@@ -10,5 +10,6 @@ python-dotenv
 httpx
 alembic
 pydantic-settings
+asyncpg
 aiosqlite
 
