@@ -1,8 +1,7 @@
 import { FileData, Source, DocumentImage } from '../types';
 
-// API Base URL - uses relative URLs for nginx proxy
-// Requests go through nginx at /api/ which proxies to tutor-service:8000
-const API_BASE_URL = '/api';
+// API Base URL - uses environment variable or default to /api for nginx proxy
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api';
 
 // Tutor API endpoints
 const TUTOR_API_BASE = `${API_BASE_URL}/tutor`;

@@ -61,7 +61,7 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: https://sugarclass.app/api/v1
+        NEXT_PUBLIC_API_URL: /api/v1
     container_name: sugarclass-frontend
     environment:
       - NODE_ENV=production
@@ -114,7 +114,7 @@ services:
       context: ./microservices/sugarclass-aiwriter/frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: https://sugarclass.app/aiwriter/api
+        NEXT_PUBLIC_API_URL: /aiwriter/api
         NEXT_PUBLIC_BASE_PATH: /aiwriter
     container_name: aiwriter-frontend
     networks:
@@ -189,7 +189,7 @@ services:
       context: ./microservices/sugarclass-aitutor/frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: https://sugarclass.app/aitutor/api
+        VITE_API_URL: /aitutor/api
     container_name: tutor-frontend
     networks:
       - sugarclass-network
