@@ -257,6 +257,7 @@ services:
       REDIS_URL: redis://tutor-redis:6379
     networks:
       - sugarclass-network
+    command: python -m uvicorn services.rag_service.tutor_main:app --host 0.0.0.0 --port 8000
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1" ]
