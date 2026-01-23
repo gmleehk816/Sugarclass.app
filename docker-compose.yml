@@ -50,6 +50,11 @@ services:
     command: npm run dev
     networks:
       - sugarclass-network
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1))\"" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ===========================================================================
   # AI WRITER MICROSERVICE
@@ -107,6 +112,11 @@ services:
         python -c 'from backend.database import init_db; init_db()' &&
         python -m uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
       "
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # AI Writer Frontend (Next.js)
   aiwriter-frontend:
@@ -123,6 +133,11 @@ services:
       - aiwriter-backend
     networks:
       - sugarclass-network
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/aiwriter/ || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ===========================================================================
   # AI TUTOR MICROSERVICE (Infrastructure Only - Backend WIP)
@@ -242,7 +257,7 @@ services:
       tutor-redis:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/tutor/health" ]
+      test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -255,7 +270,7 @@ services:
       context: ./microservices/sugarclass-aitutor/frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ""
+        VITE_API_URL: "/aitutor/api"
     container_name: tutor-frontend
     ports:
       - "3002:3000"
@@ -263,6 +278,11 @@ services:
       - tutor-backend
     networks:
       - sugarclass-network
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/aitutor/ || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 # =============================================================================
 # NETWORKS

@@ -10,12 +10,36 @@ interface ServiceFrameProps {
     serviceUrl?: string;
 }
 
+// Service URL mapping for local development vs production
+const getServiceUrl = (serviceUrl: string | undefined): string | undefined => {
+    if (!serviceUrl) return undefined;
+
+    // Check if we're in development (localhost or 127.0.0.1)
+    const isDevelopment = typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+    if (isDevelopment) {
+        // Map service paths to their local development ports
+        const servicePortMap: Record<string, string> = {
+            '/aitutor/': 'http://localhost:3002/aitutor/',
+            '/aiwriter/': 'http://localhost:3001/aiwriter/',
+        };
+        return servicePortMap[serviceUrl] || serviceUrl;
+    }
+
+    // In production, use relative paths (nginx handles routing)
+    return serviceUrl;
+};
+
 const ServiceFrame = ({ name, description, serviceUrl }: ServiceFrameProps) => {
     const [showPreview, setShowPreview] = useState(false);
     const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
-    const authenticatedUrl = serviceUrl && token
-        ? `${serviceUrl}${serviceUrl.includes('?') ? '&' : '?'}token=${token}`
-        : serviceUrl;
+
+    // Get the correct URL based on environment
+    const resolvedServiceUrl = getServiceUrl(serviceUrl);
+    const authenticatedUrl = resolvedServiceUrl && token
+        ? `${resolvedServiceUrl}${resolvedServiceUrl.includes('?') ? '&' : '?'}token=${token}`
+        : resolvedServiceUrl;
 
     const handleLaunch = () => {
         if (authenticatedUrl) {
