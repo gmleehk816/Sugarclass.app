@@ -404,7 +404,7 @@ async def query_rag_system(
         subject = context.get("subject") if context else None
         
         # Retrieve documents
-        sources = await rag_retriever_tool.invoke({
+        sources = await rag_retriever_tool.ainvoke({
             "query": question,
             "syllabus": syllabus,
             "subject": subject,
