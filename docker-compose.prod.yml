@@ -224,11 +224,10 @@ services:
       - sugarclass-network
     restart: always
     healthcheck:
-      test: [ "CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1" ]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:6333/healthz || exit 1" ]
       interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      timeout: 5s
+      retries: 5
 
   tutor-redis:
     image: redis:7-alpine
@@ -256,15 +255,6 @@ services:
       AGENT_DB_URL: postgresql://${TUTOR_AGENT_DB_USER}:${TUTOR_AGENT_DB_PASSWORD}@tutor-agent-db:5432/${TUTOR_AGENT_DB_NAME}
       QDRANT_URL: http://tutor-qdrant:6333
       REDIS_URL: redis://tutor-redis:6379
-    depends_on:
-      tutor-content-db:
-        condition: service_healthy
-      tutor-agent-db:
-        condition: service_healthy
-      tutor-qdrant:
-        condition: service_healthy
-      tutor-redis:
-        condition: service_healthy
     networks:
       - sugarclass-network
     command: python -m uvicorn services.rag_service.tutor_main:app --host 0.0.0.0 --port 8000
@@ -273,8 +263,7 @@ services:
       test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1" ]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 60s
+      retries: 3
 
   tutor-frontend:
     build:
