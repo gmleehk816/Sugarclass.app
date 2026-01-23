@@ -4,7 +4,7 @@ import Navbar from '@/components/Navbar'
 import Breadcrumbs from '@/components/Breadcrumbs'
 
 export const metadata: Metadata = {
-    title: 'NewsCollect Kids - Learn & Write News Stories',
+    title: 'Sugarclass AI Writer - Learn & Write News Stories',
     description: 'A fun and supportive platform for kids ages 8-15 to read and write news articles with AI assistance',
 }
 

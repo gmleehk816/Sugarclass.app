@@ -7,7 +7,7 @@ export default function TutorPage() {
         <ServiceFrame
             name="AI Tutor"
             description="Institutional-grade conceptual synthesis and adaptive learning oracle. Validates neural progress in real-time."
-            serviceUrl="http://localhost:3002" // Port 3002 is for AI Tutor
+            serviceUrl="/aitutor/"
         />
     );
 }

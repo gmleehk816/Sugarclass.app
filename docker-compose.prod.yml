@@ -45,13 +45,28 @@ services:
   # ===========================================================================
   # MAIN DASHBOARD
   # ===========================================================================
+  sugarclass-db:
+    image: postgres:15-alpine
+    container_name: sugarclass-db
+    environment:
+      POSTGRES_DB: sugarclass
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SUGARCLASS_DB_PASSWORD:-sugarclass_secure_pass}
+    volumes:
+      - sugarclass_db_data:/var/lib/postgresql/data
+    networks:
+      - sugarclass-network
+    restart: always
+
   backend:
     build: ./backend
     container_name: sugarclass-backend
     # No exposed ports, accessed via gateway
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./sugarclass.db
-      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql+asyncpg://postgres:${SUGARCLASS_DB_PASSWORD:-sugarclass_secure_pass}@sugarclass-db:5432/sugarclass
+      - SECRET_KEY=${SECRET_KEY:-sugarclass-prod-secret-key}
+    depends_on:
+      - sugarclass-db
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     networks:
       - sugarclass-network
@@ -200,6 +215,7 @@ networks:
     driver: bridge
 
 volumes:
+  sugarclass_db_data:
   aiwriter_db_data:
   tutor_content_db_data:
   tutor_agent_db_data:
