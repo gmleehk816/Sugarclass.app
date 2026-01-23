@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Base path for sub-path deployment (e.g., sugarclass.app/aiwriter)
   basePath: '/aiwriter',
+  trailingSlash: true,
 
   // Output mode for Docker deployment
   output: 'standalone',
