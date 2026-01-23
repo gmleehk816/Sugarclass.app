@@ -4,7 +4,9 @@ FROM node:20-slim AS build
 WORKDIR /app
 
 ARG VITE_API_URL
+ARG VITE_BASE_PATH=/aitutor
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
 
 COPY package*.json ./
 RUN npm install
