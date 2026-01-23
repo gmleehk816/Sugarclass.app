@@ -57,6 +57,11 @@ services:
     networks:
       - sugarclass-network
     restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./backend
@@ -66,11 +71,17 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:${SUGARCLASS_DB_PASSWORD:-sugarclass_secure_pass}@sugarclass-db:5432/sugarclass
       - SECRET_KEY=${SECRET_KEY:-sugarclass-prod-secret-key}
     depends_on:
-      - sugarclass-db
+      sugarclass-db:
+        condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     networks:
       - sugarclass-network
     restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build:
@@ -84,6 +95,11 @@ services:
     networks:
       - sugarclass-network
     restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ===========================================================================
   # AI WRITER
@@ -100,6 +116,11 @@ services:
     networks:
       - sugarclass-network
     restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   aiwriter-backend:
     build:
@@ -123,6 +144,11 @@ services:
         python -m uvicorn backend.api:app --host 0.0.0.0 --port 8000
       "
     restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   aiwriter-frontend:
     build:
@@ -135,6 +161,11 @@ services:
     networks:
       - sugarclass-network
     restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/aiwriter" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ===========================================================================
   # AI TUTOR
@@ -198,6 +229,11 @@ services:
     networks:
       - sugarclass-network
     restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   tutor-frontend:
     build:
@@ -209,6 +245,11 @@ services:
     networks:
       - sugarclass-network
     restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/aitutor/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   sugarclass-network:
