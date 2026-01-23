@@ -1,0 +1,51 @@
+# NewsCollect Requirements
+flask>=3.0.0
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic>=2.0.0
+requests>=2.31.0
+feedparser>=6.0.10
+python-dotenv>=1.0.0
+
+# === Database ===
+# PostgreSQL adapter (production)
+psycopg2-binary>=2.9.9
+
+# === Text Extraction Libraries (GitHub-Free) ===
+# Primary: Ultra-fast bulk extraction with high precision
+trafilatura>=1.6.0
+
+# Fallback: Async, multilingual, proven reliability
+newspaper4k>=0.9.3
+
+# Validation: Deduplication + NLP tagging
+fundus>=0.3.0
+
+# Backup: Research-grade metadata extraction
+news-please>=1.5.0
+
+# === Quality Analysis ===
+# Readability scoring (Flesch-Kincaid, grade level)
+textstat>=0.7.3
+
+# AI quality review with Gemini
+google-generativeai>=0.3.0
+
+# === API Sources (Optional) ===
+# NewsAPI: 100 requests/day free tier
+newsapi-python>=0.2.7
+
+# GNews: Google News aggregation
+gnews>=0.3.7
+
+# === Scheduling & Utilities ===
+# Async HTTP requests
+aiohttp>=3.9.0
+
+# Job scheduling
+apscheduler>=3.10.0
+
+# === Frontend Build Dependencies (for Next.js production) ===
+# These are for reference - install via npm in frontend/
+# npm install next@latest react@latest react-dom@latest
+# npm install framer-motion lucide-react

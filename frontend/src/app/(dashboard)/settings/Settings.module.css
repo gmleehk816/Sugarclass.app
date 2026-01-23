@@ -1,0 +1,214 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    animation: fadeIn 0.8s ease-out;
+}
+
+.header {
+    border-bottom: 2px solid var(--card-border);
+    padding-bottom: 24px;
+}
+
+.title {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--accent-matte);
+}
+
+.subtitle {
+    color: #6a6a6a;
+    font-size: 1.1rem;
+}
+
+.contentLayout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 40px;
+    align-items: start;
+}
+
+.tabList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: sticky;
+    top: 120px;
+}
+
+.tabBtn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    color: #7a7a7a;
+    font-weight: 500;
+    transition: var(--transition);
+    text-align: left;
+}
+
+.tabBtn:hover {
+    background: #f1ede6;
+    color: var(--foreground);
+}
+
+.activeTab {
+    background: #f1ede6;
+    color: var(--primary);
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+}
+
+.tabContent {
+    padding: 48px;
+    min-height: 500px;
+    display: flex;
+    flex-direction: column;
+}
+
+.section {
+    animation: fadeIn 0.4s ease-out;
+    flex: 1;
+}
+
+.section h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent-matte);
+    margin-bottom: 32px;
+}
+
+.sectionHint {
+    color: #6a6a6a;
+    margin-bottom: 32px;
+    font-size: 1rem;
+}
+
+.formGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.inputGroup label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #4a4a4a;
+}
+
+.inputGroup input,
+.inputGroup select,
+.inputGroup textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    background: #fdfbf7;
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: 1rem;
+    transition: var(--transition);
+}
+
+.inputGroup input:focus,
+.inputGroup select:focus,
+.inputGroup textarea:focus {
+    outline: none;
+    border-color: var(--secondary);
+    background: #ffffff;
+    box-shadow: 0 0 0 4px #f1ede6;
+}
+
+.inputGroup input:disabled {
+    background: #f5f5f5;
+    color: #9a9a9a;
+    cursor: not-allowed;
+}
+
+.inputHint {
+    font-size: 0.85rem;
+    color: #9a9a9a;
+    margin-top: 4px;
+}
+
+.infoBox {
+    margin-top: 32px;
+    padding: 20px;
+    background: #f7f3ed;
+    border-radius: 12px;
+    display: flex;
+    gap: 16px;
+    color: var(--accent-matte);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    border: 1px solid var(--card-border);
+}
+
+.toggleRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: #fdfbf7;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+}
+
+.tabFooter {
+    margin-top: 48px;
+    padding-top: 32px;
+    border-top: 1px solid var(--card-border);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.saveBtn {
+    background: var(--accent-matte);
+    color: white;
+    padding: 14px 28px;
+    border-radius: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: var(--transition);
+}
+
+.saveBtn:hover:not(:disabled) {
+    background: var(--foreground);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.saveBtn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+@media (max-width: 1024px) {
+    .contentLayout {
+        grid-template-columns: 1fr;
+    }
+
+    .tabList {
+        flex-direction: row;
+        overflow-x: auto;
+        position: static;
+        padding-bottom: 10px;
+    }
+
+    .tabBtn {
+        white-space: nowrap;
+    }
+
+    .tabContent {
+        padding: 32px 20px;
+    }
+}

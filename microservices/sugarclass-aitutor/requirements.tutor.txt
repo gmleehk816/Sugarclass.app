@@ -1,0 +1,40 @@
+# Additional requirements for AI Tutor Service
+# Install with: pip install -r requirements.tutor.txt
+
+# Database
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
+
+# Vector store
+qdrant-client>=1.7.0
+
+# LangChain and LangGraph
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-openai>=0.0.5
+langchain-anthropic>=0.1.0
+langgraph>=0.0.20
+
+# Embeddings
+sentence-transformers>=2.2.2
+# Note: torch is installed from PyTorch CPU index in Dockerfile to avoid CUDA
+torch
+
+# Text processing
+tiktoken>=0.5.0
+
+# Caching
+redis>=5.0.0
+aioredis>=2.0.0
+
+# API
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic>=2.5.0
+
+# Utilities
+python-dotenv>=1.0.0
+httpx>=0.26.0
+
+# File monitoring (for sync agent)
+watchdog>=3.0.0

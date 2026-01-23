@@ -1,0 +1,287 @@
+# =============================================================================
+# Sugarclass - Unified Docker Compose
+# =============================================================================
+# This file orchestrates:
+#   1. Main Dashboard (Shell) - Frontend & Backend
+#   2. AI Writer Microservice - News-based writing platform
+#   3. AI Tutor Microservice - RAG-based tutoring (Planned for future)
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # MAIN DASHBOARD (SHELL)
+  # ===========================================================================
+
+  # Main Dashboard Backend (FastAPI)
+  backend:
+    build: ./backend
+    container_name: sugarclass-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./sugarclass.db
+      - SECRET_KEY=${SECRET_KEY:-sugarclass-dev-secret-key-change-in-prod}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - sugarclass-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Main Dashboard Frontend (Next.js)
+  frontend:
+    build: ./frontend
+    container_name: sugarclass-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - WATCHPACK_POLLING=true
+    depends_on:
+      - backend
+    command: npm run dev
+    networks:
+      - sugarclass-network
+
+  # ===========================================================================
+  # AI WRITER MICROSERVICE
+  # ===========================================================================
+
+  # AI Writer Database (PostgreSQL)
+  aiwriter-db:
+    image: postgres:15-alpine
+    container_name: aiwriter-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: newscollect
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${AIWRITER_DB_PASSWORD:-NewsCollect2024!Secure}
+    volumes:
+      - aiwriter_db_data:/var/lib/postgresql/data
+      - ./microservices/sugarclass-aiwriter/scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    ports:
+      - "5602:5432" # Avoid Windows reserved port range
+    networks:
+      - sugarclass-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # AI Writer Backend (Python/FastAPI)
+  aiwriter-backend:
+    build:
+      context: ./microservices/sugarclass-aiwriter
+      dockerfile: Dockerfile.backend
+    container_name: aiwriter-backend
+    restart: unless-stopped
+    env_file:
+      - ./microservices/sugarclass-aiwriter/.env
+    environment:
+      DB_TYPE: postgresql
+      POSTGRES_HOST: aiwriter-db
+      POSTGRES_PORT: 5432
+      SUGARCLASS_API_URL: http://backend:8000/api/v1
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./microservices/sugarclass-aiwriter/backend:/app/backend
+      - ./microservices/sugarclass-aiwriter/collector:/app/collector
+    depends_on:
+      aiwriter-db:
+        condition: service_healthy
+    networks:
+      - sugarclass-network
+    command: >
+      sh -c "
+        sleep 5 &&
+        python -c 'from backend.database import init_db; init_db()' &&
+        python -m uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  # AI Writer Frontend (Next.js)
+  aiwriter-frontend:
+    build:
+      context: ./microservices/sugarclass-aiwriter/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8001
+        NEXT_PUBLIC_BASE_PATH: /aiwriter
+    container_name: aiwriter-frontend
+    ports:
+      - "3001:3000"
+    depends_on:
+      - aiwriter-backend
+    networks:
+      - sugarclass-network
+
+  # ===========================================================================
+  # AI TUTOR MICROSERVICE (Infrastructure Only - Backend WIP)
+  # ===========================================================================
+  # Note: The AI Tutor has its own docker-compose file for standalone operation.
+  # Below are the infrastructure services needed when integrating with the shell.
+
+  # AI Tutor Content Database (PostgreSQL)
+  tutor-content-db:
+    image: postgres:15-alpine
+    container_name: tutor-content-db
+    environment:
+      POSTGRES_USER: ${TUTOR_CONTENT_DB_USER:-tutor}
+      POSTGRES_PASSWORD: ${TUTOR_CONTENT_DB_PASSWORD:-tutor_content_pass}
+      POSTGRES_DB: ${TUTOR_CONTENT_DB_NAME:-tutor_content}
+    volumes:
+      - tutor_content_db_data:/var/lib/postgresql/data
+      - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/001_content_schema.sql:/docker-entrypoint-initdb.d/001_content_schema.sql:ro
+      - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/003_sync_tracking.sql:/docker-entrypoint-initdb.d/003_sync_tracking.sql:ro
+    ports:
+      - "5600:5432" # Avoid Windows reserved port range (5434-5533)
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${TUTOR_CONTENT_DB_USER:-tutor} -d ${TUTOR_CONTENT_DB_NAME:-tutor_content}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sugarclass-network
+
+  # AI Tutor Agent Database (PostgreSQL)
+  tutor-agent-db:
+    image: postgres:15-alpine
+    container_name: tutor-agent-db
+    environment:
+      POSTGRES_USER: ${TUTOR_AGENT_DB_USER:-tutor}
+      POSTGRES_PASSWORD: ${TUTOR_AGENT_DB_PASSWORD:-tutor_agent_pass}
+      POSTGRES_DB: ${TUTOR_AGENT_DB_NAME:-tutor_agent}
+    volumes:
+      - tutor_agent_db_data:/var/lib/postgresql/data
+      - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/002_agent_schema.sql:/docker-entrypoint-initdb.d/001_agent_schema.sql:ro
+    ports:
+      - "5601:5432" # Avoid Windows reserved port range (5434-5533)
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${TUTOR_AGENT_DB_USER:-tutor} -d ${TUTOR_AGENT_DB_NAME:-tutor_agent}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sugarclass-network
+
+  # Qdrant Vector Store (for AI Tutor semantic search)
+  tutor-qdrant:
+    image: qdrant/qdrant:latest
+    container_name: tutor-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - tutor_qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "timeout 1 bash -c 'true > /dev/tcp/127.0.0.1/6333' || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sugarclass-network
+
+  # Redis (for AI Tutor caching and session management)
+  tutor-redis:
+    image: redis:7-alpine
+    container_name: tutor-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - tutor_redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sugarclass-network
+
+  # AI Tutor Backend Service
+  tutor-backend:
+    build:
+      context: ./microservices/sugarclass-aitutor
+      dockerfile: Dockerfile.tutor
+    container_name: tutor-backend
+    env_file:
+      - ./microservices/sugarclass-aitutor/.env.prod
+    environment:
+      CONTENT_DB_URL: postgresql://${TUTOR_CONTENT_DB_USER:-tutor}:${TUTOR_CONTENT_DB_PASSWORD:-tutor_content_pass}@tutor-content-db:5432/${TUTOR_CONTENT_DB_NAME:-tutor_content}
+      AGENT_DB_URL: postgresql://${TUTOR_AGENT_DB_USER:-tutor}:${TUTOR_AGENT_DB_PASSWORD:-tutor_agent_pass}@tutor-agent-db:5432/${TUTOR_AGENT_DB_NAME:-tutor_agent}
+      QDRANT_URL: http://tutor-qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-aitutor_documents}
+      REDIS_URL: redis://tutor-redis:6379
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-384}
+      CONTENT_SOURCE_PATH: /app/content
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./microservices/sugarclass-aitutor/services/rag_service:/app/services/rag_service
+      - ./microservices/sugarclass-aitutor/database:/app/content:ro
+    ports:
+      - "8002:8000"
+    depends_on:
+      tutor-content-db:
+        condition: service_healthy
+      tutor-agent-db:
+        condition: service_healthy
+      tutor-qdrant:
+        condition: service_started
+      tutor-redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/tutor/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sugarclass-network
+
+  # AI Tutor Frontend (React/Vite)
+  tutor-frontend:
+    build:
+      context: ./microservices/sugarclass-aitutor/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+    container_name: tutor-frontend
+    ports:
+      - "3002:3000"
+    depends_on:
+      - tutor-backend
+    networks:
+      - sugarclass-network
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  sugarclass-network:
+    driver: bridge
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  aiwriter_db_data:
+    driver: local
+  tutor_content_db_data:
+    driver: local
+  tutor_agent_db_data:
+    driver: local
+  tutor_qdrant_data:
+    driver: local
+  tutor_redis_data:
+    driver: local

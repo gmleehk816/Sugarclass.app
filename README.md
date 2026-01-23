@@ -1,0 +1,117 @@
+# Sugarclass - AI Learning Orchestrator
+
+**Sugarclass** is a premium, institutional-grade learning orchestrator designed for kids and young students aged 7-18. It serves as a "Mission Control" hub that integrates multiple specialized AI tools into a unified, secure, and engaging environment.
+
+---
+
+## 🏗 Architecture Overview
+
+The project uses a **Shell + Module** architecture where separate AI-powered microservices are embedded into a central dashboard via iframes.
+
+```
+sugarclass.app/
+├── backend/                    # Main Dashboard API (FastAPI + SQLite)
+├── frontend/                   # Main Dashboard UI (Next.js)
+└── microservices/
+    ├── sugarclass-aitutor/     # RAG-based AI Tutor
+    └── sugarclass-aiwriter/    # News-based AI Writing Assistant
+```
+
+### Services & Ports
+
+| Service | Port | Description |
+|---------|------|-------------|
+| **Dashboard Frontend** | 3000 | Main shell/hub UI |
+| **Dashboard Backend** | 8000 | User auth, progress tracking |
+| **AI Writer Frontend** | 3001 | Writing assistant UI |
+| **AI Writer Backend** | 8001 | News collection, AI drafts |
+| **AI Tutor Backend** | 8002 | RAG tutoring, quizzes |
+| **AI Writer DB (Postgres)** | 5602 | News/drafts storage |
+| **AI Tutor Content DB** | 5600 | Syllabus content |
+| **AI Tutor Agent DB** | 5601 | Sessions, mastery |
+| **Qdrant (Vector DB)** | 6333 | Semantic search |
+| **Redis** | 6379 | Caching |
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Docker Desktop installed and running
+- Git
+
+### 1. Clone & Setup Environment
+
+```bash
+# Ensure you have the .env file for aiwriter
+cp microservices/sugarclass-aiwriter/.env.example microservices/sugarclass-aiwriter/.env
+
+# Ensure you have the .env.prod for aitutor  
+cp microservices/sugarclass-aitutor/.env.prod.example microservices/sugarclass-aitutor/.env.prod
+```
+
+### 2. Start All Services
+
+```bash
+docker-compose up -d --build
+```
+
+### 3. Access the Platform
+
+- **Dashboard**: http://localhost:3000
+- **AI Writer**: http://localhost:3001/aiwriter
+- **AI Tutor API**: http://localhost:8002/docs
+- **Qdrant Dashboard**: http://localhost:6333/dashboard
+
+---
+
+## 📂 Microservice Details
+
+### AI Writer (`microservices/sugarclass-aiwriter/`)
+A news-based writing platform that:
+- Collects age-appropriate news articles
+- Generates AI-powered writing prompts
+- Helps students practice essay and article writing
+
+### AI Tutor (`microservices/sugarclass-aitutor/`)
+A RAG-based tutoring system that:
+- Uses syllabus-specific content (IGCSE, A-Level, etc.)
+- Provides contextual Q&A from educational materials
+- Tracks student mastery and generates quizzes
+
+---
+
+## 🔧 Development
+
+### Running Individual Microservices
+
+**AI Writer (standalone):**
+```bash
+cd microservices/sugarclass-aiwriter
+docker-compose up -d --build
+```
+
+**AI Tutor (standalone):**
+```bash
+cd microservices/sugarclass-aitutor
+docker-compose -f docker-compose.tutor.yml up -d --build
+```
+
+### Stop All Services
+```bash
+docker-compose down
+```
+
+---
+
+## 🤖 Context for AI Assistants
+
+1. **Shell Architecture**: The main dashboard hosts child apps via `<ServiceFrame>` iframes.
+2. **SSO Handshake**: The shell sends tokens to iframes via `postMessage`.
+3. **Microservice Paths**: All microservices are in `./microservices/{service-name}/`.
+4. **Database Isolation**: Each microservice has its own database (no shared state).
+5. **Port Mapping**: Dashboard=8000/3000, Writer=8001/3001, Tutor=8002.
+
+---
+
+*Maintained by the Sugarclass Engineering Team.*

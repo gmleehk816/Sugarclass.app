@@ -1,0 +1,101 @@
+import React from 'react'
+import { motion } from 'framer-motion'
+import { Clock, BookOpen } from 'lucide-react'
+import Link from 'next/link'
+import { Article } from '@/lib/api'
+
+interface ArticleCardProps {
+    article: Article
+    index: number
+    key?: any
+}
+
+const categoryColors: Record<string, string> = {
+    Science: 'bg-science text-white',
+    Technology: 'bg-tech text-white',
+    Environment: 'bg-environment text-white',
+    Sports: 'bg-sports text-white',
+    Arts: 'bg-arts text-white',
+    Health: 'bg-health text-white',
+}
+
+export default function ArticleCard({ article, index }: ArticleCardProps) {
+    const readingTime = Math.ceil((article.word_count || 300) / 200) // Assuming 200 words per minute
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: index * 0.1 }}
+        >
+            <Link href={`/news/${article.id}`}>
+                <motion.div
+                    className="group bg-white rounded-2xl shadow-md overflow-hidden cursor-pointer h-full flex flex-col"
+                    whileHover={{ y: -8, scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    transition={{ duration: 0.2 }}
+                >
+                    {/* Image with gradient overlay */}
+                    <div className="relative h-48 overflow-hidden bg-gradient-to-br from-sky-blue/20 to-ai-purple/20">
+                        {article.image_url ? (
+                            <img
+                                src={article.image_url}
+                                alt={article.title}
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                            />
+                        ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-sky-blue/30 to-ai-purple/30 group-hover:scale-110 transition-transform duration-500" />
+                        )}
+
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+
+                        {/* Category Badge */}
+                        {article.category && (
+                            <span className={`absolute top-3 left-3 px-3 py-1 ${categoryColors[article.category] || 'bg-sky-blue text-white'} backdrop-blur-sm rounded-full text-xs font-semibold shadow-lg`}>
+                                {article.category}
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-5 flex-1 flex flex-col">
+                        <h3 className="text-xl font-heading font-bold text-text-primary mb-2 line-clamp-2 group-hover:text-sky-blue transition-colors">
+                            {article.title}
+                        </h3>
+                        <p className="text-sm text-text-secondary mb-4 line-clamp-3 leading-relaxed flex-1">
+                            {article.description || 'No description available.'}
+                        </p>
+
+                        {/* Meta Information */}
+                        <div className="flex items-center justify-between text-xs text-text-muted pt-4 border-t border-border">
+                            <div className="flex items-center gap-4">
+                                <span className="flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {readingTime} min
+                                </span>
+                                {article.word_count && (
+                                    <span className="flex items-center gap-1">
+                                        <BookOpen className="w-3 h-3" />
+                                        {article.word_count} words
+                                    </span>
+                                )}
+                            </div>
+                            {article.age_group && (
+                                <span className="px-2 py-1 bg-mint/10 text-mint rounded-full font-semibold">
+                                    Ages {article.age_group}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Source */}
+                        {article.source && (
+                            <div className="mt-2 text-xs text-text-muted">
+                                📡 {article.source}
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
+            </Link>
+        </motion.div>
+    )
+}

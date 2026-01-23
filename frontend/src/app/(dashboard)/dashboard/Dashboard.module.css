@@ -1,0 +1,291 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 0 10px;
+}
+
+.title {
+    font-size: 2.8rem;
+    font-weight: 800;
+    color: var(--primary);
+    margin-bottom: 8px;
+    letter-spacing: -2px;
+}
+
+.subtitle {
+    color: #8a8a8a;
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.statsGrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+}
+
+/* Dashboard Layout Grid - Balanced Weights & Heights */
+.contentGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    align-items: stretch;
+}
+
+.sectionHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    min-height: 40px;
+    /* Force consistent vertical space for title row */
+}
+
+.sectionHeader h2 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--primary);
+    letter-spacing: -0.02em;
+}
+
+.seeAll {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #f7f3f0;
+    border-radius: 100px;
+    transition: var(--transition-smooth);
+}
+
+.seeAll:hover {
+    background: #f1ede6;
+    padding-right: 16px;
+}
+
+/* Activity Column Styling */
+.recentActivity {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* New inner card for activity to match other columns */
+.activityCard {
+    padding: 24px;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    height: 100%;
+    flex: 1;
+}
+
+.activityList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.activityItem {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    transition: var(--transition-smooth);
+    border: 1px solid transparent;
+}
+
+.activityItem:hover {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.05);
+    transform: translateX(5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.activityIcon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.activityInfo {
+    flex: 1;
+}
+
+.activityName {
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--primary);
+    display: block;
+    margin-bottom: 2px;
+}
+
+.activityTime {
+    color: #9a9a9a;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* Module Hub (Middle Column) */
+.quickLaunch {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+}
+
+.launchCard {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    flex: 1;
+    /* Stretch cards to fill column height if needed */
+}
+
+.launchIconSquare {
+    width: 50px;
+    height: 50px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.launchText h3 {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--primary);
+    margin-bottom: 8px;
+}
+
+.launchText p {
+    color: #7a7a7a;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* Learning Insights (Right Column) */
+.insightsColumn {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.insights {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    padding: 30px;
+    border-radius: var(--radius-lg);
+    color: white;
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+    flex: 1;
+    /* Stretch to match Column 1 and 2 */
+}
+
+.insights::before {
+    content: "";
+    position: absolute;
+    top: -20px;
+    right: -20px;
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+}
+
+.insights h3 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    margin-bottom: 12px;
+    position: relative;
+}
+
+.insightCard {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 20px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.insightCard p {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    opacity: 0.9;
+}
+
+.tutorIcon {
+    background: #f0f7ff;
+    color: #3498db;
+}
+
+.writerIcon {
+    background: #fffaf0;
+    color: #8e7d6b;
+}
+
+@media (max-width: 1400px) {
+    .contentGrid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .insightsColumn {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 1024px) {
+    .statsGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .contentGrid {
+        grid-template-columns: 1fr;
+        gap: 32px;
+    }
+
+    .insightsColumn {
+        grid-column: span 1;
+        display: flex;
+    }
+
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    .title {
+        font-size: 2.2rem;
+    }
+
+    .statsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .container {
+        gap: 24px;
+    }
+}

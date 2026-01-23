@@ -1,0 +1,7 @@
+{
+  "name": "Sugarclass AI Tutor",
+  "description": "An intelligent tutoring system with multi-agent workflows and subject-specific learning.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

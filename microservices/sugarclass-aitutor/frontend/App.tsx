@@ -1,0 +1,732 @@
+import React, { useState, useRef, useEffect } from 'react';
+import Navbar from './components/Navbar';
+import FileUpload from './components/FileUpload';
+import SourceCard from './components/SourceCard';
+import DiagramDisplay from './components/DiagramDisplay';
+import ScrollToBottom from './components/ScrollToBottom';
+import RecentChats from './components/RecentChats';
+import { Message, Role, FileData, Source } from './types';
+import {
+  queryDocuments,
+  clearAllDocuments,
+  deleteDocument,
+  getHealth,
+  getSubjects,
+  startTutorSession,
+  chatWithTutor,
+  endTutorSession,
+  Subject
+} from './services/apiService';
+
+interface ChatHistory {
+  id: number;
+  title: string;
+  lastMessage: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: Array<{ question: string; answer: string; time: string }>;
+}
+
+const App: React.FC = () => {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      role: Role.MODEL,
+      text: "Hello! I'm your Sugarclass AI Tutor. Select a subject to start learning, or ask me anything about your materials.",
+      timestamp: new Date()
+    }
+  ]);
+  const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [activeFiles, setActiveFiles] = useState<FileData[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [systemStatus, setSystemStatus] = useState<'healthy' | 'error' | 'checking'>('checking');
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectSearchTerm, setSubjectSearchTerm] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
+  const [currentChatId, setCurrentChatId] = useState<number>(Date.now());
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageContainerRef = useRef<HTMLDivElement>(null);
+
+  const filteredSubjects = subjects.filter(subject =>
+    subject.name.toLowerCase().includes(subjectSearchTerm.toLowerCase()) ||
+    subject.syllabus.toLowerCase().includes(subjectSearchTerm.toLowerCase())
+  );
+
+  useEffect(() => {
+    // Initialize user ID
+    let userId = localStorage.getItem('tutor_user_id');
+    if (!userId) {
+      userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('tutor_user_id', userId);
+    }
+    setUserId(userId);
+
+    // Check system health
+    checkHealth();
+
+    // Load subjects
+    loadSubjects();
+
+    // Restore selected subject from localStorage
+    const savedSubject = localStorage.getItem('tutor_subject');
+    if (savedSubject) {
+      setSelectedSubject(savedSubject);
+      updateWelcomeMessage(savedSubject);
+    }
+
+    const interval = setInterval(checkHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    console.log('Active Files Updated:', activeFiles);
+  }, [activeFiles]);
+
+  // Load chat history from localStorage
+  useEffect(() => {
+    const savedChats = localStorage.getItem('ai_tutor_chats');
+    if (savedChats) {
+      try {
+        setChatHistory(JSON.parse(savedChats));
+      } catch (error) {
+        console.error('Failed to load chat history:', error);
+      }
+    }
+  }, []);
+
+  // Auto-scroll detection
+  useEffect(() => {
+    const container = messageContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+      setUserScrolledUp(!isAtBottom);
+      setShowScrollButton(!isAtBottom);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const checkHealth = async () => {
+    try {
+      await getHealth();
+      setSystemStatus('healthy');
+    } catch (err) {
+      console.error('Failed to connect to backend:', err);
+      setSystemStatus('error');
+    }
+  };
+
+  const loadSubjects = async () => {
+    try {
+      const data = await getSubjects();
+      setSubjects(data.subjects);
+    } catch (error) {
+      console.error('Failed to load subjects:', error);
+    }
+  };
+
+  const selectSubject = async (subjectName: string) => {
+    setSelectedSubject(subjectName);
+    localStorage.setItem('tutor_subject', subjectName);
+
+    // Clear chat and update welcome message
+    setMessages([
+      {
+        id: Date.now().toString(),
+        role: Role.MODEL,
+        text: getSubjectWelcomeMessage(subjectName),
+        timestamp: new Date()
+      }
+    ]);
+
+    // Start new tutor session
+    try {
+      if (userId) {
+        const sessionResponse = await startTutorSession({
+          user_id: userId,
+          subject: subjectName,
+          curriculum: localStorage.getItem('tutor_curriculum') || 'CIE_IGCSE',
+          grade_level: localStorage.getItem('tutor_grade') || 'GCSE'
+        });
+        setSessionId(sessionResponse.session_id);
+        console.log('Session started:', sessionResponse.session_id);
+      }
+    } catch (error) {
+      console.error('Failed to start tutor session:', error);
+      // Continue without session, will use RAG fallback
+    }
+
+    // Close sidebar on mobile
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const getSubjectWelcomeMessage = (subject: string): string => {
+    const subjectLower = subject.toLowerCase();
+
+    if (subjectLower.includes('engineering')) {
+      return `Ready to explore ${subject}! From materials and mechanics to electronics and systems - what would you like to learn today?`;
+    } else if (subjectLower.includes('math') || subjectLower.includes('mathematics')) {
+      return `Ready to explore ${subject}! I can help with algebra, calculus, geometry, and more. What topic shall we start with?`;
+    } else if (subjectLower.includes('physics')) {
+      return `Let's dive into ${subject}! From mechanics to waves and electricity - what would you like to learn today?`;
+    } else if (subjectLower.includes('chemistry')) {
+      return `Welcome to ${subject}! Organic, inorganic, physical chemistry - pick a topic and let's explore together!`;
+    } else if (subjectLower.includes('biology')) {
+      return `${subject} time! Cells, genetics, ecology - there's so much to discover. What interests you most?`;
+    } else if (subjectLower.includes('music')) {
+      return `Let's study ${subject}! From theory to composition and history - what would you like to learn about?`;
+    } else if (subjectLower.includes('ict') || subjectLower.includes('computer') || subjectLower.includes('cs')) {
+      return `Let's study ${subject}! From hardware and software to programming and networking - what topic would you like to explore?`;
+    } else if (subjectLower.includes('english')) {
+      return `${subject} time! Literature, language, writing - what would you like to work on today?`;
+    } else if (subjectLower.includes('history')) {
+      return `Ready to explore ${subject}! From ancient to modern times - what era or topic interests you?`;
+    } else if (subjectLower.includes('geography')) {
+      return `${subject} exploration time! Physical and human geography - what would you like to learn?`;
+    }
+
+    return `Let's study ${subject}! What would you like to learn today?`;
+  };
+
+  const updateWelcomeMessage = (subject: string | null) => {
+    if (!subject) {
+      setMessages([
+        {
+          id: Date.now().toString(),
+          role: Role.MODEL,
+          text: "Hello! I'm your Sugarclass AI Tutor. Select a subject to start learning, or ask me anything about your materials.",
+          timestamp: new Date()
+        }
+      ]);
+    } else {
+      setMessages([
+        {
+          id: Date.now().toString(),
+          role: Role.MODEL,
+          text: getSubjectWelcomeMessage(subject),
+          timestamp: new Date()
+        }
+      ]);
+    }
+  };
+
+  const suggestedPrompts = [
+    selectedSubject ? `Explain the basics of ${selectedSubject}` : "Summarize my files",
+    "What are the key concepts?",
+    "Give me some practice questions",
+    "Explain with examples",
+    "How does this work?",
+    "Compare and contrast"
+  ];
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isTyping]);
+
+  const saveChatToHistory = (question: string, answer: string) => {
+    setChatHistory(prev => {
+      const chatIndex = prev.findIndex(c => c.id === currentChatId);
+      let newHistory = [...prev];
+
+      if (chatIndex !== -1) {
+        const updatedChat = {
+          ...prev[chatIndex],
+          messages: [...prev[chatIndex].messages, { question, answer, time: new Date().toISOString() }],
+          lastMessage: question,
+          updatedAt: new Date().toISOString()
+        };
+        newHistory[chatIndex] = updatedChat;
+      } else {
+        const newChat: ChatHistory = {
+          id: currentChatId,
+          title: question.substring(0, 50),
+          lastMessage: question,
+          messages: [{ question, answer, time: new Date().toISOString() }],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        newHistory = [newChat, ...newHistory];
+      }
+
+      // Keep only last 20 chats
+      const trimmedHistory = newHistory.slice(0, 20);
+      localStorage.setItem('ai_tutor_chats', JSON.stringify(trimmedHistory));
+      return trimmedHistory;
+    });
+  };
+
+  const loadChatFromHistory = (chatId: number) => {
+    const chat = chatHistory.find(c => c.id === chatId);
+    if (!chat) return;
+
+    setCurrentChatId(chatId);
+    const restoredMessages: Message[] = [
+      {
+        id: '1',
+        role: Role.MODEL,
+        text: selectedSubject ? getSubjectWelcomeMessage(selectedSubject) : "Hello! I'm your AI Tutor. Select a subject to start learning, or ask me anything about your materials.",
+        timestamp: new Date()
+      }
+    ];
+
+    chat.messages.forEach((msg, idx) => {
+      restoredMessages.push({
+        id: (idx + 2).toString(),
+        role: Role.USER,
+        text: msg.question,
+        timestamp: new Date()
+      });
+      restoredMessages.push({
+        id: (idx + 3).toString(),
+        role: Role.MODEL,
+        text: msg.answer,
+        timestamp: new Date()
+      });
+    });
+
+    setMessages(restoredMessages);
+    setSidebarOpen(false);
+  };
+
+  const clearChatHistory = () => {
+    setChatHistory([]);
+    localStorage.removeItem('ai_tutor_chats');
+  };
+
+  const handleSend = async (overrideInput?: string) => {
+    const textToSend = overrideInput || input;
+    if (!textToSend.trim() || isTyping) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: Role.USER,
+      text: textToSend,
+      timestamp: new Date(),
+      files: activeFiles.length > 0 ? [...activeFiles] : undefined
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+
+    try {
+      let botMessage: Message | null = null;
+
+      // Try tutor API first if session exists
+      if (sessionId) {
+        try {
+          const tutorResponse = await chatWithTutor({
+            session_id: sessionId,
+            message: textToSend
+          });
+
+          botMessage = {
+            id: (Date.now() + 1).toString(),
+            role: Role.MODEL,
+            text: tutorResponse.response,
+            timestamp: new Date(),
+            sources: tutorResponse.metadata?.sources
+          };
+
+          // Add quiz indicator if active
+          if (tutorResponse.quiz_active) {
+            botMessage.text += '\n\n📝 Quiz mode active - answer the question above';
+          }
+        } catch (tutorError) {
+          console.warn('Tutor API failed, falling back to RAG:', tutorError);
+          // Continue to RAG fallback
+        }
+      }
+
+      // If tutor API failed or no session, use RAG
+      if (!botMessage) {
+        const result = await queryDocuments(textToSend);
+
+        botMessage = {
+          id: (Date.now() + 1).toString(),
+          role: Role.MODEL,
+          text: result.answer,
+          timestamp: new Date(),
+          sources: result.sources,
+          diagram: result.diagram,
+          documentImages: result.document_images,
+          ocrText: result.ocr_text
+        };
+      }
+
+      if (botMessage) {
+        setMessages(prev => [...prev, botMessage!]);
+        saveChatToHistory(textToSend, botMessage.text);
+      }
+    } catch (error: any) {
+      let errorMsg = error.message || 'Failed to get response from backend';
+
+      // Enhanced error messages
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+        errorMsg = '❌ Cannot connect to RAG service. Please ensure:\n1. Docker containers are running\n2. RAG service is accessible\n3. Try restarting services';
+      } else if (errorMsg.includes('503')) {
+        errorMsg = '⚠️ RAG service is starting up. Please wait a moment and try again.';
+      } else if (errorMsg.includes('408') || errorMsg.includes('timeout')) {
+        errorMsg = '⏱️ Query timed out. This may happen on first query while loading models. Please try again.';
+      }
+
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: Role.MODEL,
+        text: errorMsg,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  const removeFile = async (index: number) => {
+    const fileToRemove = activeFiles[index];
+    if (fileToRemove.id) {
+      try {
+        await deleteDocument(fileToRemove.id);
+      } catch (error) {
+        console.error("Failed to delete document from backend:", error);
+      }
+    }
+    setActiveFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearChat = async () => {
+    try {
+      await clearAllDocuments();
+    } catch (error) {
+      console.error("Failed to clear documents from backend:", error);
+    }
+
+    // Clear session
+    if (sessionId) {
+      try {
+        await endTutorSession(sessionId);
+      } catch (error) {
+        console.error("Failed to end session:", error);
+      }
+      setSessionId(null);
+    }
+
+    // Reset to initial state
+    updateWelcomeMessage(selectedSubject);
+    setActiveFiles([]);
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      <Navbar
+        onNewChat={clearChat}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        systemStatus={systemStatus}
+        selectedSubject={selectedSubject}
+      />
+
+      {/* Sidebar Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[60] animate-in fade-in duration-300"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Drawer */}
+      <aside className={`
+        fixed left-0 top-0 bottom-0 w-80 bg-white z-[70] shadow-2xl transition-transform duration-500 ease-in-out p-6 flex flex-col gap-6
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-main">📚 Subjects</h2>
+          <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-black/5 rounded-full">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Subjects List */}
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Available Subjects</p>
+
+            {/* Subject Search Bar */}
+            <div className="relative group">
+              <input
+                type="text"
+                placeholder="Search subjects..."
+                value={subjectSearchTerm}
+                onChange={(e) => setSubjectSearchTerm(e.target.value)}
+                className="w-full bg-[#F0F0E9] border border-black/5 rounded-xl py-2 pl-9 pr-4 text-xs font-medium focus:ring-2 focus:ring-[#F43E01]/20 focus:border-[#F43E01] transition-all outline-none"
+              />
+              <svg className="w-4 h-4 absolute left-3 top-2.5 text-gray-400 group-focus-within:text-[#F43E01] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {subjects.length === 0 ? (
+              <p className="text-sm text-gray-400 italic px-1">Loading subjects...</p>
+            ) : filteredSubjects.length === 0 ? (
+              <p className="text-sm text-gray-400 italic px-1">No subjects found matching "{subjectSearchTerm}"</p>
+            ) : (
+              filteredSubjects.map((subject) => (
+                <button
+                  key={subject.id}
+                  onClick={() => selectSubject(subject.name)}
+                  className={`w-full text-left p-3 rounded-xl transition-all border ${selectedSubject === subject.name
+                    ? 'bg-[#F43E01] text-white border-[#F43E01]'
+                    : 'bg-[#F0F0E9] text-main border-black/5 hover:border-[#F43E01]'
+                    }`}
+                >
+                  <div className="font-semibold text-sm">{subject.name}</div>
+                  <div className="text-xs opacity-70">{subject.syllabus}</div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Active Files */}
+        <div className="border-t border-black/10 pt-4">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 mb-2">Active Context</p>
+          {activeFiles.length === 0 ? (
+            <p className="text-sm text-gray-400 italic px-1">No files uploaded yet.</p>
+          ) : (
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {activeFiles.map((f, i) => (
+                <div key={i} className="flex items-center justify-between p-2 bg-[#F0F0E9] rounded-lg border border-black/5">
+                  <span className="text-xs truncate flex-1 mr-2">{f.name}</span>
+                  <button
+                    onClick={() => removeFile(i)}
+                    className="text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent Chats */}
+        <RecentChats
+          chats={chatHistory}
+          onLoadChat={loadChatFromHistory}
+          onClearHistory={clearChatHistory}
+        />
+
+        <button
+          onClick={clearChat}
+          className="w-full py-3 rounded-2xl border-2 border-red-100 text-red-500 font-bold hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          Clear Chat
+        </button>
+      </aside>
+
+      {/* Main Content Area */}
+      <main ref={messageContainerRef} className="flex-1 max-w-4xl w-full mx-auto px-4 md:px-8 pt-28 pb-40 space-y-8 overflow-y-auto">
+        {messages.map((msg, index) => (
+          <div
+            key={msg.id}
+            className={`flex flex-col ${msg.role === Role.USER ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out`}
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
+            <div className={`
+              max-w-[88%] md:max-w-[75%] p-5 md:p-6 rounded-[2rem] shadow-sm relative group
+              ${msg.role === Role.USER
+                ? 'bg-[#F43E01] text-white rounded-tr-none'
+                : 'bg-white text-[#332F33] rounded-tl-none border border-black/5'
+              }
+            `}>
+              {msg.files && msg.files.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {msg.files.map((f, i) => (
+                    <div key={i} className={`text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-2 border ${msg.role === Role.USER ? 'bg-white/10 border-white/20' : 'bg-black/5 border-black/10'}`}>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      {f.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="whitespace-pre-wrap leading-relaxed text-[15px] md:text-[17px] tracking-wide font-medium">
+                {msg.text}
+              </div>
+
+              {/* Diagram and Images Display */}
+              {(msg.diagram || (msg.documentImages && msg.documentImages.length > 0)) && (
+                <DiagramDisplay
+                  diagram={msg.diagram}
+                  documentImages={msg.documentImages}
+                />
+              )}
+
+              {msg.sources && msg.sources.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-black/5">
+                  <button
+                    onClick={() => {
+                      const el = document.getElementById(`sources-${msg.id}`);
+                      if (el) el.classList.toggle('hidden');
+                      const arrow = document.getElementById(`arrow-${msg.id}`);
+                      if (arrow) arrow.classList.toggle('rotate-180');
+                    }}
+                    className="flex items-center justify-between w-full group hover:opacity-80 transition-opacity"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg id={`arrow-${msg.id}`} className="w-4 h-4 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Supporting Evidence</p>
+                    </div>
+                    <span className="text-[10px] font-bold text-[#F43E01] bg-[#F43E01]/5 px-2 py-0.5 rounded-full">
+                      {msg.sources.length} Sources
+                    </span>
+                  </button>
+                  <div id={`sources-${msg.id}`} className="hidden mt-4 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-2">
+                      {msg.sources.slice(0, 4).map((source, i) => (
+                        <SourceCard key={i} source={source} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className={`text-[11px] mt-3 font-semibold opacity-40 uppercase tracking-widest ${msg.role === Role.USER ? 'text-white' : 'text-[#332F33]'}`}>
+                {msg.timestamp instanceof Date ? msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {isTyping && (
+          <div className="flex justify-start">
+            <div className="bg-white p-5 rounded-[2rem] rounded-tl-none border border-black/5 shadow-sm">
+              <div className="flex gap-1.5">
+                <div className="w-2.5 h-2.5 bg-[#F43E01]/30 rounded-full animate-bounce"></div>
+                <div className="w-2.5 h-2.5 bg-[#F43E01]/50 rounded-full animate-bounce [animation-delay:-.3s]"></div>
+                <div className="w-2.5 h-2.5 bg-[#F43E01] rounded-full animate-bounce [animation-delay:-.5s]"></div>
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </main>
+
+      {/* Suggestion Bar & Input */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 p-4 bg-gradient-to-t from-[#F0F0E9] via-[#F0F0E9]/95 to-transparent">
+        <div className="max-w-4xl mx-auto w-full space-y-4">
+
+          {/* Suggested Prompts */}
+          {messages.length < 3 && !isTyping && (
+            <div className="flex gap-2 overflow-x-auto pb-2 px-1 no-scrollbar">
+              {suggestedPrompts.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSend(p)}
+                  className="shrink-0 px-4 py-2 rounded-full bg-white border border-black/5 text-sm font-bold text-main hover:border-[#F43E01] hover:text-[#F43E01] transition-all shadow-sm"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Active File Pills (Above Input) */}
+          {activeFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 animate-in slide-in-from-bottom-2">
+              {activeFiles.map((file, idx) => (
+                <div key={idx} className="bg-[#F43E01] text-white px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-2 shadow-md">
+                  <span className="truncate max-w-[150px]">{file.name}</span>
+                  <button onClick={() => removeFile(idx)} className="hover:scale-125 transition-transform">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Enhanced Input Box */}
+          <div className="bg-white rounded-[2.5rem] shadow-2xl border border-black/5 p-3 flex items-end gap-3 transition-all focus-within:ring-4 focus-within:ring-[#F43E01]/10">
+            <FileUpload
+              onFilesSelected={setActiveFiles}
+              selectedFiles={activeFiles}
+            />
+
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Message your AI Tutor..."
+              className="flex-1 bg-transparent border-none focus:ring-0 resize-none py-3 text-[16px] text-[#332F33] max-h-40 min-h-[48px] font-medium placeholder:text-gray-400"
+              rows={1}
+            />
+
+            <button
+              onClick={() => handleSend()}
+              disabled={!input.trim() || isTyping}
+              className={`
+                w-12 h-12 rounded-full transition-all duration-300 flex items-center justify-center shrink-0
+                ${!input.trim() || isTyping
+                  ? 'bg-gray-100 text-gray-300'
+                  : 'primary-btn shadow-lg hover:scale-105 active:scale-95'
+                }
+              `}
+            >
+              <svg className="w-6 h-6 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex justify-between items-center px-4">
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em] hidden md:block">
+              {systemStatus === 'healthy' ? '✓ Connected' : '⚠ Offline'}
+            </span>
+            <div className="flex items-center gap-6">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">Sugarclass AI Tutor</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Scroll to Bottom Button */}
+      <ScrollToBottom
+        visible={showScrollButton}
+        onClick={scrollToBottom}
+      />
+    </div>
+  );
+};
+
+export default App;

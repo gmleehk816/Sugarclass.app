@@ -1,0 +1,92 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.prod
+.env.*.local
+
+# Docker
+.dockerignore
+
+# Database (exclude all database files - too large for GitHub)
+*.db
+*.sqlite
+*.sqlite3
+
+# Note: database/rag_content.db is 481MB and must be uploaded via SCP
+
+# Caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Unused UI directories
+services/rag_service/web/
+webui/
+
+# Archive directory (old test files, debug scripts, deprecated code)
+archive/
+*.tmp
+*.bak
+*.swp
+nul
+
+# Qdrant data (if running locally)
+qdrant_storage/
+
+# Redis dumps
+dump.rdb
+
+# Logs
+*.log
+frontend.log
+tutor.log
+proxy.log
+ngrok.log
+
+# Test and diagnostic scripts
+test_*.py
+check_*.py
+verify_*.py
+diagnose_*.py
+debug_*.py

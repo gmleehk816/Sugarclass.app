@@ -1,0 +1,221 @@
+# Docker Compose for AI Tutor System
+# Includes PostgreSQL databases, Qdrant vector store, and the tutor service
+
+version: '3.8'
+
+services:
+  # Content Database (PostgreSQL) - stores syllabus hierarchy and content
+  content-db:
+    image: postgres:15-alpine
+    container_name: tutor-content-db
+    environment:
+      POSTGRES_USER: ${CONTENT_DB_USER:-tutor}
+      POSTGRES_PASSWORD: ${CONTENT_DB_PASSWORD:-tutor_content_pass}
+      POSTGRES_DB: ${CONTENT_DB_NAME:-tutor_content}
+    volumes:
+      - content_db_data:/var/lib/postgresql/data
+      - ./services/rag_service/database/migrations/001_content_schema.sql:/docker-entrypoint-initdb.d/001_content_schema.sql:ro
+    ports:
+      - "${CONTENT_DB_PORT:-5433}:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${CONTENT_DB_USER:-tutor} -d ${CONTENT_DB_NAME:-tutor_content}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tutor-network
+
+  # Agent Database (PostgreSQL) - stores students, sessions, mastery, logs
+  agent-db:
+    image: postgres:15-alpine
+    container_name: tutor-agent-db
+    environment:
+      POSTGRES_USER: ${AGENT_DB_USER:-tutor}
+      POSTGRES_PASSWORD: ${AGENT_DB_PASSWORD:-tutor_agent_pass}
+      POSTGRES_DB: ${AGENT_DB_NAME:-tutor_agent}
+    volumes:
+      - agent_db_data:/var/lib/postgresql/data
+      - ./services/rag_service/database/migrations/002_agent_schema.sql:/docker-entrypoint-initdb.d/001_agent_schema.sql:ro
+    ports:
+      - "${AGENT_DB_PORT:-5434}:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${AGENT_DB_USER:-tutor} -d ${AGENT_DB_NAME:-tutor_agent}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tutor-network
+
+  # Qdrant Vector Store - for semantic search
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: tutor-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "timeout 1 bash -c 'true > /dev/tcp/127.0.0.1/6333' || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tutor-network
+
+  # Redis - for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: tutor-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tutor-network
+
+  # Automated Data Sync Agent
+  sync-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.tutor
+    container_name: tutor-sync-agent
+    environment:
+      # Database connections
+      CONTENT_DB_URL: postgresql://${CONTENT_DB_USER:-tutor}:${CONTENT_DB_PASSWORD:-tutor_content_pass}@content-db:5432/${CONTENT_DB_NAME:-tutor_content}
+
+      # Vector store
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-aitutor_documents}
+
+      # Redis (use service name 'redis', not container name 'tutor-redis')
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # Sync configuration
+      SQLITE_SOURCE_PATH: /app/content/rag_content.db
+      SYNC_CHECK_INTERVAL: 21600 # Check every 6 hours (21600 seconds)
+      ENABLE_SYNC_AGENT: false # Manual mode - no LLM required
+
+      # Embedding model
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-384}
+
+      # Service configuration
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./services/rag_service:/app/services/rag_service
+      - ./scripts/migrate_sqlite_to_postgres.py:/app/migrate_sqlite_to_postgres.py:ro
+      # Mount SQLite database directory
+      - ./database:/app/content:ro
+    command: python -m services.rag_service.agents.data_sync_agent
+    # Override healthcheck - check if healthcheck file was updated in last 7 hours
+    # The agent writes to /tmp/sync_agent_health every cycle
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import os; import time; f='/tmp/sync_agent_health'; exit(0 if os.path.exists(f) and time.time() - os.path.getmtime(f) < 25200 else 1)\"" ]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      content-db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - tutor-network
+
+  # React Frontend (serves static files + proxies API to tutor-service)
+  tutor-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+    container_name: tutor-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - tutor-service
+    restart: unless-stopped
+    networks:
+      - tutor-network
+
+  # AI Tutor Service
+  tutor-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.tutor
+    container_name: tutor-service
+    env_file:
+      - .env.prod
+    environment:
+      # Database connections
+      CONTENT_DB_URL: postgresql://${CONTENT_DB_USER:-tutor}:${CONTENT_DB_PASSWORD:-tutor_content_pass}@content-db:5432/${CONTENT_DB_NAME:-tutor_content}
+      AGENT_DB_URL: postgresql://${AGENT_DB_USER:-tutor}:${AGENT_DB_PASSWORD:-tutor_agent_pass}@agent-db:5432/${AGENT_DB_NAME:-tutor_agent}
+
+      # Vector store
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-aitutor_documents}
+
+      # Redis
+      REDIS_URL: redis://redis:6379
+
+      # Embedding model
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-384}
+
+      # Content source path (mounted volume)
+      CONTENT_SOURCE_PATH: /app/content
+
+      # Service configuration
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WORKERS: ${WORKERS:-2}
+    volumes:
+      # Mount code for development (instant reload)
+      - ./services/rag_service:/app/services/rag_service
+      # Mount SQLite database directory
+      - ./database:/app/content:ro
+    ports:
+      - "${TUTOR_PORT:-8001}:8000"
+    depends_on:
+      content-db:
+        condition: service_healthy
+      agent-db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/tutor/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - tutor-network
+
+volumes:
+  content_db_data:
+    driver: local
+  agent_db_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  tutor-network:
+    driver: bridge

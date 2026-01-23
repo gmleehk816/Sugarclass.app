@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.env*
+!.env.example
+
+# Data
+tutor_content_db_data/
+tutor_agent_db_data/
+tutor_qdrant_data/
+tutor_redis_data/
+aiwriter_db_data/
+data/
+storage/
+
+# Database
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Docker
+.dockerignore
