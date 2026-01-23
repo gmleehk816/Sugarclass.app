@@ -188,6 +188,8 @@ services:
       POSTGRES_DB: ${TUTOR_CONTENT_DB_NAME}
     volumes:
       - tutor_content_db_data:/var/lib/postgresql/data
+      - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/001_content_schema.sql:/docker-entrypoint-initdb.d/001_content_schema.sql:ro
+      - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/003_sync_tracking.sql:/docker-entrypoint-initdb.d/003_sync_tracking.sql:ro
     networks:
       - sugarclass-network
     restart: always
@@ -206,6 +208,7 @@ services:
       POSTGRES_DB: ${TUTOR_AGENT_DB_NAME}
     volumes:
       - tutor_agent_db_data:/var/lib/postgresql/data
+      - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/002_agent_schema.sql:/docker-entrypoint-initdb.d/002_agent_schema.sql:ro
     networks:
       - sugarclass-network
     restart: always
