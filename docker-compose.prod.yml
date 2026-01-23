@@ -1,0 +1,207 @@
+# =============================================================================
+# Sugarclass - Production Docker Compose
+# =============================================================================
+# This file extends the base configuration for VPS deployment.
+# It includes:
+#   1. Nginx Gateway (Port 80/443)
+#   2. SSL via Certbot
+#   3. Optimized production builds
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # GATEWAY (Reverse Proxy & SSL)
+  # ===========================================================================
+  gateway:
+    build:
+      context: ./gateway
+    container_name: sugarclass-gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./gateway/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - frontend
+      - backend
+      - aiwriter-frontend
+      - tutor-frontend
+    networks:
+      - sugarclass-network
+    restart: always
+
+  certbot:
+    image: certbot/certbot
+    container_name: sugarclass-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - sugarclass-network
+
+  # ===========================================================================
+  # MAIN DASHBOARD
+  # ===========================================================================
+  backend:
+    build: ./backend
+    container_name: sugarclass-backend
+    # No exposed ports, accessed via gateway
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./sugarclass.db
+      - SECRET_KEY=${SECRET_KEY}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    networks:
+      - sugarclass-network
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: https://sugarclass.app/api/v1
+    container_name: sugarclass-frontend
+    environment:
+      - NODE_ENV=production
+    command: npm run start
+    networks:
+      - sugarclass-network
+    restart: always
+
+  # ===========================================================================
+  # AI WRITER
+  # ===========================================================================
+  aiwriter-db:
+    image: postgres:15-alpine
+    container_name: aiwriter-db
+    environment:
+      POSTGRES_DB: newscollect
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${AIWRITER_DB_PASSWORD}
+    volumes:
+      - aiwriter_db_data:/var/lib/postgresql/data
+    networks:
+      - sugarclass-network
+    restart: always
+
+  aiwriter-backend:
+    build:
+      context: ./microservices/sugarclass-aiwriter
+      dockerfile: Dockerfile.backend
+    container_name: aiwriter-backend
+    env_file:
+      - ./microservices/sugarclass-aiwriter/.env
+    environment:
+      DB_TYPE: postgresql
+      POSTGRES_HOST: aiwriter-db
+      POSTGRES_PORT: 5432
+      SUGARCLASS_API_URL: https://sugarclass.app/api/v1
+    depends_on:
+      - aiwriter-db
+    networks:
+      - sugarclass-network
+    command: >
+      sh -c "
+        python -c 'from backend.database import init_db; init_db()' &&
+        python -m uvicorn backend.api:app --host 0.0.0.0 --port 8000
+      "
+    restart: always
+
+  aiwriter-frontend:
+    build:
+      context: ./microservices/sugarclass-aiwriter/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://sugarclass.app/aiwriter/api
+        NEXT_PUBLIC_BASE_PATH: /aiwriter
+    container_name: aiwriter-frontend
+    networks:
+      - sugarclass-network
+    restart: always
+
+  # ===========================================================================
+  # AI TUTOR
+  # ===========================================================================
+  tutor-content-db:
+    image: postgres:15-alpine
+    container_name: tutor-content-db
+    environment:
+      POSTGRES_USER: ${TUTOR_CONTENT_DB_USER}
+      POSTGRES_PASSWORD: ${TUTOR_CONTENT_DB_PASSWORD}
+      POSTGRES_DB: ${TUTOR_CONTENT_DB_NAME}
+    volumes:
+      - tutor_content_db_data:/var/lib/postgresql/data
+    networks:
+      - sugarclass-network
+    restart: always
+
+  tutor-agent-db:
+    image: postgres:15-alpine
+    container_name: tutor-agent-db
+    environment:
+      POSTGRES_USER: ${TUTOR_AGENT_DB_USER}
+      POSTGRES_PASSWORD: ${TUTOR_AGENT_DB_PASSWORD}
+      POSTGRES_DB: ${TUTOR_AGENT_DB_NAME}
+    volumes:
+      - tutor_agent_db_data:/var/lib/postgresql/data
+    networks:
+      - sugarclass-network
+    restart: always
+
+  tutor-qdrant:
+    image: qdrant/qdrant:latest
+    container_name: tutor-qdrant
+    volumes:
+      - tutor_qdrant_data:/qdrant/storage
+    networks:
+      - sugarclass-network
+    restart: always
+
+  tutor-redis:
+    image: redis:7-alpine
+    container_name: tutor-redis
+    volumes:
+      - tutor_redis_data:/data
+    networks:
+      - sugarclass-network
+    restart: always
+
+  tutor-backend:
+    build:
+      context: ./microservices/sugarclass-aitutor
+      dockerfile: Dockerfile.tutor
+    container_name: tutor-backend
+    env_file:
+      - ./microservices/sugarclass-aitutor/.env.prod
+    environment:
+      CONTENT_DB_URL: postgresql://${TUTOR_CONTENT_DB_USER}:${TUTOR_CONTENT_DB_PASSWORD}@tutor-content-db:5432/${TUTOR_CONTENT_DB_NAME}
+      AGENT_DB_URL: postgresql://${TUTOR_AGENT_DB_USER}:${TUTOR_AGENT_DB_PASSWORD}@tutor-agent-db:5432/${TUTOR_AGENT_DB_NAME}
+      QDRANT_URL: http://tutor-qdrant:6333
+      REDIS_URL: redis://tutor-redis:6379
+    networks:
+      - sugarclass-network
+    restart: always
+
+  tutor-frontend:
+    build:
+      context: ./microservices/sugarclass-aitutor/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: https://sugarclass.app/aitutor/api
+    container_name: tutor-frontend
+    networks:
+      - sugarclass-network
+    restart: always
+
+networks:
+  sugarclass-network:
+    driver: bridge
+
+volumes:
+  aiwriter_db_data:
+  tutor_content_db_data:
+  tutor_agent_db_data:
+  tutor_qdrant_data:
+  tutor_redis_data:

@@ -114,4 +114,28 @@ docker-compose down
 
 ---
 
+---
+
+## 🌐 Deployment to VPS
+
+### 1. Initial Setup
+Run the setup script on your VPS:
+```bash
+curl -sSL https://raw.githubusercontent.com/gmleehk816/Sugarclass.app/main/setup-vps.sh | bash
+```
+
+### 2. Configure SSL
+Generate SSL certificates using Certbot:
+```bash
+sudo docker compose -f docker-compose.prod.yml run --rm certbot certonly --webroot --webroot-path=/var/www/certbot --email your-email@example.com --agree-tos --no-eff-email -d sugarclass.app -d www.sugarclass.app
+```
+
+### 3. Update Nginx for SSL
+After generating certificates, uncomment the SSL redirect and port 443 block in `gateway/nginx/nginx.conf` and restart:
+```bash
+sudo docker compose -f docker-compose.prod.yml restart gateway
+```
+
+---
+
 *Maintained by the Sugarclass Engineering Team.*
