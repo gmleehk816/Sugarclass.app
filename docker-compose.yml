@@ -264,6 +264,37 @@ services:
     networks:
       - sugarclass-network
 
+  # AI Tutor Sync Agent (Monitors and syncs content)
+  tutor-sync-agent:
+    build:
+      context: ./microservices/sugarclass-aitutor
+      dockerfile: Dockerfile.tutor
+    container_name: tutor-sync-agent
+    env_file:
+      - ./microservices/sugarclass-aitutor/.env.prod
+    environment:
+      CONTENT_DB_URL: postgresql://${TUTOR_CONTENT_DB_USER:-tutor}:${TUTOR_CONTENT_DB_PASSWORD:-tutor_content_pass}@tutor-content-db:5432/${TUTOR_CONTENT_DB_NAME:-tutor_content}
+      QDRANT_URL: http://tutor-qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-aitutor_documents}
+      REDIS_HOST: tutor-redis
+      REDIS_PORT: 6379
+      SQLITE_SOURCE_PATH: /app/content/rag_content.db
+      SYNC_CHECK_INTERVAL: 21600 # Every 6 hours
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./microservices/sugarclass-aitutor/services/rag_service:/app/services/rag_service
+      - ./microservices/sugarclass-aitutor/scripts/migrate_sqlite_to_postgres.py:/app/migrate_sqlite_to_postgres.py:ro
+      - ./microservices/sugarclass-aitutor/database:/app/content:ro
+    command: python -m services.rag_service.agents.data_sync_agent
+    depends_on:
+      tutor-content-db:
+        condition: service_healthy
+      tutor-qdrant:
+        condition: service_started
+    networks:
+      - sugarclass-network
+    restart: unless-stopped
+
   # AI Tutor Frontend (React/Vite)
   tutor-frontend:
     build:

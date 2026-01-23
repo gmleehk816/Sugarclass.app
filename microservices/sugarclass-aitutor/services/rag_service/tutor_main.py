@@ -460,54 +460,6 @@ async def proxy_rag_query(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/subjects")
-async def proxy_rag_subjects():
-    """
-    Get available subjects from the RAG service.
-    """
-    try:
-        # First try the PostgreSQL database directly
-        if _content_db_builder and _content_db_builder.pool:
-            async with _content_db_builder.pool.acquire() as conn:
-                rows = await conn.fetch("""
-                    SELECT DISTINCT 
-                        subject,
-                        syllabus,
-                        COUNT(*) as topic_count
-                    FROM syllabus_hierarchy
-                    GROUP BY subject, syllabus
-                    ORDER BY subject ASC
-                """)
-                
-                subjects = []
-                for row in rows:
-                    subjects.append({
-                        "name": row['subject'],
-                        "curriculum": row['syllabus'],
-                        "topic_count": row['topic_count']
-                    })
-                
-                return subjects
-        
-        # Fallback to RAG service
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{RAG_SERVICE_URL}/topics/subject/Combined%20Science",
-                timeout=10.0
-            )
-            return response.json()
-            
-    except Exception as e:
-        logger.error(f"Error getting subjects: {e}")
-        # Fallback to hardcoded subjects
-        return [
-            {"name": "Combined Science", "curriculum": "IGCSE", "topic_count": 0},
-            {"name": "Biology", "curriculum": "IGCSE", "topic_count": 0},
-            {"name": "Chemistry", "curriculum": "IGCSE", "topic_count": 0},
-            {"name": "Physics", "curriculum": "IGCSE", "topic_count": 0},
-        ]
-
-
 @app.get("/api/topics/subject/{subject_name}")
 async def proxy_rag_topics(subject_name: str):
     """

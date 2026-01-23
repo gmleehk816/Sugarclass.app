@@ -7,7 +7,15 @@ interface SourceCardProps {
 
 const SourceCard: React.FC<SourceCardProps> = ({ source }) => {
     const [expanded, setExpanded] = useState(false);
-    const text = source.content_preview || source.text_preview || '';
+
+    // Helper to strip HTML tags for clean display
+    const stripHtml = (html: string) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        return doc.body.textContent || "";
+    };
+
+    const rawText = source.content_preview || source.text_preview || '';
+    const text = stripHtml(rawText);
     const scorePercent = typeof source.score === 'number' ? Math.round(source.score * 100) : 0;
 
     return (

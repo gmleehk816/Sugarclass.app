@@ -482,7 +482,8 @@ Be efficient and silent when everything is in sync. Only report when action is t
                     logger.info(f"Sync: {sync_result['message']}")
                 
                 # 4. Check status
-                status_result = await check_sync_status()
+                status_json = await check_sync_status()
+                status_result = json.loads(status_json)
                 logger.info(f"Sync status: {status_result['sync_percentage']}% - {status_result['overall_status']}")
                 return True
         

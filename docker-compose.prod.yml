@@ -259,6 +259,33 @@ services:
       - sugarclass-network
     command: python -m uvicorn services.rag_service.tutor_main:app --host 0.0.0.0 --port 8000
     restart: always
+
+  # AI Tutor Sync Agent (Monitors and syncs content)
+  tutor-sync-agent:
+    build:
+      context: ./microservices/sugarclass-aitutor
+      dockerfile: Dockerfile.tutor
+    container_name: tutor-sync-agent
+    env_file:
+      - ./microservices/sugarclass-aitutor/.env.prod
+    environment:
+      CONTENT_DB_URL: postgresql://${TUTOR_CONTENT_DB_USER}:${TUTOR_CONTENT_DB_PASSWORD}@tutor-content-db:5432/${TUTOR_CONTENT_DB_NAME}
+      QDRANT_URL: http://tutor-qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-aitutor_documents}
+      REDIS_HOST: tutor-redis
+      REDIS_PORT: 6379
+      SQLITE_SOURCE_PATH: /app/content/rag_content.db
+      SYNC_CHECK_INTERVAL: 21600 # Every 6 hours
+    volumes:
+      - ./microservices/sugarclass-aitutor/scripts/migrate_sqlite_to_postgres.py:/app/migrate_sqlite_to_postgres.py:ro
+      - ./microservices/sugarclass-aitutor/database:/app/content:ro
+    command: python -m services.rag_service.agents.data_sync_agent
+    depends_on:
+      - tutor-content-db
+      - tutor-qdrant
+    networks:
+      - sugarclass-network
+    restart: always
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1" ]
       interval: 30s

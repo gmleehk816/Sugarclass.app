@@ -443,56 +443,42 @@ async def get_review_topics(
 # ==================== Content Endpoints ====================
 
 @router.get("/subjects")
-async def list_subjects():
-    """List all available subjects from the database."""
+async def list_subjects(
+    content_db = Depends(get_content_db)
+):
+    """List all available subjects from the PostgreSQL content database."""
     try:
-        import sqlite3
-        import os
+        # Fetch directly from PostgreSQL pool if available
+        if hasattr(content_db, 'pool') and content_db.pool:
+            async with content_db.pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT DISTINCT 
+                        subject,
+                        syllabus,
+                        COUNT(*) as topic_count
+                    FROM syllabus_hierarchy
+                    GROUP BY subject, syllabus
+                    ORDER BY subject ASC
+                """)
+                
+                subjects = []
+                for i, row in enumerate(rows):
+                    subjects.append({
+                        "id": i + 1,
+                        "name": row['subject'],
+                        "syllabus": row['syllabus'],
+                        "topic_count": row['topic_count']
+                    })
+                
+                return {"subjects": subjects, "count": len(subjects)}
         
-        # Path to content database
-        db_path = os.path.join(os.path.dirname(__file__), "..", "database", "content", "rag_content.db")
-        
-        if not os.path.exists(db_path):
-            # Try Docker path
-            db_path = "/app/content/rag_content.db"
-        
-        if not os.path.exists(db_path):
-            return {"subjects": [], "count": 0}
-        
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Get all subjects with syllabus information
-        query = """
-            SELECT DISTINCT 
-                s.id,
-                s.name as subject_name,
-                syl.name as syllabus_name
-            FROM subjects s
-            LEFT JOIN syllabuses syl ON s.syllabus_id = syl.id
-            ORDER BY s.name
-        """
-        
-        cursor.execute(query)
-        rows = cursor.fetchall()
-        
-        subjects = []
-        for row in rows:
-            subjects.append({
-                "id": row["id"],
-                "name": row["subject_name"],
-                "syllabus": row["syllabus_name"] or "General"
-            })
-        
-        conn.close()
-        logger.info(f"Found {len(subjects)} subjects")
-        
-        return {"subjects": subjects, "count": len(subjects)}
+        # Fallback to empty if DB not ready
+        return {"subjects": [], "count": 0}
         
     except Exception as e:
-        logger.error(f"Error listing subjects: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error listing subjects from PostgreSQL: {e}")
+        # Final fallback - might be useful during migration
+        return {"subjects": [], "count": 0}
 
 
 @router.post("/content/search")

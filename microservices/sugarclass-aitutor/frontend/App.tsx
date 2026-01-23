@@ -67,11 +67,15 @@ const App: React.FC = () => {
     }
     setUserId(userId);
 
+    // Load subjects
+    loadSubjects();
+
     // Check system health
     checkHealth();
 
-    // Load subjects
-    loadSubjects();
+    // Set up polling intervals
+    const healthInterval = setInterval(checkHealth, 30000); // 30 seconds
+    const subjectsInterval = setInterval(loadSubjects, 21600000); // 6 hours
 
     // Restore selected subject from localStorage
     const savedSubject = localStorage.getItem('tutor_subject');
@@ -80,8 +84,10 @@ const App: React.FC = () => {
       updateWelcomeMessage(savedSubject);
     }
 
-    const interval = setInterval(checkHealth, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(healthInterval);
+      clearInterval(subjectsInterval);
+    };
   }, []);
 
   useEffect(() => {

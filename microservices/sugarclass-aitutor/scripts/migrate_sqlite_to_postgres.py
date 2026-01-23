@@ -33,6 +33,22 @@ POSTGRES_URL = os.getenv(
     "postgresql://tutor:tutor_content_pass@localhost:5433/tutor_content"
 )
 
+import re
+
+def strip_html_tags(text: str) -> str:
+    """Strip HTML tags from text and normalize whitespace."""
+    if not text:
+        return ""
+    # Remove script and style elements
+    text = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', ' ', text)
+    # Unescape common HTML entities
+    text = text.replace('&nbsp;', ' ').replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&quot;', '"')
+    # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 async def migrate_data():
     """Migrate data from SQLite to PostgreSQL"""
     
@@ -115,7 +131,7 @@ async def migrate_data():
             subject_name = topic.get('subject_name')
             syllabus_name = topic.get('syllabus_name')
             topic_name = topic.get('name', 'General')
-            content = topic.get('processed_content') or topic_name
+            content = strip_html_tags(topic.get('processed_content') or topic_name)
             
             # Create a structured entry - use topic name as chapter
             # Generate synthetic file path since SQLite data doesn't have it
@@ -156,7 +172,7 @@ async def migrate_data():
             content_data = sqlite_cursor.fetchone()
             
             if content_data:
-                content = content_data[0] or content_data[1] or subtopic.get('title', '')
+                content = strip_html_tags(content_data[0] or content_data[1] or subtopic.get('title', ''))
                 
                 # Generate synthetic file path
                 file_path = f"migrated/{subtopic.get('syllabus_name', 'Unknown')}/{subtopic.get('subject_name', 'Unknown')}/{subtopic.get('topic_title', 'General')}/{subtopic.get('title', 'Content')}.md"
