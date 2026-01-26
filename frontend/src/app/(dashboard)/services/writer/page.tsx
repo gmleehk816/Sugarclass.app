@@ -1,13 +1,40 @@
 "use client";
 
-import ServiceFrame from "@/components/ServiceFrame";
+import { useEffect, useState } from "react";
+import styles from "./page.module.css";
 
 export default function WriterPage() {
+    const [authenticatedUrl, setAuthenticatedUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        const isDevelopment = typeof window !== 'undefined' &&
+            (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+        
+        let baseUrl = "/aiwriter/";
+        if (isDevelopment) {
+            baseUrl = "http://localhost:3001/aiwriter/";
+        }
+        
+        if (token) {
+            const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}token=${token}`;
+            setAuthenticatedUrl(url);
+        } else {
+            setAuthenticatedUrl(baseUrl);
+        }
+    }, []);
+
     return (
-        <ServiceFrame
-            name="AI Writer"
-            description="Professional semantic drafting and document optimization engine. Integrated with enterprise style guides."
-            serviceUrl="/aiwriter/"
-        />
+        <div className={styles.microserviceContainer}>
+            {authenticatedUrl && (
+                <iframe
+                    src={authenticatedUrl}
+                    className={styles.microserviceIframe}
+                    title="Writing Hub"
+                    allow="fullscreen"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+                />
+            )}
+        </div>
     );
 }

@@ -37,6 +37,17 @@ const Sidebar = () => {
         router.push("/login");
     };
 
+    // Auto-collapse on iPad (screen width < 1024px)
+    useEffect(() => {
+        const handleResize = () => {
+            setIsCollapsed(window.innerWidth < 1024);
+        };
+        
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     // Close mobile menu on route change
     useEffect(() => {
         setIsMobileMenuOpen(false);

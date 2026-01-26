@@ -19,6 +19,16 @@ const Navbar: React.FC<NavbarProps> = ({ onNewChat, onToggleSidebar, systemStatu
   }, []);
 
   const getTitle = () => {
+    const isMobile = window.innerWidth < 768;
+    const shortBrand = 'AI Tutor';
+    
+    if (isMobile) {
+      if (selectedSubject) {
+        return `${shortBrand} | ${selectedSubject}`;
+      }
+      return shortBrand;
+    }
+    
     const brand = 'Sugarclass AI Tutor';
     if (selectedSubject) {
       return `${brand} | ${selectedSubject}`;
@@ -33,7 +43,7 @@ const Navbar: React.FC<NavbarProps> = ({ onNewChat, onToggleSidebar, systemStatu
           liquid-glass flex items-center justify-between px-4 md:px-6 py-2 transition-all duration-500 ease-in-out pointer-events-auto
           ${isScrolled
             ? 'w-[92%] md:w-[70%] lg:w-[50%] rounded-full shadow-lg h-14'
-            : 'w-full md:w-[95%] rounded-3xl shadow-sm h-18'
+            : 'w-full md:w-[95%] rounded-3xl shadow-sm h-12 md:h-14 lg:h-16'
           }
         `}
       >
@@ -50,7 +60,7 @@ const Navbar: React.FC<NavbarProps> = ({ onNewChat, onToggleSidebar, systemStatu
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-sm ${systemStatus === 'healthy' ? 'bg-green-500' : systemStatus === 'error' ? 'bg-red-500' : 'bg-gray-400'}`}>
               {systemStatus === 'healthy' ? '✓' : systemStatus === 'error' ? '✕' : '…'}
             </div>
-            <span className={`font-bold text-[#332F33] text-lg transition-opacity duration-300 ${isScrolled ? 'hidden lg:block' : 'block'}`}>
+            <span className={`font-bold text-[#332F33] transition-opacity duration-300 ${isScrolled ? 'hidden lg:block' : 'block'} ${selectedSubject ? 'text-base md:text-lg' : 'text-base md:text-lg'}`}>
               {getTitle()}
             </span>
           </div>

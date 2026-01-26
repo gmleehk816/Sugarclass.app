@@ -1,8 +1,9 @@
 "use client";
 
-import { ExternalLink, ShieldCheck, Zap, Activity, Monitor } from "lucide-react";
+import { ArrowLeft, Activity, ShieldCheck } from "lucide-react";
 import styles from "./ServiceFrame.module.css";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface ServiceFrameProps {
     name: string;
@@ -23,6 +24,7 @@ const getServiceUrl = (serviceUrl: string | undefined): string | undefined => {
         const servicePortMap: Record<string, string> = {
             '/aitutor/': 'http://localhost:3002/aitutor/',
             '/aiwriter/': 'http://localhost:3001/aiwriter/',
+            '/examiner/': 'http://localhost:3003/',
         };
         return servicePortMap[serviceUrl] || serviceUrl;
     }
@@ -32,107 +34,86 @@ const getServiceUrl = (serviceUrl: string | undefined): string | undefined => {
 };
 
 const ServiceFrame = ({ name, description, serviceUrl }: ServiceFrameProps) => {
-    const [showPreview, setShowPreview] = useState(false);
-    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+    const router = useRouter();
+    const [authenticatedUrl, setAuthenticatedUrl] = useState<string | null>(null);
+    const [isCollapsed, setIsCollapsed] = useState(false);
 
-    // Get the correct URL based on environment
-    const resolvedServiceUrl = getServiceUrl(serviceUrl);
-    const authenticatedUrl = resolvedServiceUrl && token
-        ? `${resolvedServiceUrl}${resolvedServiceUrl.includes('?') ? '&' : '?'}token=${token}`
-        : resolvedServiceUrl;
+    useEffect(() => {
+        // Auto-collapse on iPad (collapses to icons only)
+        const handleResize = () => {
+            setIsCollapsed(window.innerWidth < 1024);
+        };
+        
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
-    const handleLaunch = () => {
-        if (authenticatedUrl) {
-            window.open(authenticatedUrl, "_blank");
+    useEffect(() => {
+        // Set URL after client-side hydration to avoid mismatch
+        const token = localStorage.getItem("token");
+        const resolvedServiceUrl = getServiceUrl(serviceUrl);
+        
+        if (resolvedServiceUrl && token) {
+            const url = `${resolvedServiceUrl}${resolvedServiceUrl.includes('?') ? '&' : '?'}token=${token}`;
+            setAuthenticatedUrl(url);
+        } else {
+            setAuthenticatedUrl(resolvedServiceUrl || null);
         }
+    }, [serviceUrl]);
+
+    const handleGoBack = () => {
+        router.push('/dashboard');
     };
 
-    return (
-        <div className={`${styles.container} animate-fade-in`}>
-            <div className={styles.hero}>
-                <div className={styles.heroContent}>
-                    <div className={styles.badge}>
-                        <ShieldCheck size={14} />
-                        <span>Enterprise Certified Module</span>
-                    </div>
-                    <h1>{name}</h1>
-                    <p className={styles.heroDesc}>{description}</p>
+    // Show loading state while hydrating
+    if (!authenticatedUrl) {
+        return (
+            <div className={styles.loadingState}>
+                <ShieldCheck size={48} />
+                <p>Loading service...</p>
+            </div>
+        );
+    }
 
-                    <div className={styles.actionRow}>
-                        <button className="btn-launch" onClick={handleLaunch}>
-                            <Zap size={20} fill="currentColor" />
-                            Launch Full Portal
-                        </button>
-                        <button
-                            className={styles.secondaryBtn}
-                            onClick={() => setShowPreview(!showPreview)}
-                        >
-                            {showPreview ? <Monitor size={20} /> : <Activity size={20} />}
-                            {showPreview ? "Close Preview" : "Quick Preview"}
-                        </button>
-                    </div>
+    return (
+        <div className={styles.fullscreenContainer}>
+            {/* Sidebar Navigation */}
+            <div className={`${styles.serviceSidebar} ${isCollapsed ? styles.collapsed : ''}`}>
+                <button className={styles.backButton} onClick={handleGoBack} title="Back to Dashboard">
+                    <ArrowLeft size={20} />
+                    {!isCollapsed && <span>Back</span>}
+                </button>
+                
+                <div className={styles.sidebarContent}>
+                    {!isCollapsed && (
+                        <>
+                            <h3>{name}</h3>
+                            <p>{description}</p>
+                        </>
+                    )}
                 </div>
 
-                <div className={styles.statsPanel}>
-                    <div className={styles.statItem}>
-                        <div className={styles.statIcon}>
-                            <Activity size={18} />
-                        </div>
-                        <div>
-                            <span className={styles.statLabel}>Service Status</span>
-                            <span className={styles.statValue}>Operational</span>
-                        </div>
-                    </div>
-                    <div className={styles.statItem}>
-                        <div className={styles.statIcon}>
-                            <Zap size={18} />
-                        </div>
-                        <div>
-                            <span className={styles.statLabel}>Latency Rate</span>
-                            <span className={styles.statValue}>42ms</span>
-                        </div>
+                <div className={styles.statusIndicators}>
+                    <div className={styles.statusBadge}>
+                        <Activity size={14} />
+                        {!isCollapsed && <span>Live</span>}
                     </div>
                 </div>
             </div>
 
-            {showPreview && authenticatedUrl && (
-                <div className={`${styles.previewSection} premium-card`}>
-                    <div className={styles.previewHeader}>
-                        <div className={styles.dotGroup}>
-                            <div className={styles.dot}></div>
-                            <div className={styles.dot}></div>
-                            <div className={styles.dot}></div>
-                        </div>
-                        <span className={styles.previewTitle}>Secure Preview Instance</span>
-                        <div className={styles.launchIconBtn} onClick={handleLaunch}>
-                            <ExternalLink size={16} />
-                        </div>
-                    </div>
+            {/* Full-Screen Iframe */}
+            <div className={styles.iframeWrapper}>
+                {authenticatedUrl && (
                     <iframe
                         src={authenticatedUrl}
-                        className={styles.iframe}
-                        title={`${name} Preview`}
+                        className={styles.fullscreenIframe}
+                        title={name}
+                        allow="fullscreen"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
                     />
-                </div>
-            )}
-
-            {!showPreview && (
-                <div className={styles.featureGrid}>
-                    <div className={`${styles.featureCard} premium-card`}>
-                        <h3>Unified Tracking</h3>
-                        <p>All activities in this module are automatically synchronized with your enterprise learning records.</p>
-                    </div>
-                    <div className={`${styles.featureCard} premium-card`}>
-                        <h3>Cross-Session Persistence</h3>
-                        <p>Drafts and session state are preserved even when switching between windows.</p>
-                    </div>
-                </div>
-            )}
-
-            <footer className={styles.footer}>
-                <ShieldCheck size={16} />
-                <span>End-to-end encryption active for this service session.</span>
-            </footer>
+                )}
+            </div>
         </div>
     );
 };

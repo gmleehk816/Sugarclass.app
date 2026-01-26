@@ -189,8 +189,12 @@
 }
 
 @media (max-width: 1024px) {
-    .sidebar {
+    .sidebar:not(.collapsed) {
         width: 260px;
+    }
+
+    .sidebar.collapsed {
+        width: var(--sidebar-collapsed-width);
     }
 }
 

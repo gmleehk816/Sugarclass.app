@@ -1,13 +1,40 @@
 "use client";
 
-import ServiceFrame from "@/components/ServiceFrame";
+import { useEffect, useState } from "react";
+import styles from "./page.module.css";
 
 export default function TutorPage() {
+    const [authenticatedUrl, setAuthenticatedUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        const isDevelopment = typeof window !== 'undefined' &&
+            (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+        
+        let baseUrl = "/aitutor/";
+        if (isDevelopment) {
+            baseUrl = "http://localhost:3002/aitutor/";
+        }
+        
+        if (token) {
+            const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}token=${token}`;
+            setAuthenticatedUrl(url);
+        } else {
+            setAuthenticatedUrl(baseUrl);
+        }
+    }, []);
+
     return (
-        <ServiceFrame
-            name="AI Tutor"
-            description="Institutional-grade conceptual synthesis and adaptive learning oracle. Validates neural progress in real-time."
-            serviceUrl="/aitutor/"
-        />
+        <div className={styles.microserviceContainer}>
+            {authenticatedUrl && (
+                <iframe
+                    src={authenticatedUrl}
+                    className={styles.microserviceIframe}
+                    title="AI Teacher"
+                    allow="fullscreen"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+                />
+            )}
+        </div>
     );
 }
