@@ -10,12 +10,12 @@ export default function ExaminerPage() {
         const token = localStorage.getItem("token");
         const isDevelopment = typeof window !== 'undefined' &&
             (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-        
+
         let baseUrl = "/examiner/";
         if (isDevelopment) {
-            baseUrl = "http://localhost:3003/";
+            baseUrl = "http://localhost:3003/examiner";
         }
-        
+
         if (token) {
             const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}token=${token}`;
             setAuthenticatedUrl(url);

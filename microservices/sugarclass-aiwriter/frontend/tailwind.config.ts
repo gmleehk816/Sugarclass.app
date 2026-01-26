@@ -47,8 +47,9 @@ const config: Config = {
                 'ai-purple-light': '#F3E8FF',
             },
             fontFamily: {
-                heading: ['Plus Jakarta Sans', 'sans-serif'],
-                body: ['Inter', 'sans-serif'],
+                sans: ['Outfit', 'sans-serif'],
+                heading: ['Outfit', 'sans-serif'],
+                body: ['Outfit', 'sans-serif'],
                 mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
             },
             lineHeight: {

@@ -140,6 +140,57 @@ services:
       retries: 3
 
   # ===========================================================================
+  # AI EXAMINER MICROSERVICE
+  # ===========================================================================
+
+  # AI Examiner Backend (Python/FastAPI)
+  aiexaminer-backend:
+    build:
+      context: ./microservices/sugarclass-aiexaminer
+      dockerfile: Dockerfile.backend
+    container_name: aiexaminer-backend
+    restart: unless-stopped
+    env_file:
+      - ./microservices/sugarclass-aiexaminer/.env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./database/examiner.db
+      - SUGARCLASS_API_URL=http://backend:8000/api/v1
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./microservices/sugarclass-aiexaminer/backend:/app/backend
+      - ./microservices/sugarclass-aiexaminer/database:/app/database
+      - ./microservices/sugarclass-aiexaminer/uploads:/app/uploads
+    networks:
+      - sugarclass-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Examiner Frontend (Next.js)
+  aiexaminer-frontend:
+    build:
+      context: ./microservices/sugarclass-aiexaminer/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8003/v1
+        NEXT_PUBLIC_BASE_PATH: /examiner
+    container_name: aiexaminer-frontend
+    ports:
+      - "3003:3000"
+    depends_on:
+      - aiexaminer-backend
+    networks:
+      - sugarclass-network
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/examiner').then(r => process.exit(r.ok ? 0 : 1))\"" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
   # AI TUTOR MICROSERVICE (Infrastructure Only - Backend WIP)
   # ===========================================================================
   # Note: The AI Tutor has its own docker-compose file for standalone operation.

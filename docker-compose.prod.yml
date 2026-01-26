@@ -32,6 +32,8 @@ services:
         condition: service_healthy
       tutor-frontend:
         condition: service_healthy
+      aiexaminer-frontend:
+        condition: service_healthy
     networks:
       - sugarclass-network
     restart: always
@@ -311,6 +313,50 @@ services:
       timeout: 10s
       retries: 3
 
+  # ===========================================================================
+  # AI EXAMINER
+  # ===========================================================================
+  aiexaminer-backend:
+    build:
+      context: ./microservices/sugarclass-aiexaminer
+      dockerfile: Dockerfile.backend
+    container_name: aiexaminer-backend
+    env_file:
+      - ./microservices/sugarclass-aiexaminer/.env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./database/examiner.db
+      - SUGARCLASS_API_URL=https://sugarclass.app/api/v1
+    volumes:
+      - examiner_uploads:/app/uploads
+      - examiner_db_data:/app/database
+    networks:
+      - sugarclass-network
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  aiexaminer-frontend:
+    build:
+      context: ./microservices/sugarclass-aiexaminer/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /examiner/api/v1
+        NEXT_PUBLIC_BASE_PATH: /examiner
+    container_name: aiexaminer-frontend
+    depends_on:
+      - aiexaminer-backend
+    networks:
+      - sugarclass-network
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/examiner').then(r => process.exit(r.ok ? 0 : 1))\"" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
   sugarclass-network:
     driver: bridge
@@ -322,3 +368,5 @@ volumes:
   tutor_agent_db_data:
   tutor_qdrant_data:
   tutor_redis_data:
+  examiner_uploads:
+  examiner_db_data:

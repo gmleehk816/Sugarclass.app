@@ -21,7 +21,7 @@ The application is built using a **Micro-Frontend/Service Architecture** integra
 Modules are separate applications (often with their own backends) embedded into the Shell via the `ServiceFrame` component.
 1. **Writing Hub (AI Writer)**: A news-based writing platform. Integrated from `../sugarclass-aiwriter`.
 2. **AI Teacher (Tutor)**: Placeholder for conceptual synthesis and tutoring.
-3. **Quiz Master (Examiner)**: Placeholder for knowledge validation and automated testing.
+3. **Quiz Master (Examiner)**: Integrated from `../sugarclass-aiexaminer`.
 
 ---
 
