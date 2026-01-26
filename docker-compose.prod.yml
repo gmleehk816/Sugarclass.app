@@ -264,6 +264,11 @@ services:
       - sugarclass-network
     command: python -m uvicorn services.rag_service.tutor_main:app --host 0.0.0.0 --port 8000
     restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # AI Tutor Sync Agent (Monitors and syncs content)
   tutor-sync-agent:
@@ -352,7 +357,7 @@ services:
       - sugarclass-network
     restart: always
     healthcheck:
-      test: [ "CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/examiner').then(r => process.exit(r.ok ? 0 : 1))\"" ]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/examiner/ || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
