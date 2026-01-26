@@ -75,3 +75,20 @@ async def get_dashboard_summary(
         "service_stats": service_stats,
         "recent_history": recent_history
     }
+
+@router.get("/history", response_model=List[ProgressSchema])
+async def get_full_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+    limit: int = 50
+) -> Any:
+    """
+    Get full activity history.
+    """
+    result = await db.execute(
+        select(Progress)
+        .filter(Progress.user_id == current_user.id)
+        .order_by(Progress.timestamp.desc())
+        .limit(limit)
+    )
+    return result.scalars().all()

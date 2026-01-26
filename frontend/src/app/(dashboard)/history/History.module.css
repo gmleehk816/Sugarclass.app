@@ -1,0 +1,125 @@
+.container {
+    padding: 24px;
+    animation: fadeIn 0.6s ease-out;
+}
+
+.header {
+    margin-bottom: 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--primary);
+    letter-spacing: -0.05em;
+}
+
+.subtitle {
+    color: #64748b;
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-top: 8px;
+}
+
+.historyCard {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--card-border);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+}
+
+.tableContainer {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.table th {
+    padding: 20px 24px;
+    background: #f8fafc;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #64748b;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.table td {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--card-border);
+    vertical-align: middle;
+}
+
+.row:hover {
+    background: var(--primary-muted);
+}
+
+.serviceBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 100px;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.activityInfo {
+    display: flex;
+    flex-direction: column;
+}
+
+.activityName {
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 1rem;
+}
+
+.activityDesc {
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+.timestamp {
+    font-weight: 600;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.empty {
+    padding: 80px 24px;
+    text-align: center;
+    color: #94a3b8;
+}
+
+.empty i {
+    display: block;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 16px;
+    }
+
+    .title {
+        font-size: 1.8rem;
+    }
+
+    .table td,
+    .table th {
+        padding: 16px;
+    }
+}

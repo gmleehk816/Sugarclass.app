@@ -56,9 +56,9 @@ const DashboardPage = () => {
                     <h1 className={styles.title}>Welcome back, <span className="gradient-text">{firstName}</span>!</h1>
                     <p className={styles.subtitle}>Your smart learning space. You are doing a great job today!</p>
                 </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                    <div className="animate-float" style={{ opacity: 0.8 }}>
-                        <Sparkles size={32} color="#f1c40f" />
+                <div className={styles.headerAccents}>
+                    <div className="animate-float">
+                        <Sparkles size={32} color="var(--accent)" />
                     </div>
                 </div>
             </header>
@@ -189,9 +189,6 @@ const DashboardPage = () => {
                 </section>
             </div>
 
-            {/* Lucrative Blobs in Dashboard BG */}
-            <div className="abstract-blob blob-sunrise" style={{ top: '10%', right: '5%', opacity: 0.08 }}></div>
-            <div className="abstract-blob blob-ocean" style={{ bottom: '10%', left: '5%', opacity: 0.08 }}></div>
         </div>
     );
 };

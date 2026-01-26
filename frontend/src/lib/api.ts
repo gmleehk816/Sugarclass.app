@@ -49,6 +49,7 @@ export const auth = {
 
 export const progress = {
     getSummary: () => apiFetch('/progress/summary'),
+    getFullHistory: (limit: number = 50) => apiFetch(`/progress/history?limit=${limit}`),
     trackActivity: (data: any) => apiFetch('/progress/', {
         method: 'POST',
         body: JSON.stringify(data),

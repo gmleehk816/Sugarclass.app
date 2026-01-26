@@ -75,7 +75,7 @@ const ServiceFrame = ({ name, description, serviceUrl }: ServiceFrameProps) => {
 
                 <div className={styles.statsPanel}>
                     <div className={styles.statItem}>
-                        <div className={styles.statIcon} style={{ background: '#fcfaf7', color: 'var(--success)' }}>
+                        <div className={styles.statIcon}>
                             <Activity size={18} />
                         </div>
                         <div>
@@ -84,7 +84,7 @@ const ServiceFrame = ({ name, description, serviceUrl }: ServiceFrameProps) => {
                         </div>
                     </div>
                     <div className={styles.statItem}>
-                        <div className={styles.statIcon} style={{ background: '#fcfaf7', color: 'var(--accent)' }}>
+                        <div className={styles.statIcon}>
                             <Zap size={18} />
                         </div>
                         <div>

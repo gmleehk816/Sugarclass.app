@@ -10,8 +10,8 @@ export default function DashboardLayout({
         <div className="dashboard-layout">
             <Sidebar />
             <main className={styles.main}>
-                <div className="grid-pattern"></div>
-                <div className="corner-glow"></div>
+                <div className="blob blob-1"></div>
+                <div className="blob blob-2"></div>
                 <div className="main-content">
                     {children}
                 </div>
