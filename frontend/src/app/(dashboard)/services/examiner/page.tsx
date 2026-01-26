@@ -13,7 +13,7 @@ export default function ExaminerPage() {
 
         let baseUrl = "/examiner/";
         if (isDevelopment) {
-            baseUrl = "http://localhost:3003/examiner";
+            baseUrl = "http://localhost:3003/examiner/";
         }
 
         if (token) {
