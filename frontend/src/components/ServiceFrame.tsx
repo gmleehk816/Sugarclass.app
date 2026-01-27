@@ -22,9 +22,9 @@ const getServiceUrl = (serviceUrl: string | undefined): string | undefined => {
     if (isDevelopment) {
         // Map service paths to their local development ports
         const servicePortMap: Record<string, string> = {
-            '/aitutor/': 'http://localhost:3002/aitutor/',
-            '/aiwriter/': 'http://localhost:3001/aiwriter/',
-            '/examiner/': 'http://localhost:3003/',
+            '/aitutor/': 'http://localhost:3402/aitutor/',
+            '/aiwriter/': 'http://localhost:3401/aiwriter/',
+            '/examiner/': 'http://localhost:3403/',
         };
         return servicePortMap[serviceUrl] || serviceUrl;
     }
@@ -43,7 +43,7 @@ const ServiceFrame = ({ name, description, serviceUrl }: ServiceFrameProps) => {
         const handleResize = () => {
             setIsCollapsed(window.innerWidth < 1024);
         };
-        
+
         handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
@@ -53,7 +53,7 @@ const ServiceFrame = ({ name, description, serviceUrl }: ServiceFrameProps) => {
         // Set URL after client-side hydration to avoid mismatch
         const token = localStorage.getItem("token");
         const resolvedServiceUrl = getServiceUrl(serviceUrl);
-        
+
         if (resolvedServiceUrl && token) {
             const url = `${resolvedServiceUrl}${resolvedServiceUrl.includes('?') ? '&' : '?'}token=${token}`;
             setAuthenticatedUrl(url);
@@ -84,7 +84,7 @@ const ServiceFrame = ({ name, description, serviceUrl }: ServiceFrameProps) => {
                     <ArrowLeft size={20} />
                     {!isCollapsed && <span>Back</span>}
                 </button>
-                
+
                 <div className={styles.sidebarContent}>
                     {!isCollapsed && (
                         <>

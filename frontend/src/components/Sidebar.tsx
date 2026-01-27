@@ -28,7 +28,7 @@ const Sidebar = () => {
         { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
         { name: "AI Teacher", icon: BookOpen, path: "/services/tutor" },
         { name: "Writing Hub", icon: PenTool, path: "/services/writer" },
-        { name: "Quiz Master", icon: FileSearch, path: "/services/examiner" },
+        { name: "AI Examiner", icon: FileSearch, path: "/services/examiner" },
         { name: "Settings", icon: Settings, path: "/settings" },
     ];
 
@@ -42,7 +42,7 @@ const Sidebar = () => {
         const handleResize = () => {
             setIsCollapsed(window.innerWidth < 1024);
         };
-        
+
         handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);

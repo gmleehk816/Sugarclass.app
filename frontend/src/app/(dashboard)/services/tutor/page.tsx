@@ -10,12 +10,12 @@ export default function TutorPage() {
         const token = localStorage.getItem("token");
         const isDevelopment = typeof window !== 'undefined' &&
             (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-        
+
         let baseUrl = "/aitutor/";
         if (isDevelopment) {
-            baseUrl = "http://localhost:3002/aitutor/";
+            baseUrl = "http://localhost:3402/aitutor/";
         }
-        
+
         if (token) {
             const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}token=${token}`;
             setAuthenticatedUrl(url);

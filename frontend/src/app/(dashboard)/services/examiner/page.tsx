@@ -13,7 +13,7 @@ export default function ExaminerPage() {
 
         let baseUrl = "/examiner/";
         if (isDevelopment) {
-            baseUrl = "http://localhost:3003/examiner/";
+            baseUrl = "http://localhost:3403/examiner/";
         }
 
         if (token) {
@@ -30,7 +30,7 @@ export default function ExaminerPage() {
                 <iframe
                     src={authenticatedUrl}
                     className={styles.microserviceIframe}
-                    title="Quiz Master"
+                    title="AI Examiner"
                     allow="fullscreen"
                     sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
                 />

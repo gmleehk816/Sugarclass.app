@@ -10,7 +10,7 @@ export default function Navbar() {
                         <GraduationCap size={24} />
                     </div>
                     <span className="text-xl font-extrabold tracking-tight text-primary">
-                        Quiz Master <span className="text-accent font-medium text-sm ml-1 opacity-80">by Sugarclass</span>
+                        AI Examiner <span className="text-accent font-medium text-sm ml-1 opacity-80">by Sugarclass</span>
                     </span>
                 </div>
                 <div className="hidden md:flex items-center gap-8">

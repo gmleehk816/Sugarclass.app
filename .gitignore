@@ -28,6 +28,12 @@ storage/
 # Database
 *.db
 *.sqlite3
+examiner_db_data/
+microservices/sugarclass-aiexaminer/database/
+
+# Uploads
+examiner_uploads/
+microservices/sugarclass-aiexaminer/uploads/
 
 # OS
 .DS_Store

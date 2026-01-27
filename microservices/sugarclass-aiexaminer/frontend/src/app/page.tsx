@@ -2,10 +2,33 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import UploadSection from '@/components/UploadSection';
 import QuizInterface from '@/components/QuizInterface';
-import { Sparkles, Trophy, Database, Zap, ArrowRight, BookOpen } from 'lucide-react';
+import ShortAnswerQuiz from '@/components/ShortAnswerQuiz';
+import PageSelector from '@/components/PageSelector';
+import { Sparkles, Trophy, Database, Zap, ArrowRight, BookOpen, FileText, MessageSquare, CheckSquare, Clock, Award, GraduationCap, History } from 'lucide-react';
+
+interface PagePreview {
+  page: number;
+  title: string;
+  preview: string;
+  char_count: number;
+  is_title_page: boolean;
+}
+
+interface UploadResponse {
+  id: string;
+  filename: string;
+  text_preview: string;
+  full_text: string;
+  total_pages: number;
+  processed_pages: number[];
+  requires_page_selection: boolean;
+  max_pages_limit: number;
+  page_previews: PagePreview[];
+}
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -15,12 +38,37 @@ function DashboardContent() {
   const [quizData, setQuizData] = useState<any>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [questionType, setQuestionType] = useState<'mcq' | 'short'>('mcq');
+  const [numQuestions, setNumQuestions] = useState(15); // Default to 15 questions
+
+  // Page selection and configuration state
+  const [pendingUpload, setPendingUpload] = useState<UploadResponse | null>(null);
+  const [showPageSelector, setShowPageSelector] = useState(false);
+
+  // Progress stats
+  const [stats, setStats] = useState<{ quizzes_taken: number, average_accuracy: string } | null>(null);
+  const [recentHistory, setRecentHistory] = useState<any[]>([]);
 
   useEffect(() => {
     if (materialId) {
       handleGenerateFromMaterial(materialId);
     }
+    fetchStats();
   }, [materialId]);
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/progress/`);
+      const data = await response.json();
+      setStats({
+        quizzes_taken: data.quizzes_taken,
+        average_accuracy: data.average_accuracy
+      });
+      setRecentHistory(data.history?.slice(0, 3) || []);
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    }
+  };
 
   const handleGenerateFromMaterial = async (id: string) => {
     setIsGenerating(true);
@@ -48,11 +96,12 @@ function DashboardContent() {
           material_id: id,
           topic: material.filename.split('.')[0],
           num_questions: 5,
-          difficulty: 'medium'
+          difficulty: 'medium',
+          question_type: questionType
         }),
       });
       const data = await response.json();
-      setQuizData(data);
+      setQuizData({ ...data, question_type: questionType });
     } catch (error: any) {
       console.error('Quiz generation failed:', error);
       setError(error.message);
@@ -61,31 +110,83 @@ function DashboardContent() {
     }
   };
 
-  const handleUploadComplete = async (uploadResponse: any) => {
+  const handleUploadComplete = async (uploadResponse: UploadResponse) => {
+    if (showPageSelector || quizData || isGenerating) return;
+
+    setPendingUpload(uploadResponse);
+    setShowPageSelector(true);
+  };
+
+  const handlePageSelection = async (selectedPages: number[], selectedQuestionType: 'mcq' | 'short', selectedNumQuestions: number) => {
+    if (!pendingUpload) return;
+
+    setShowPageSelector(false);
     setIsGenerating(true);
     setError(null);
-    const token = localStorage.getItem('sugarclass_token');
+    setQuestionType(selectedQuestionType);
+    setNumQuestions(selectedNumQuestions);
+
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/generate`, {
+      const token = localStorage.getItem('sugarclass_token');
+      let processedData = pendingUpload;
+
+      // Only call process-pages if we actually did selection (large PDF)
+      if (pendingUpload.requires_page_selection) {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/process-pages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            material_id: pendingUpload.id,
+            selected_pages: selectedPages
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to process selected pages');
+        }
+
+        processedData = await response.json();
+      }
+
+      // Validate text content
+      if (!processedData.full_text || processedData.full_text.trim() === '') {
+        throw new Error("No text content could be extracted. Please try a different document.");
+      }
+
+      // Generate the quiz
+      const requestBody = {
+        text: processedData.full_text,
+        material_id: processedData.id,
+        topic: processedData.filename.split('.')[0],
+        num_questions: selectedNumQuestions,
+        difficulty: 'medium',
+        question_type: selectedQuestionType
+      };
+
+      const quizResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({
-          text: uploadResponse.full_text,
-          material_id: uploadResponse.id,
-          topic: uploadResponse.filename.split('.')[0],
-          num_questions: 5,
-          difficulty: 'medium'
-        }),
+        body: JSON.stringify(requestBody),
       });
-      const data = await response.json();
-      setQuizData(data);
-    } catch (error) {
-      console.error('Quiz generation failed:', error);
-      setError("Failed to generate quiz. Please try again.");
-    } finally {
+
+      const responseData = await quizResponse.json();
+
+      if (!quizResponse.ok) {
+        throw new Error(responseData.detail || `Server error: ${quizResponse.status}`);
+      }
+
+      setQuizData({ ...responseData, question_type: selectedQuestionType });
+      setPendingUpload(null);
+      setIsGenerating(false);
+    } catch (error: any) {
+      console.error('Processing failed:', error);
+      setError(error.message);
       setIsGenerating(false);
     }
   };
@@ -100,10 +201,11 @@ function DashboardContent() {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
-          quiz_id: quizData.id,
+          quiz_id: quizData?.id,
           score: score,
           total: total,
-          user_id: 'default_user'
+          user_id: 'default_user',
+          question_type: quizData?.question_type
         }),
       });
     } catch (error) {
@@ -113,6 +215,23 @@ function DashboardContent() {
 
   return (
     <div className="container mx-auto px-6 py-12 md:px-10 lg:py-20">
+      {/* Page Selector Modal */}
+      {showPageSelector && pendingUpload && (
+        <PageSelector
+          totalPages={pendingUpload.total_pages}
+          maxPages={pendingUpload.max_pages_limit}
+          pagePreviews={pendingUpload.page_previews}
+          contentPreview={pendingUpload.text_preview}
+          requiresSelection={pendingUpload.requires_page_selection}
+          onConfirm={handlePageSelection}
+          onCancel={() => {
+            setShowPageSelector(false);
+            setPendingUpload(null);
+          }}
+        />
+      )}
+
+
       {!quizData && !isGenerating ? (
         <div className="animate-fade-in max-w-6xl mx-auto">
           {/* Context Header */}
@@ -124,8 +243,8 @@ function DashboardContent() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start mb-24">
             <div className="lg:col-span-12">
               <h1 className="text-6xl md:text-8xl font-black mb-8 tracking-tight text-primary leading-[0.9]">
-                Turn your notes <br />
-                into <span className="text-secondary-foreground opacity-30">perfect</span> <span className="text-accent italic">scores.</span>
+                AI <span className="text-secondary-foreground opacity-30">Examiner</span> <br />
+                <span className="text-accent italic">Smart Mastery.</span>
               </h1>
               <p className="text-xl md:text-2xl text-slate-500 max-w-3xl leading-relaxed font-medium">
                 Upload your study materials and let our refined AI generate expert-level practice assessments designed for deep retention and mastery.
@@ -140,34 +259,136 @@ function DashboardContent() {
             </div>
           )}
 
+          {/* Page Limit Notice */}
+          <div className="mb-8 p-6 rounded-2xl bg-primary-muted border border-primary/10 flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-primary/10 text-primary">
+              <FileText size={24} />
+            </div>
+            <div>
+              <h3 className="font-bold text-primary mb-1">Smart Page Processing</h3>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                For optimal AI performance, we process up to <span className="font-bold text-primary">20 pages</span> per document.
+                For larger PDFs, you'll be able to select which pages to focus on.
+              </p>
+            </div>
+          </div>
+
           <UploadSection onUploadComplete={handleUploadComplete} />
 
-          {/* Quick Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-24">
-            {[
-              { label: 'Session Analytics', title: 'Smart Progress', desc: 'Track your weak areas with AI-driven insights.', icon: Zap, color: 'bg-amber-50 text-amber-600', link: '/history' },
-              { label: 'Content Sync', title: 'Source Library', desc: 'Manage your textbooks and handwritten papers.', icon: Database, color: 'bg-blue-50 text-blue-600', link: '/materials' },
-              { label: 'Global Ranking', title: 'Merit List', desc: 'Compare your mastery score with students worldwide.', icon: Trophy, color: 'bg-emerald-50 text-emerald-600', link: '/history' },
-            ].map((stat, i) => (
-              <div key={i} className="premium-card p-10 group hover:border-primary-muted h-full flex flex-col justify-between">
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6">{stat.label}</div>
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className={`p-4 rounded-2xl ${stat.color}`}>
-                      <stat.icon size={24} />
-                    </div>
-                    <h3 className="text-2xl font-extrabold text-primary tracking-tight">{stat.title}</h3>
-                  </div>
-                  <p className="text-slate-500 font-medium leading-relaxed mb-8">{stat.desc}</p>
-                </div>
-                <button
-                  onClick={() => router.push(stat.link)}
-                  className="flex items-center gap-2 text-sm font-bold text-primary group-hover:gap-4 transition-all duration-500"
-                >
-                  View {stat.title} <ArrowRight size={18} />
-                </button>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-24 items-stretch">
+            {/* Recent Activity Column */}
+            <div className="lg:col-span-1 flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-primary flex items-center gap-2">
+                  <Clock size={20} className="text-accent" />
+                  Recent Sessions
+                </h3>
+                <Link href="/history" className="text-xs font-bold text-slate-400 hover:text-primary transition-colors flex items-center gap-1">
+                  View All <ArrowRight size={12} />
+                </Link>
               </div>
-            ))}
+              <div className="premium-card flex-1 bg-white/40 border-card-border/50 divide-y divide-card-border/30">
+                {recentHistory.length > 0 ? (
+                  recentHistory.map((item, i) => (
+                    <div key={i} className="p-5 hover:bg-white/60 transition-colors flex items-center justify-between group">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${parseInt(item.accuracy) >= 80 ? 'bg-success/10 text-success' : 'bg-primary/5 text-primary'}`}>
+                          <Award size={20} />
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold text-primary group-hover:text-accent transition-colors line-clamp-1">{item.title}</div>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{new Date(item.completed_at).toLocaleDateString()}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-black text-primary">{item.accuracy}</div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">{item.score}/{item.total}</div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-12 text-center flex flex-col items-center justify-center h-full opacity-40">
+                    <History size={32} className="mb-3" />
+                    <p className="text-xs font-bold uppercase tracking-widest">No sessions yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Neural Insights Column */}
+            <div className="lg:col-span-1 flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-primary flex items-center gap-2">
+                  <Sparkles size={20} className="text-accent" />
+                  AI Insights
+                </h3>
+              </div>
+              <div className="premium-card flex-1 bg-gradient-to-br from-primary/5 to-accent/5 p-8 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-8 opacity-5 text-accent group-hover:scale-110 transition-transform duration-700">
+                  <Sparkles size={160} />
+                </div>
+
+                <div className="relative z-10 h-full flex flex-col">
+                  {stats ? (
+                    <>
+                      <div className="p-4 rounded-2xl bg-white/80 border border-card-border/50 mb-6 group-hover:shadow-lg transition-all duration-500">
+                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-accent mb-2">Mastery Feedback</div>
+                        <p className="text-sm font-medium text-slate-600 leading-relaxed italic">
+                          "{parseInt(stats.average_accuracy) >= 80
+                            ? "Your high accuracy shows strong conceptual retention. Try harder materials to maintain your edge."
+                            : "Consistency is key. Focus on reviewing the explanation cards after each incorrect answer."}"
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 mt-auto">
+                        <div className="p-4 rounded-2xl bg-white/40 border border-card-border/30">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Global Rank</div>
+                          <div className="text-xl font-black text-primary">Top 12%</div>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-white/40 border border-card-border/30">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Star Badges</div>
+                          <div className="text-xl font-black text-primary">{Math.floor(stats.quizzes_taken / 5)} Earned</div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="animate-pulse flex flex-col gap-4">
+                      <div className="h-20 bg-white/40 rounded-2xl"></div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="h-16 bg-white/40 rounded-2xl"></div>
+                        <div className="h-16 bg-white/40 rounded-2xl"></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Metrics Column */}
+            <div className="lg:col-span-1 flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-primary flex items-center gap-2">
+                  <Zap size={20} className="text-accent" />
+                  Live Metrics
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 gap-6 flex-1">
+                {[
+                  { label: 'Total Quizzes', value: stats?.quizzes_taken || 0, icon: GraduationCap, color: 'text-blue-600 bg-blue-50' },
+                  { label: 'Avg. Accuracy', value: stats?.average_accuracy || '0%', icon: Trophy, color: 'text-emerald-600 bg-emerald-50' },
+                ].map((metric, i) => (
+                  <div key={i} className="premium-card p-6 flex items-center gap-6 bg-white/60 hover:bg-white transition-all">
+                    <div className={`p-4 rounded-2xl ${metric.color}`}>
+                      <metric.icon size={24} />
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">{metric.label}</div>
+                      <div className="text-3xl font-black text-primary tracking-tight">{metric.value}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Bottom Proof Section */}
@@ -193,7 +414,9 @@ function DashboardContent() {
           </div>
           <h2 className="text-4xl font-extrabold mb-4 text-primary tracking-tight">Synthesizing Materials</h2>
           <p className="text-xl text-slate-400 max-w-md mx-auto font-medium leading-relaxed">
-            Gemini is distilling your content into high-fidelity practice items. This usually takes around 10-15 seconds.
+            {questionType === 'short'
+              ? 'Generating thoughtful short-answer questions...'
+              : 'Distilling your content into high-fidelity practice items...'}
           </p>
         </div>
       ) : (
@@ -206,12 +429,30 @@ function DashboardContent() {
               &larr; Exit Session
             </button>
             <div className="flex items-center gap-4">
+              <div className={`status-badge border ${quizData.question_type === 'short' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                {quizData.question_type === 'short' ? 'Short Answer Mode' : 'Multiple Choice Mode'}
+              </div>
               <div className="status-badge bg-success/10 text-success border border-success/20">
                 Syncing Progress
               </div>
             </div>
           </div>
-          <QuizInterface questions={quizData.questions} quizId={quizData.id} onFinished={handleQuizFinished} />
+
+          {quizData.question_type === 'short' ? (
+            <ShortAnswerQuiz
+              questions={quizData.questions}
+              quizId={quizData.id}
+              onFinished={handleQuizFinished}
+              onReset={() => setQuizData(null)}
+            />
+          ) : (
+            <QuizInterface
+              questions={quizData.questions}
+              quizId={quizData.id}
+              onFinished={handleQuizFinished}
+              onReset={() => setQuizData(null)}
+            />
+          )}
         </div>
       )}
     </div>

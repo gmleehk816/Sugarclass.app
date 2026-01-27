@@ -30,23 +30,41 @@ def report_activity(service: str, activity_type: str, token: str, metadata: dict
     except Exception as e:
         print(f"Failed to report activity: {e}")
 
+
 class QuizGenerationRequest(BaseModel):
     text: str
     num_questions: int = 5
     difficulty: str = "medium"
     topic: Optional[str] = None
     material_id: Optional[str] = None
+    question_type: str = "mcq"  # "mcq" or "short"
+
+
+class ShortAnswerValidationRequest(BaseModel):
+    question: str
+    expected_answer: str
+    key_points: List[str]
+    user_answer: str
+
 
 @router.post("/generate")
 async def generate_quiz(request: QuizGenerationRequest, db: AsyncSession = Depends(get_db)):
     if not request.text:
         raise HTTPException(status_code=400, detail="No source text provided")
     
-    questions = await gemini_service.generate_questions(
-        text=request.text,
-        num_questions=request.num_questions,
-        difficulty=request.difficulty
-    )
+    # Generate based on question type
+    if request.question_type == "short":
+        questions = await gemini_service.generate_short_questions(
+            text=request.text,
+            num_questions=request.num_questions,
+            difficulty=request.difficulty
+        )
+    else:
+        questions = await gemini_service.generate_questions(
+            text=request.text,
+            num_questions=request.num_questions,
+            difficulty=request.difficulty
+        )
     
     if not questions:
         raise HTTPException(status_code=500, detail="Failed to generate questions")
@@ -63,28 +81,50 @@ async def generate_quiz(request: QuizGenerationRequest, db: AsyncSession = Depen
         
     return {
         "id": quiz.id,
-        "questions": questions
+        "questions": questions,
+        "question_type": request.question_type
     }
+
+
+@router.post("/validate-short-answer")
+async def validate_short_answer(request: ShortAnswerValidationRequest):
+    """Validate a user's short answer response using AI"""
+    
+    result = await gemini_service.validate_short_answer(
+        question=request.question,
+        expected_answer=request.expected_answer,
+        key_points=request.key_points,
+        user_answer=request.user_answer
+    )
+    
+    return result
+
 
 @router.get("/")
 async def get_quizzes(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Quiz).order_by(Quiz.created_at.desc()))
     return result.scalars().all()
 
+
+class QuizSubmitRequest(BaseModel):
+    quiz_id: str
+    score: int
+    total: int
+    user_id: Optional[str] = None
+    question_type: Optional[str] = "mcq"
+
+
 @router.post("/submit")
 async def submit_quiz_score(
-    quiz_id: str, 
-    score: int, 
-    total: int, 
-    user_id: Optional[str] = None,
+    request: QuizSubmitRequest,
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ):
     progress = Progress(
-        user_id=user_id or "default_user",
-        quiz_id=quiz_id,
-        score=score,
-        total_questions=total
+        user_id=request.user_id or "default_user",
+        quiz_id=request.quiz_id,
+        score=request.score,
+        total_questions=request.total
     )
     db.add(progress)
     await db.commit()
@@ -95,10 +135,13 @@ async def submit_quiz_score(
             service="examiner",
             activity_type="quiz_completion",
             token=authorization,
-            metadata={"quiz_id": quiz_id, "score": score, "total": total},
-            score=round((score/total) * 100) if total > 0 else 0
+            metadata={
+                "quiz_id": request.quiz_id, 
+                "score": request.score, 
+                "total": request.total,
+                "question_type": request.question_type
+            },
+            score=round((request.score/request.total) * 100) if request.total > 0 else 0
         )
         
-    return {"status": "success", "score": score, "total": total}
-
-
+    return {"status": "success", "score": request.score, "total": request.total}

@@ -331,6 +331,7 @@ services:
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///./database/examiner.db
       - SUGARCLASS_API_URL=https://sugarclass.app/api/v1
+      - CORS_ORIGINS=https://sugarclass.app,https://www.sugarclass.app
     volumes:
       - examiner_uploads:/app/uploads
       - examiner_db_data:/app/database

@@ -1,8 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
+from dotenv import load_dotenv
 from backend.database import engine, Base
 from backend.api.endpoints import quiz, upload, progress
 import backend.models.quiz
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI(
     title="Sugarclass AI Examiner API",
@@ -16,9 +21,12 @@ async def startup():
         await conn.run_sync(Base.metadata.create_all)
 
 # Configure CORS
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3400,http://localhost:3403")
+allow_origins_list = [origin.strip() for origin in cors_origins.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=allow_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

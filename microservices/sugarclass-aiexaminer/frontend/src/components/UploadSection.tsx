@@ -28,7 +28,7 @@ export default function UploadSection({ onUploadComplete }: { onUploadComplete: 
     }, []);
 
     const pollSession = useCallback(async () => {
-        if (!sessionId || !isPolling) return;
+        if (!sessionId || !isPolling || isUploading) return;
 
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/session/${sessionId}`);
@@ -60,11 +60,14 @@ export default function UploadSection({ onUploadComplete }: { onUploadComplete: 
         if (sessionId) formData.append('session_id', sessionId);
 
         try {
+            const token = localStorage.getItem('sugarclass_token');
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/`, {
                 method: 'POST',
                 body: formData,
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
             });
             const data = await response.json();
+            setIsPolling(false);
             onUploadComplete(data);
         } catch (error) {
             console.error('Upload failed:', error);
@@ -81,7 +84,12 @@ export default function UploadSection({ onUploadComplete }: { onUploadComplete: 
           ${dragActive ? 'border-accent bg-accent-muted ring-4 ring-accent-muted' : ''}`}
                 onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
                 onDragLeave={() => setDragActive(false)}
-                onDrop={(e) => { e.preventDefault(); setDragActive(false); if (e.target instanceof HTMLInputElement && e.target.files?.[0]) handleUpload(e.target.files[0]); }}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    setDragActive(false);
+                    const files = e.dataTransfer?.files;
+                    if (files?.[0]) handleUpload(files[0]);
+                }}
                 onClick={() => {
                     const input = document.getElementById('file-upload') as HTMLInputElement;
                     input?.click();
@@ -100,6 +108,7 @@ export default function UploadSection({ onUploadComplete }: { onUploadComplete: 
                 <input
                     id="file-upload"
                     type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
                     className="hidden"
                     onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
                 />

@@ -9,7 +9,11 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from dotenv import load_dotenv
 from .ai_writer_functions import generate_prewrite_summary, generate_ai_suggestion, improve_paragraph
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI(title="NewsCollect API")
 

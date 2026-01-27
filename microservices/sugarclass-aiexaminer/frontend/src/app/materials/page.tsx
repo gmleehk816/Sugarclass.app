@@ -120,7 +120,7 @@ export default function MaterialsPage() {
                                     className="flex items-center justify-center gap-3 w-full py-3.5 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-md active:scale-95"
                                 >
                                     <Play size={18} fill="currentColor" />
-                                    Start New Quiz
+                                    Start AI Examination
                                 </Link>
                             </div>
                         ))}

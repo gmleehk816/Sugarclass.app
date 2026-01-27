@@ -37,7 +37,7 @@ services:
     build: ./frontend
     container_name: sugarclass-frontend
     ports:
-      - "3000:3000"
+      - "3400:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -128,7 +128,7 @@ services:
         NEXT_PUBLIC_BASE_PATH: /aiwriter
     container_name: aiwriter-frontend
     ports:
-      - "3001:3000"
+      - "3401:3000"
     depends_on:
       - aiwriter-backend
     networks:
@@ -179,7 +179,7 @@ services:
         NEXT_PUBLIC_BASE_PATH: /examiner
     container_name: aiexaminer-frontend
     ports:
-      - "3003:3000"
+      - "3403:3000"
     depends_on:
       - aiexaminer-backend
     networks:
@@ -355,7 +355,7 @@ services:
         VITE_API_URL: "/aitutor/api"
     container_name: tutor-frontend
     ports:
-      - "3002:3000"
+      - "3402:3000"
     depends_on:
       - tutor-backend
     networks:
