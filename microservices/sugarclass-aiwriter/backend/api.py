@@ -56,10 +56,8 @@ def report_activity(service: str, activity_type: str, token: str, metadata: dict
         print(f"Failed to report activity: {e}")
 
 # Enable CORS for Next.js frontend
-
-# Enable CORS for Next.js frontend
 # Get CORS origins from environment variable, with fallback to localhost for development
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002")
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3400,http://localhost:3401,http://localhost:3403")
 allow_origins_list = [origin.strip() for origin in cors_origins.split(",")]
 
 app.add_middleware(
@@ -69,6 +67,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Tasks to run on startup"""
+    if os.getenv("ENABLE_SCHEDULER", "false").lower() == "true":
+        try:
+            from collector.scheduler import start_scheduler
+            start_scheduler()
+            print("[Startup] News collection scheduler started")
+        except Exception as e:
+            print(f"[Startup Error] Failed to start scheduler: {e}")
 
 # Pydantic models
 class Article(BaseModel):

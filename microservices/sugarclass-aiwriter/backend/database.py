@@ -409,9 +409,13 @@ def init_db():
         
         # Insert default sources
         default_sources = [
-            ("cnn.com", "CNN", "http://rss.cnn.com/rss/edition.rss"),
-            ("bbc.com", "BBC", "http://feeds.bbci.co.uk/news/rss.xml"),
+            ("cnn.com", "CNN", "https://rss.cnn.com/rss/edition.rss"),
+            ("bbc.com", "BBC", "https://feeds.bbci.co.uk/news/rss.xml"),
             ("reuters.com", "Reuters", "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best"),
+            ("cnbc.com", "CNBC", "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114"),
+            ("theguardian.com", "The Guardian", "https://www.theguardian.com/world/rss"),
+            ("phys.org", "Phys.org", "https://phys.org/rss-feed/"),
+            ("sciencenewsforstudents.org", "Science News Explores", "https://www.snexplores.org/feed"),
         ]
         
         for domain, name, rss_url in default_sources:

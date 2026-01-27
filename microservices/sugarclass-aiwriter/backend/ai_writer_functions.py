@@ -10,9 +10,9 @@ import requests
 from dotenv import load_dotenv
 import time
 
-# Path to aiwriter's api.txt
-_AIWRITER_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "aiwriter")
-_DOTENV_PATH = os.path.join(_AIWRITER_PATH, "api.txt")
+# Path to aiwriter's .env
+_AIWRITER_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DOTENV_PATH = os.path.join(_AIWRITER_PATH, ".env")
 
 
 def _reload_config():

@@ -511,7 +511,18 @@ Be efficient and silent when everything is in sync. Only report when action is t
                 else:
                     logger.info(f"No changes. Sleeping for {interval_hours:.1f} hours until next check...")
                 
-                await asyncio.sleep(self.check_interval)
+                # Heartbeat while sleeping
+                sleep_remaining = self.check_interval
+                heartbeat_interval = 60 # 1 minute
+                while sleep_remaining > 0 and self.running:
+                    await asyncio.sleep(min(heartbeat_interval, sleep_remaining))
+                    sleep_remaining -= heartbeat_interval
+                    # Update healthcheck file timestamp
+                    try:
+                        with open(healthcheck_file, 'w') as f:
+                            f.write(f"{datetime.now().isoformat()}\n")
+                    except Exception:
+                        pass
                 
             except asyncio.CancelledError:
                 logger.info("Sync agent stopped")

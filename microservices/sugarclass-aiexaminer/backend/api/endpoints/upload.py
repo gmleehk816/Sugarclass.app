@@ -180,33 +180,37 @@ async def process_selected_pages(
     }
 
 
-@router.get("/pdf-info/{material_id}")
-async def get_pdf_info(material_id: str, db: AsyncSession = Depends(get_db)):
-    """Get PDF page information for page selection UI"""
+@router.get("/{material_id}/config")
+async def get_material_config(material_id: str, db: AsyncSession = Depends(get_db)):
+    """Get full material configuration for re-generating quizzes"""
     result = await db.execute(select(Material).where(Material.id == material_id))
     material = result.scalar_one_or_none()
     
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
     
-    if not material.file_path.lower().endswith('.pdf'):
-        return {
-            "material_id": material_id,
-            "filename": material.filename,
-            "is_pdf": False,
-            "total_pages": 1,
-            "max_pages_limit": MAX_PAGES_LIMIT
-        }
+    is_pdf = material.file_path.lower().endswith('.pdf')
+    total_pages = 0
+    page_previews = []
+    requires_page_selection = False
     
-    total_pages = await pdf_service.get_page_count(material.file_path)
+    if is_pdf:
+        total_pages = await pdf_service.get_page_count(material.file_path)
+        requires_page_selection = total_pages > MAX_PAGES_LIMIT
+        page_previews = await pdf_service.get_page_previews(material.file_path)
+    else:
+        total_pages = 1
     
     return {
-        "material_id": material_id,
+        "id": material.id,
         "filename": material.filename,
-        "is_pdf": True,
+        "text_preview": material.extracted_text[:500] + "..." if len(material.extracted_text) > 500 else material.extracted_text,
+        "full_text": material.extracted_text,
         "total_pages": total_pages,
+        "processed_pages": [], # We don't track which ones were selected yet
+        "requires_page_selection": requires_page_selection,
         "max_pages_limit": MAX_PAGES_LIMIT,
-        "requires_page_selection": total_pages > MAX_PAGES_LIMIT
+        "page_previews": page_previews
     }
 
 

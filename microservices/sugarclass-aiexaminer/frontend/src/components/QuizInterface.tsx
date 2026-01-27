@@ -28,12 +28,14 @@ export default function QuizInterface({
     questions,
     quizId,
     onFinished,
-    onReset
+    onReset,
+    onTryAnotherType
 }: {
     questions: Question[],
     quizId: string,
     onFinished: (score: number, total: number) => void,
-    onReset: () => void
+    onReset: () => void,
+    onTryAnotherType: () => void
 }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -129,6 +131,12 @@ export default function QuizInterface({
                             Detailed Review
                         </button>
                     )}
+                    <button
+                        onClick={onTryAnotherType}
+                        className="flex-1 px-8 py-4 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3"
+                    >
+                        <MessageSquare size={20} /> Try Another Format
+                    </button>
                     <button
                         onClick={onReset}
                         className="flex-1 px-8 py-4 rounded-2xl bg-accent text-white font-bold hover:bg-accent-light shadow-xl transition-all active:scale-95"

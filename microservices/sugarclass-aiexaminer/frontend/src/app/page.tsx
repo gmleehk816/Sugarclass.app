@@ -43,6 +43,7 @@ function DashboardContent() {
 
   // Page selection and configuration state
   const [pendingUpload, setPendingUpload] = useState<UploadResponse | null>(null);
+  const [currentMaterial, setCurrentMaterial] = useState<UploadResponse | null>(null);
   const [showPageSelector, setShowPageSelector] = useState(false);
 
   // Progress stats
@@ -74,36 +75,32 @@ function DashboardContent() {
     setIsGenerating(true);
     setError(null);
     try {
-      // 1. Fetch material details
       const token = localStorage.getItem('sugarclass_token');
-      const matRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/`, {
+      // Fetch full material configuration (including previews)
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${id}/config`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
-      const materials = await matRes.json();
-      const material = materials.find((m: any) => m.id === id);
 
-      if (!material) throw new Error("Material not found");
+      if (!res.ok) {
+        throw new Error("Material config not found");
+      }
 
-      // 2. Generate quiz
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          text: material.extracted_text,
-          material_id: id,
-          topic: material.filename.split('.')[0],
-          num_questions: 5,
-          difficulty: 'medium',
-          question_type: questionType
-        }),
-      });
-      const data = await response.json();
-      setQuizData({ ...data, question_type: questionType });
+      const material = await res.json();
+
+      // Check if it has extracted text OR if it can have text via page selection
+      const hasText = material.full_text && material.full_text.trim() !== '';
+      const canSelectPages = material.requires_page_selection && material.total_pages > 0;
+
+      if (!hasText && !canSelectPages) {
+        throw new Error("This document appears to be empty or unreadable. Please try a different source.");
+      }
+
+      // Show the page selector with the material data
+      setPendingUpload(material);
+      setShowPageSelector(true);
+      setIsGenerating(false);
     } catch (error: any) {
-      console.error('Quiz generation failed:', error);
+      console.error('Quiz configuration failed:', error);
       setError(error.message);
     } finally {
       setIsGenerating(false);
@@ -182,6 +179,7 @@ function DashboardContent() {
       }
 
       setQuizData({ ...responseData, question_type: selectedQuestionType });
+      setCurrentMaterial(processedData);
       setPendingUpload(null);
       setIsGenerating(false);
     } catch (error: any) {
@@ -208,8 +206,19 @@ function DashboardContent() {
           question_type: quizData?.question_type
         }),
       });
+
+      // Re-fetch stats to update the dashboard
+      fetchStats();
     } catch (error) {
       console.error('Failed to submit score:', error);
+    }
+  };
+
+  const handleTryAnotherType = () => {
+    if (currentMaterial) {
+      setPendingUpload(currentMaterial);
+      setShowPageSelector(true);
+      setQuizData(null);
     }
   };
 
@@ -273,7 +282,10 @@ function DashboardContent() {
             </div>
           </div>
 
-          <UploadSection onUploadComplete={handleUploadComplete} />
+          <UploadSection
+            onUploadComplete={handleUploadComplete}
+            onShowLibrary={() => router.push('/materials')}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-24 items-stretch">
             {/* Recent Activity Column */}
@@ -290,7 +302,11 @@ function DashboardContent() {
               <div className="premium-card flex-1 bg-white/40 border-card-border/50 divide-y divide-card-border/30">
                 {recentHistory.length > 0 ? (
                   recentHistory.map((item, i) => (
-                    <div key={i} className="p-5 hover:bg-white/60 transition-colors flex items-center justify-between group">
+                    <div
+                      key={i}
+                      onClick={() => item.material_id && router.push(`/?mid=${item.material_id}`)}
+                      className={`p-5 hover:bg-white/60 transition-colors flex items-center justify-between group ${item.material_id ? 'cursor-pointer' : ''}`}
+                    >
                       <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${parseInt(item.accuracy) >= 80 ? 'bg-success/10 text-success' : 'bg-primary/5 text-primary'}`}>
                           <Award size={20} />
@@ -342,12 +358,16 @@ function DashboardContent() {
 
                       <div className="grid grid-cols-2 gap-4 mt-auto">
                         <div className="p-4 rounded-2xl bg-white/40 border border-card-border/30">
-                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Global Rank</div>
-                          <div className="text-xl font-black text-primary">Top 12%</div>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Status</div>
+                          <div className="text-xl font-black text-primary">
+                            {parseInt(stats.average_accuracy) >= 90 ? 'Expert' :
+                              parseInt(stats.average_accuracy) >= 70 ? 'Scholar' :
+                                stats.quizzes_taken > 0 ? 'Learner' : 'Neutral'}
+                          </div>
                         </div>
                         <div className="p-4 rounded-2xl bg-white/40 border border-card-border/30">
                           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Star Badges</div>
-                          <div className="text-xl font-black text-primary">{Math.floor(stats.quizzes_taken / 5)} Earned</div>
+                          <div className="text-xl font-black text-primary">{Math.floor(stats.quizzes_taken / 3)} Earned</div>
                         </div>
                       </div>
                     </>
@@ -392,15 +412,17 @@ function DashboardContent() {
           </div>
 
           {/* Bottom Proof Section */}
-          <div className="pt-24 border-t border-card-border flex flex-col md:flex-row items-center justify-between gap-8 text-center md:text-left">
+          <div className="pt-24 border-t border-card-border flex flex-col md:flex-row items-center justify-between gap-8 text-center md:text-left pb-12">
             <div className="flex flex-wrap justify-center md:justify-start items-center gap-6 md:gap-12 opacity-40 grayscale">
-              <span className="font-extrabold text-2xl tracking-tighter">OXFORD</span>
+              <span className="font-extrabold text-2xl tracking-tighter">IGCSE</span>
+              <span className="font-extrabold text-2xl tracking-tighter">EDEXCEL</span>
+              <span className="font-extrabold text-2xl tracking-tighter">IB</span>
               <span className="font-extrabold text-2xl tracking-tighter">CAMBRIDGE</span>
-              <span className="font-extrabold text-2xl tracking-tighter">IVY LEAGUE</span>
+              <span className="font-extrabold text-2xl tracking-tighter">OXFORD</span>
             </div>
-            <div className="flex items-center gap-3 text-slate-400 font-bold">
-              <BookOpen size={20} />
-              <span>Trusted by 45,000+ Students globally</span>
+            <div className="flex items-center gap-3 text-slate-400 font-bold uppercase tracking-[0.1em] text-xs">
+              <BookOpen size={16} />
+              <span>Tailored for International Curriculums</span>
             </div>
           </div>
         </div>
@@ -444,6 +466,7 @@ function DashboardContent() {
               quizId={quizData.id}
               onFinished={handleQuizFinished}
               onReset={() => setQuizData(null)}
+              onTryAnotherType={handleTryAnotherType}
             />
           ) : (
             <QuizInterface
@@ -451,6 +474,7 @@ function DashboardContent() {
               quizId={quizData.id}
               onFinished={handleQuizFinished}
               onReset={() => setQuizData(null)}
+              onTryAnotherType={handleTryAnotherType}
             />
           )}
         </div>

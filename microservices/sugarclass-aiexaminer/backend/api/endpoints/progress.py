@@ -26,17 +26,18 @@ async def get_user_progress(user_id: Optional[str] = None, db: AsyncSession = De
     
     # Historical List
     hist_result = await db.execute(
-        select(Progress, Quiz.title)
+        select(Progress, Quiz.title, Quiz.material_id)
         .join(Quiz, Progress.quiz_id == Quiz.id)
         .where(Progress.user_id == user_id)
         .order_by(Progress.completed_at.desc())
     )
     
     history = []
-    for row, title in hist_result:
+    for row, title, material_id in hist_result:
         history.append({
             "id": row.id,
             "title": title,
+            "material_id": material_id,
             "score": row.score,
             "total": row.total_questions,
             "accuracy": f"{round((row.score/row.total_questions)*100)}%",

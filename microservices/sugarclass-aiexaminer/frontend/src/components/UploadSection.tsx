@@ -3,7 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Upload, Smartphone, Camera, FileText, CheckCircle2, RotateCcw } from 'lucide-react';
 
-export default function UploadSection({ onUploadComplete }: { onUploadComplete: (data: any) => void }) {
+export default function UploadSection({
+    onUploadComplete,
+    onShowLibrary
+}: {
+    onUploadComplete: (data: any) => void;
+    onShowLibrary: () => void;
+}) {
     const [isUploading, setIsUploading] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
@@ -102,8 +108,16 @@ export default function UploadSection({ onUploadComplete }: { onUploadComplete: 
                 <p className="text-slate-500 text-center mb-8 max-w-xs font-medium">
                     Drag and drop textbooks, lecture notes, or handwritten papers (PDF, PNG, JPG)
                 </p>
-                <div className="px-8 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-lg active:scale-95">
-                    {isUploading ? 'Processing...' : 'Select Source File'}
+                <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="px-8 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-lg active:scale-95 text-center">
+                        {isUploading ? 'Processing...' : 'Select Source File'}
+                    </div>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onShowLibrary(); }}
+                        className="px-8 py-3 rounded-xl border-2 border-primary/10 text-primary font-bold hover:bg-white transition-all active:scale-95"
+                    >
+                        Browse Library
+                    </button>
                 </div>
                 <input
                     id="file-upload"

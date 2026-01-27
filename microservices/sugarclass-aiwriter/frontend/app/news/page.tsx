@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ArrowLeft, Settings2, Search } from 'lucide-react'
+import { ArrowLeft, Settings2, Search, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import ArticleCard from '@/components/ArticleCard'
@@ -21,7 +21,6 @@ export default function NewsPage() {
     const categories = [
         { name: 'All', icon: '📰', color: 'primary' },
         { name: 'science', icon: '🔬', color: 'science' },
-        { name: 'tech', icon: '💻', color: 'tech' },
         { name: 'technology', icon: '💻', color: 'tech' },
         { name: 'environment', icon: '🌍', color: 'environment' },
         { name: 'sports', icon: '⚽', color: 'sports' },
@@ -107,7 +106,7 @@ export default function NewsPage() {
                             className={`flex items-center gap-2 px-4 py-2 bg-surface rounded-xl hover:bg-surface-dark transition-colors shadow-sm text-sm font-semibold text-text-secondary ${syncing ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             <div className={`${syncing ? 'animate-spin' : ''}`}>
-                                🔄
+                                <RefreshCw className="w-4 h-4" />
                             </div>
                             {syncing ? 'Syncing...' : 'Sync Latest News'}
                         </motion.button>

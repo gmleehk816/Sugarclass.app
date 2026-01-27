@@ -14,7 +14,8 @@ import {
     MessageSquare,
     Sparkles,
     AlertCircle,
-    Send
+    Send,
+    CheckSquare
 } from 'lucide-react';
 
 interface ShortQuestion {
@@ -36,12 +37,14 @@ export default function ShortAnswerQuiz({
     questions,
     quizId,
     onFinished,
-    onReset
+    onReset,
+    onTryAnotherType
 }: {
     questions: ShortQuestion[],
     quizId: string,
     onFinished: (score: number, total: number) => void,
-    onReset: () => void
+    onReset: () => void,
+    onTryAnotherType: () => void
 }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [userAnswer, setUserAnswer] = useState('');
@@ -203,6 +206,12 @@ export default function ShortAnswerQuiz({
                         className="flex-1 px-8 py-4 rounded-2xl bg-primary text-white font-bold hover:bg-primary-light shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95"
                     >
                         <RotateCcw size={20} /> Try Again
+                    </button>
+                    <button
+                        onClick={onTryAnotherType}
+                        className="flex-1 px-8 py-4 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3"
+                    >
+                        <CheckSquare size={20} /> Try Another Format
                     </button>
                     <button
                         onClick={onReset}
