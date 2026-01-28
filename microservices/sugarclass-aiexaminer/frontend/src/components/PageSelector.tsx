@@ -16,7 +16,7 @@ interface PageSelectorProps {
     maxPages: number;
     pagePreviews?: PagePreview[];
     contentPreview?: string;
-    onConfirm: (selectedPages: number[], questionType: 'mcq' | 'short', numQuestions: number) => void;
+    onConfirm: (selectedPages: number[], questionType: 'mcq' | 'short' | 'mixed', numQuestions: number) => void;
     onCancel: () => void;
     requiresSelection?: boolean;
 }
@@ -38,7 +38,7 @@ export default function PageSelector({
         return new Set();
     });
 
-    const [questionType, setQuestionType] = useState<'mcq' | 'short'>('mcq');
+    const [questionType, setQuestionType] = useState<'mcq' | 'short' | 'mixed'>('mixed');
     const [numQuestions, setNumQuestions] = useState(15);
     const [searchQuery, setSearchQuery] = useState('');
     const [showSelected, setShowSelected] = useState(false);
@@ -243,8 +243,8 @@ export default function PageSelector({
                     </div>
 
                     {/* Right: Quiz Settings */}
-                    <div className="w-full md:w-[400px] flex flex-col bg-slate-50">
-                        <div className="p-6 md:p-10 space-y-8 animate-fade-in">
+                    <div className="w-full md:w-80 lg:w-[400px] flex flex-col bg-slate-50 border-t md:border-t-0 md:border-l border-card-border overflow-hidden">
+                        <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-8 animate-fade-in">
                             {/* Question Count */}
                             <div>
                                 <h3 className="font-extrabold text-primary mb-5 flex items-center gap-3">
@@ -275,6 +275,29 @@ export default function PageSelector({
                                 </h3>
                                 <div className="space-y-2">
                                     <button
+                                        onClick={() => setQuestionType('mixed')}
+                                        className={`w-full p-4 rounded-xl border-2 text-left transition-all ${questionType === 'mixed'
+                                            ? 'bg-gradient-to-r from-blue-50 to-amber-50 border-purple-500'
+                                            : 'bg-white border-slate-200 hover:border-purple-300'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className={`p-2 rounded-lg ${questionType === 'mixed' ? 'bg-gradient-to-r from-blue-500 to-amber-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                                                <Sparkles size={20} />
+                                            </div>
+                                            <div>
+                                                <h4 className={`font-bold text-sm ${questionType === 'mixed' ? 'text-purple-700' : 'text-slate-700'}`}>
+                                                    Mixed (Recommended)
+                                                </h4>
+                                                <p className="text-xs text-slate-500">Both MCQ & Short Answer</p>
+                                            </div>
+                                            {questionType === 'mixed' && (
+                                                <Check size={20} className="ml-auto text-purple-500" />
+                                            )}
+                                        </div>
+                                    </button>
+
+                                    <button
                                         onClick={() => setQuestionType('mcq')}
                                         className={`w-full p-4 rounded-xl border-2 text-left transition-all ${questionType === 'mcq'
                                             ? 'bg-blue-50 border-blue-500'
@@ -287,7 +310,7 @@ export default function PageSelector({
                                             </div>
                                             <div>
                                                 <h4 className={`font-bold text-sm ${questionType === 'mcq' ? 'text-blue-700' : 'text-slate-700'}`}>
-                                                    Multiple Choice
+                                                    Multiple Choice Only
                                                 </h4>
                                                 <p className="text-xs text-slate-500">4 options per question</p>
                                             </div>
@@ -310,7 +333,7 @@ export default function PageSelector({
                                             </div>
                                             <div>
                                                 <h4 className={`font-bold text-sm ${questionType === 'short' ? 'text-amber-700' : 'text-slate-700'}`}>
-                                                    Short Answer
+                                                    Short Answer Only
                                                 </h4>
                                                 <p className="text-xs text-slate-500">AI validates your answers</p>
                                             </div>
@@ -368,7 +391,7 @@ export default function PageSelector({
                                 <ArrowRight size={18} />
                             </button>
                             <p className="text-center text-xs text-slate-400 mt-3">
-                                From {selectedPages.size} selected pages • {questionType === 'mcq' ? 'Multiple Choice' : 'Short Answer'}
+                                From {selectedPages.size} selected pages • {questionType === 'mixed' ? 'Mixed Format' : questionType === 'mcq' ? 'Multiple Choice' : 'Short Answer'}
                             </p>
                         </div>
                     </div>

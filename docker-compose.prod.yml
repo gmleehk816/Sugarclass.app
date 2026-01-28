@@ -321,6 +321,24 @@ services:
   # ===========================================================================
   # AI EXAMINER
   # ===========================================================================
+  aiexaminer-db:
+    image: postgres:15-alpine
+    container_name: aiexaminer-db
+    environment:
+      POSTGRES_DB: examiner
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${AIEXAMINER_DB_PASSWORD}
+    volumes:
+      - aiexaminer_db_data:/var/lib/postgresql/data
+    networks:
+      - sugarclass-network
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   aiexaminer-backend:
     build:
       context: ./microservices/sugarclass-aiexaminer
@@ -329,15 +347,27 @@ services:
     env_file:
       - ./microservices/sugarclass-aiexaminer/.env
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./database/examiner.db
+      - DB_TYPE=postgresql
+      - POSTGRES_HOST=aiexaminer-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=examiner
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${AIEXAMINER_DB_PASSWORD}
       - SUGARCLASS_API_URL=https://sugarclass.app/api/v1
       - CORS_ORIGINS=https://sugarclass.app,https://www.sugarclass.app
       - MOBILE_BASE_URL=https://sugarclass.app/examiner
     volumes:
       - examiner_uploads:/app/uploads
-      - examiner_db_data:/app/database
+    depends_on:
+      aiexaminer-db:
+        condition: service_healthy
     networks:
       - sugarclass-network
+    command: >
+      sh -c "
+        python backend/init_db.py &&
+        python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+      "
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1" ]
@@ -371,9 +401,11 @@ networks:
 volumes:
   sugarclass_db_data:
   aiwriter_db_data:
+  aiexaminer_db_data:
   tutor_content_db_data:
   tutor_agent_db_data:
   tutor_qdrant_data:
   tutor_redis_data:
   examiner_uploads:
-  examiner_db_data:
+
+

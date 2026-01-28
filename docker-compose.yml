@@ -153,12 +153,14 @@ services:
     env_file:
       - ./microservices/sugarclass-aiexaminer/.env
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./database/examiner.db
+      - DB_TYPE=sqlite
+      - SQLITE_DB_PATH=./database/examiner.db
       - SUGARCLASS_API_URL=http://backend:8000/api/v1
       - MOBILE_BASE_URL=http://localhost:3403/examiner
     ports:
       - "8003:8000"
     volumes:
+      - ./microservices/sugarclass-aiexaminer/.env:/app/.env:ro
       - ./microservices/sugarclass-aiexaminer/backend:/app/backend
       - ./microservices/sugarclass-aiexaminer/database:/app/database
       - ./microservices/sugarclass-aiexaminer/uploads:/app/uploads

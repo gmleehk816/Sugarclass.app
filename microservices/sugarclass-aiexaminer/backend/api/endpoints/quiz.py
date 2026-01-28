@@ -37,7 +37,7 @@ class QuizGenerationRequest(BaseModel):
     difficulty: str = "medium"
     topic: Optional[str] = None
     material_id: Optional[str] = None
-    question_type: str = "mcq"  # "mcq" or "short"
+    question_type: str = "mixed"  # "mcq", "short", or "mixed"
 
 
 class ShortAnswerValidationRequest(BaseModel):
@@ -52,19 +52,51 @@ async def generate_quiz(request: QuizGenerationRequest, db: AsyncSession = Depen
     if not request.text:
         raise HTTPException(status_code=400, detail="No source text provided")
     
+    questions = []
+    
     # Generate based on question type
-    if request.question_type == "short":
+    if request.question_type == "mixed":
+        # Split questions between MCQ and Short Answer (roughly 60/40 split)
+        mcq_count = max(1, int(request.num_questions * 0.6))
+        short_count = request.num_questions - mcq_count
+        
+        mcq_questions = await gemini_service.generate_questions(
+            text=request.text,
+            num_questions=mcq_count,
+            difficulty=request.difficulty
+        )
+        
+        short_questions = await gemini_service.generate_short_questions(
+            text=request.text,
+            num_questions=short_count,
+            difficulty=request.difficulty
+        )
+        
+        # Mark each question with its type for the frontend
+        for q in (mcq_questions or []):
+            q['question_type'] = 'mcq'
+        for q in (short_questions or []):
+            q['question_type'] = 'short'
+        
+        # Group questions by type: MCQ first, then Short Answer
+        questions = list(mcq_questions or []) + list(short_questions or [])
+                
+    elif request.question_type == "short":
         questions = await gemini_service.generate_short_questions(
             text=request.text,
             num_questions=request.num_questions,
             difficulty=request.difficulty
         )
+        for q in (questions or []):
+            q['question_type'] = 'short'
     else:
         questions = await gemini_service.generate_questions(
             text=request.text,
             num_questions=request.num_questions,
             difficulty=request.difficulty
         )
+        for q in (questions or []):
+            q['question_type'] = 'mcq'
     
     if not questions:
         raise HTTPException(status_code=500, detail="Failed to generate questions")
@@ -101,9 +133,59 @@ async def validate_short_answer(request: ShortAnswerValidationRequest):
 
 
 @router.get("/")
-async def get_quizzes(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Quiz).order_by(Quiz.created_at.desc()))
+async def get_quizzes(
+    limit: int = 100, 
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Quiz)
+        .order_by(Quiz.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     return result.scalars().all()
+
+
+@router.get("/{quiz_id}")
+async def get_quiz_by_id(quiz_id: str, db: AsyncSession = Depends(get_db)):
+    """Fetch a specific quiz by ID to replay it"""
+    result = await db.execute(select(Quiz).where(Quiz.id == quiz_id))
+    quiz = result.scalar_one_or_none()
+    
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    
+    return {
+        "id": quiz.id,
+        "title": quiz.title,
+        "questions": quiz.questions,
+        "material_id": quiz.material_id,
+        "created_at": quiz.created_at
+    }
+
+
+@router.delete("/{quiz_id}")
+async def delete_quiz(quiz_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a specific quiz and its related progress"""
+    # Delete the quiz
+    result = await db.execute(select(Quiz).where(Quiz.id == quiz_id))
+    quiz = result.scalar_one_or_none()
+    
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    
+    await db.delete(quiz)
+    
+    # Also delete any related progress records
+    from sqlalchemy import delete
+    from backend.models.quiz import Progress
+    await db.execute(delete(Progress).where(Progress.quiz_id == quiz_id))
+    
+    await db.commit()
+    
+    return {"status": "success", "message": "Quiz deleted successfully"}
+
 
 
 class QuizSubmitRequest(BaseModel):

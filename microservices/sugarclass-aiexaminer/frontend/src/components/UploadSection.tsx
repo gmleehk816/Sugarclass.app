@@ -16,6 +16,7 @@ export default function UploadSection({
     const [qrCode, setQrCode] = useState<string | null>(null);
     const [isPolling, setIsPolling] = useState(false);
     const [mobileStatus, setMobileStatus] = useState<'idle' | 'syncing' | 'done'>('idle');
+    const [uploadedCount, setUploadedCount] = useState(0);
 
     // Fetch initial session and QR
     useEffect(() => {
@@ -41,15 +42,13 @@ export default function UploadSection({
             const data = await response.json();
 
             if (data.status === 'completed' && data.materials?.length > 0) {
-                setIsPolling(false);
                 setMobileStatus('done');
-                // Trigger upload complete with the first material for now
-                onUploadComplete(data.materials[0]);
+                setUploadedCount(data.materials.length);
             }
         } catch (error) {
             console.error('Polling error:', error);
         }
-    }, [sessionId, isPolling, onUploadComplete]);
+    }, [sessionId, isPolling, isUploading, onUploadComplete]);
 
     useEffect(() => {
         let interval: NodeJS.Timeout;
@@ -163,9 +162,20 @@ export default function UploadSection({
                     )}
                 </div>
 
-                <div className={`flex items-center gap-3 text-sm font-bold px-4 py-2 rounded-full transition-all ${mobileStatus === 'done' ? 'bg-success/10 text-success' : 'bg-accent-muted text-accent'}`}>
-                    {mobileStatus === 'done' ? <CheckCircle2 size={18} /> : <Camera size={18} />}
-                    <span>{mobileStatus === 'done' ? 'Sync Completed' : 'Scan to Sync Device'}</span>
+                <div className="flex flex-col items-center gap-4">
+                    <div className={`flex items-center gap-3 text-sm font-bold px-4 py-2 rounded-full transition-all ${mobileStatus === 'done' ? 'bg-success/10 text-success' : 'bg-accent-muted text-accent'}`}>
+                        {mobileStatus === 'done' ? <CheckCircle2 size={18} /> : <Camera size={18} />}
+                        <span>{mobileStatus === 'done' ? `${uploadedCount} File${uploadedCount > 1 ? 's' : ''} Synced` : 'Scan to Sync Device'}</span>
+                    </div>
+
+                    {mobileStatus === 'done' && (
+                        <button
+                            onClick={() => window.location.href = `/?sid=${sessionId}`}
+                            className="px-6 py-2 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-md active:scale-95 animate-fade-in"
+                        >
+                            Start Session Quiz
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

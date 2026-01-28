@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
+import UploadSection from '@/components/UploadSection';
 import { FileText, Trash2, Play, Search, Clock, FileType } from 'lucide-react';
 import Link from 'next/link';
 
@@ -10,9 +12,18 @@ interface Material {
     filename: string;
     extracted_text: string;
     created_at: string;
+    session_id: string | null;
+}
+
+interface MaterialGroup {
+    sessionId: string | null;
+    materials: Material[];
+    createdAt: string;
+    title: string;
 }
 
 export default function MaterialsPage() {
+    const router = useRouter();
     const [materials, setMaterials] = useState<Material[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -33,7 +44,8 @@ export default function MaterialsPage() {
         }
     };
 
-    const deleteMaterial = async (id: string) => {
+    const deleteMaterial = async (id: string, e?: React.MouseEvent) => {
+        e?.stopPropagation();
         if (!confirm('Are you sure you want to delete this material?')) return;
         try {
             await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${id}`, {
@@ -45,9 +57,73 @@ export default function MaterialsPage() {
         }
     };
 
+    const deleteGroup = async (group: MaterialGroup, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm(`Are you sure you want to delete all ${group.materials.length} materials in this session?`)) return;
+
+        try {
+            for (const material of group.materials) {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${material.id}`, {
+                    method: 'DELETE',
+                });
+            }
+            const idsToDelete = new Set(group.materials.map(m => m.id));
+            setMaterials(materials.filter(m => !idsToDelete.has(m.id)));
+        } catch (error) {
+            console.error('Group delete failed:', error);
+        }
+    };
+
+    const handleUploadComplete = (uploadResponse: any) => {
+        fetchMaterials();
+        setTimeout(() => {
+            const listElement = document.getElementById('materials-list');
+            listElement?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+    };
+
     const filteredMaterials = materials.filter(m =>
         m.filename.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    // Grouping logic
+    const groups: MaterialGroup[] = [];
+    const sessionMap = new Map<string, Material[]>();
+    const noSessionMaterials: Material[] = [];
+
+    filteredMaterials.forEach(m => {
+        if (m.session_id) {
+            if (!sessionMap.has(m.session_id)) {
+                sessionMap.set(m.session_id, []);
+            }
+            sessionMap.get(m.session_id)?.push(m);
+        } else {
+            noSessionMaterials.push(m);
+        }
+    });
+
+    // Add session groups
+    sessionMap.forEach((mats, sid) => {
+        groups.push({
+            sessionId: sid,
+            materials: mats,
+            createdAt: mats[0].created_at,
+            title: mats.length > 1 ? `Session Bundle (${mats.length} files)` : mats[0].filename
+        });
+    });
+
+    // Add individual materials
+    noSessionMaterials.forEach(m => {
+        groups.push({
+            sessionId: null,
+            materials: [m],
+            createdAt: m.created_at,
+            title: m.filename
+        });
+    });
+
+    // Sort groups by date
+    groups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return (
         <main className="min-h-screen bg-background relative overflow-hidden">
@@ -74,6 +150,21 @@ export default function MaterialsPage() {
                     </div>
                 </div>
 
+                {/* Upload Section */}
+                <UploadSection
+                    onUploadComplete={handleUploadComplete}
+                    onShowLibrary={() => {
+                        // Already on materials page, just scroll to list
+                        const listElement = document.getElementById('materials-list');
+                        listElement?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                />
+
+                {/* Materials List */}
+                <div id="materials-list">
+                    <h2 className="text-3xl font-black text-primary mb-6">Your Study Materials</h2>
+                </div>
+
                 {isLoading ? (
                     <div className="flex justify-center py-24">
                         <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
@@ -91,36 +182,56 @@ export default function MaterialsPage() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {filteredMaterials.map((material) => (
-                            <div key={material.id} className="premium-card p-8 flex flex-col justify-between hover:border-accent/30 transition-all bg-white/60 group">
+                        {groups.map((group, idx) => (
+                            <div key={group.sessionId || idx} className="premium-card p-8 flex flex-col justify-between hover:border-accent/30 transition-all bg-white/60 group">
                                 <div>
                                     <div className="flex items-start justify-between mb-6">
-                                        <div className="p-4 rounded-2xl bg-primary-muted text-primary group-hover:bg-primary group-hover:text-white transition-all">
+                                        <div className={`p-4 rounded-2xl transition-all ${group.materials.length > 1 ? 'bg-accent-muted text-accent group-hover:bg-accent group-hover:text-white' : 'bg-primary-muted text-primary group-hover:bg-primary group-hover:text-white'}`}>
                                             <FileType size={28} />
                                         </div>
                                         <button
-                                            onClick={() => deleteMaterial(material.id)}
+                                            onClick={(e) => group.sessionId ? deleteGroup(group, e) : deleteMaterial(group.materials[0].id, e)}
                                             className="p-2 text-slate-300 hover:text-error transition-colors"
                                         >
                                             <Trash2 size={20} />
                                         </button>
                                     </div>
-                                    <h3 className="text-xl font-black text-primary mb-2 line-clamp-2 leading-tight group-hover:text-accent transition-colors">{material.filename}</h3>
+                                    <h3 className="text-xl font-black text-primary mb-2 line-clamp-2 leading-tight group-hover:text-accent transition-colors">{group.title}</h3>
                                     <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest mb-6">
                                         <Clock size={14} />
-                                        <span>{new Date(material.created_at).toLocaleDateString()}</span>
+                                        <span>{new Date(group.createdAt).toLocaleDateString()}</span>
                                     </div>
-                                    <p className="text-slate-500 text-sm font-medium line-clamp-3 mb-8 italic">
-                                        "{material.extracted_text.substring(0, 150)}..."
-                                    </p>
+
+                                    {group.materials.length > 1 ? (
+                                        <div className="space-y-2 mb-8">
+                                            {group.materials.slice(0, 3).map(m => (
+                                                <div key={m.id} className="text-xs font-bold text-slate-500 flex items-center gap-2 truncate">
+                                                    <div className="w-1 h-1 rounded-full bg-slate-300" />
+                                                    {m.filename}
+                                                </div>
+                                            ))}
+                                            {group.materials.length > 3 && (
+                                                <div className="text-[10px] text-slate-400 font-bold italic">
+                                                    + {group.materials.length - 3} more files
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="text-slate-500 text-sm font-medium line-clamp-3 mb-8 italic">
+                                            "{group.materials[0].extracted_text.substring(0, 150)}..."
+                                        </p>
+                                    )}
                                 </div>
 
                                 <Link
-                                    href={`/?mid=${material.id}`}
+                                    href={group.materials.length > 1
+                                        ? `/?sid=${group.sessionId}`
+                                        : `/?mid=${group.materials[0].id}`
+                                    }
                                     className="flex items-center justify-center gap-3 w-full py-3.5 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-md active:scale-95"
                                 >
                                     <Play size={18} fill="currentColor" />
-                                    Configure & Start Quiz
+                                    {group.materials.length > 1 ? 'Start Session Quiz' : 'Configure & Start Quiz'}
                                 </Link>
                             </div>
                         ))}
