@@ -185,9 +185,9 @@ services:
     image: postgres:15-alpine
     container_name: tutor-content-db
     environment:
-      POSTGRES_USER: ${TUTOR_CONTENT_DB_USER}
-      POSTGRES_PASSWORD: ${TUTOR_CONTENT_DB_PASSWORD}
-      POSTGRES_DB: ${TUTOR_CONTENT_DB_NAME}
+      POSTGRES_USER: ${TUTOR_CONTENT_DB_USER:-tutor}
+      POSTGRES_PASSWORD: ${TUTOR_CONTENT_DB_PASSWORD:-tutor_content_pass}
+      POSTGRES_DB: ${TUTOR_CONTENT_DB_NAME:-tutor_content}
     volumes:
       - tutor_content_db_data:/var/lib/postgresql/data
       - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/001_content_schema.sql:/docker-entrypoint-initdb.d/001_content_schema.sql:ro
@@ -205,9 +205,9 @@ services:
     image: postgres:15-alpine
     container_name: tutor-agent-db
     environment:
-      POSTGRES_USER: ${TUTOR_AGENT_DB_USER}
-      POSTGRES_PASSWORD: ${TUTOR_AGENT_DB_PASSWORD}
-      POSTGRES_DB: ${TUTOR_AGENT_DB_NAME}
+      POSTGRES_USER: ${TUTOR_AGENT_DB_USER:-tutor}
+      POSTGRES_PASSWORD: ${TUTOR_AGENT_DB_PASSWORD:-tutor_agent_pass}
+      POSTGRES_DB: ${TUTOR_AGENT_DB_NAME:-tutor_agent}
     volumes:
       - tutor_agent_db_data:/var/lib/postgresql/data
       - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/002_agent_schema.sql:/docker-entrypoint-initdb.d/002_agent_schema.sql:ro
