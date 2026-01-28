@@ -10,7 +10,7 @@ import os
 import shutil
 import uuid
 from typing import Optional, List
-import requests
+import httpx
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -20,17 +20,18 @@ def report_activity(service: str, activity_type: str, token: str, metadata: dict
     if not token:
         return
     try:
-        requests.post(
-            f"{SUGARCLASS_API_URL}/progress/",
-            json={
-                "service": service,
-                "activity_type": activity_type,
-                "metadata_json": metadata or {},
-                "score": score
-            },
-            headers={"Authorization": token},
-            timeout=2
-        )
+        with httpx.Client() as client:
+            client.post(
+                f"{SUGARCLASS_API_URL}/progress/",
+                json={
+                    "service": service,
+                    "activity_type": activity_type,
+                    "metadata_json": metadata or {},
+                    "score": score
+                },
+                headers={"Authorization": token},
+                timeout=2
+            )
     except Exception as e:
         print(f"Failed to report activity: {e}")
 

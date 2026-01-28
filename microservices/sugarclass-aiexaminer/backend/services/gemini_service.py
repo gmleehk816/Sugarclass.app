@@ -9,10 +9,11 @@ class GeminiService:
         self.base_url = settings.LLM_BASE_URL.rstrip("/")
         self.model = settings.LLM_MODEL
 
-    async def generate_questions(self, text: str, num_questions: int = 5, difficulty: str = "medium") -> List[Dict[str, Any]]:
+    async def generate_questions(self, text: str, num_questions: int = 5, difficulty: str = "medium", exclude_questions: List[str] = None) -> List[Dict[str, Any]]:
+        exclude_section = f"\n        DO NOT generate any of the following questions as they already exist: {', '.join(exclude_questions)}" if exclude_questions else ""
         prompt = f"""
         Act as an expert educator. Based on the following study materials, generate {num_questions} multiple-choice questions.
-        The difficulty level should be {difficulty}.
+        The difficulty level should be {difficulty}.{exclude_section}
         
         For each question, provide:
         1. The question text.
@@ -74,11 +75,12 @@ class GeminiService:
                 print(f"Error calling LLM API or parsing response: {e}")
                 return []
 
-    async def generate_short_questions(self, text: str, num_questions: int = 5, difficulty: str = "medium") -> List[Dict[str, Any]]:
+    async def generate_short_questions(self, text: str, num_questions: int = 5, difficulty: str = "medium", exclude_questions: List[str] = None) -> List[Dict[str, Any]]:
         """Generate short answer questions from study materials"""
+        exclude_section = f"\n        DO NOT generate any of the following questions as they already exist: {', '.join(exclude_questions)}" if exclude_questions else ""
         prompt = f"""
         Act as an expert educator. Based on the following study materials, generate {num_questions} short answer questions.
-        The difficulty level should be {difficulty}.
+        The difficulty level should be {difficulty}.{exclude_section}
         
         For each question, provide:
         1. The question text (should require a paragraph-length response).

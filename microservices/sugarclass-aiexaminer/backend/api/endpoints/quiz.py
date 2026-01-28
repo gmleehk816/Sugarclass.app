@@ -1,5 +1,5 @@
 import os
-import requests
+import httpx
 from fastapi import APIRouter, HTTPException, Depends, Header
 from pydantic import BaseModel
 from typing import List, Optional
@@ -16,17 +16,19 @@ def report_activity(service: str, activity_type: str, token: str, metadata: dict
     if not token:
         return
     try:
-        requests.post(
-            f"{SUGARCLASS_API_URL}/progress/",
-            json={
-                "service": service,
-                "activity_type": activity_type,
-                "metadata_json": metadata or {},
-                "score": score
-            },
-            headers={"Authorization": token},
-            timeout=2
-        )
+        # Use a sync client for this fire-and-forget reporting
+        with httpx.Client() as client:
+            client.post(
+                f"{SUGARCLASS_API_URL}/progress/",
+                json={
+                    "service": service,
+                    "activity_type": activity_type,
+                    "metadata_json": metadata or {},
+                    "score": score
+                },
+                headers={"Authorization": token},
+                timeout=2
+            )
     except Exception as e:
         print(f"Failed to report activity: {e}")
 
@@ -45,6 +47,147 @@ class ShortAnswerValidationRequest(BaseModel):
     expected_answer: str
     key_points: List[str]
     user_answer: str
+
+
+class QuestionRegenerateRequest(BaseModel):
+    text: str
+    existing_questions: List[str]
+    question_type: str = "mcq"
+    difficulty: str = "medium"
+
+
+class QuizCreateFromPreviewRequest(BaseModel):
+    title: str
+    questions: List[dict]
+    material_id: Optional[str] = None
+    source_text: str
+
+
+class QuizRenameRequest(BaseModel):
+    title: str
+
+
+@router.post("/generate-preview")
+async def generate_quiz_preview(request: QuizGenerationRequest):
+    """Generate questions for preview without saving to database"""
+    if not request.text:
+        raise HTTPException(status_code=400, detail="No source text provided")
+    
+    questions = []
+    
+    if request.question_type == "mixed":
+        mcq_count = max(1, int(request.num_questions * 0.6))
+        short_count = request.num_questions - mcq_count
+        
+        mcq_questions = await gemini_service.generate_questions(
+            text=request.text,
+            num_questions=mcq_count,
+            difficulty=request.difficulty
+        )
+        
+        short_questions = await gemini_service.generate_short_questions(
+            text=request.text,
+            num_questions=short_count,
+            difficulty=request.difficulty
+        )
+        
+        for q in (mcq_questions or []):
+            q['question_type'] = 'mcq'
+        for q in (short_questions or []):
+            q['question_type'] = 'short'
+        
+        questions = list(mcq_questions or []) + list(short_questions or [])
+                
+    elif request.question_type == "short":
+        questions = await gemini_service.generate_short_questions(
+            text=request.text,
+            num_questions=request.num_questions,
+            difficulty=request.difficulty
+        )
+        for q in (questions or []):
+            q['question_type'] = 'short'
+    else:
+        questions = await gemini_service.generate_questions(
+            text=request.text,
+            num_questions=request.num_questions,
+            difficulty=request.difficulty
+        )
+        for q in (questions or []):
+            q['question_type'] = 'mcq'
+    
+    if not questions:
+        raise HTTPException(status_code=500, detail="Failed to generate questions")
+        
+    return {
+        "questions": questions,
+        "question_type": request.question_type,
+        "topic": request.topic
+    }
+
+
+@router.post("/regenerate-single")
+async def regenerate_single_question(request: QuestionRegenerateRequest):
+    """Regenerate a single question while avoiding existing ones"""
+    
+    if request.question_type == "short":
+        questions = await gemini_service.generate_short_questions(
+            text=request.text,
+            num_questions=1,
+            difficulty=request.difficulty,
+            exclude_questions=request.existing_questions
+        )
+        if questions:
+            questions[0]['question_type'] = 'short'
+    else:
+        questions = await gemini_service.generate_questions(
+            text=request.text,
+            num_questions=1,
+            difficulty=request.difficulty,
+            exclude_questions=request.existing_questions
+        )
+        if questions:
+            questions[0]['question_type'] = 'mcq'
+            
+    if not questions:
+        raise HTTPException(status_code=500, detail="Failed to regenerate question")
+        
+    return questions[0]
+
+
+@router.post("/create-from-preview")
+async def create_quiz_from_preview(request: QuizCreateFromPreviewRequest, db: AsyncSession = Depends(get_db)):
+    """Save approved questions from preview as a new quiz"""
+    quiz = Quiz(
+        title=request.title,
+        source_text=request.source_text,
+        questions=request.questions,
+        material_id=request.material_id
+    )
+    db.add(quiz)
+    await db.commit()
+    await db.refresh(quiz)
+    
+    return {
+        "id": quiz.id,
+        "title": quiz.title,
+        "questions": quiz.questions
+    }
+
+
+@router.patch("/{quiz_id}")
+async def rename_quiz(quiz_id: str, request: QuizRenameRequest, db: AsyncSession = Depends(get_db)):
+    """Rename an existing quiz"""
+    result = await db.execute(select(Quiz).where(Quiz.id == quiz_id))
+    quiz = result.scalar_one_or_none()
+    
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+        
+    quiz.title = request.title
+    await db.commit()
+    await db.refresh(quiz)
+    
+    return {"status": "success", "id": quiz.id, "title": quiz.title}
 
 
 @router.post("/generate")

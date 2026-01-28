@@ -8,7 +8,7 @@ import QuizInterface from '@/components/QuizInterface';
 import ShortAnswerQuiz from '@/components/ShortAnswerQuiz';
 import MixedQuiz from '@/components/MixedQuiz';
 import PageSelector from '@/components/PageSelector';
-import { Search, RotateCcw, Play, CheckCircle, Sparkles, Trophy, Zap, ArrowRight, Clock, Award, GraduationCap, History, BookOpen, Upload as UploadIcon, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Search, RotateCcw, Play, CheckCircle, Sparkles, Trophy, Zap, ArrowRight, Clock, Award, GraduationCap, History, BookOpen, Upload as UploadIcon, ChevronLeft, ChevronRight, Trash2, Edit3, X } from 'lucide-react';
 
 interface PagePreview {
   page: number;
@@ -53,6 +53,16 @@ function DashboardContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 9;
+
+  // Question Review State
+  const [previewQuestions, setPreviewQuestions] = useState<any[] | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [isRegeneratingSingle, setIsRegeneratingSingle] = useState<number | null>(null);
+  const [quizTitle, setQuizTitle] = useState('');
+
+  // Exercise Rename State
+  const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
+  const [newTitle, setNewTitle] = useState('');
 
   useEffect(() => {
     if (materialId) {
@@ -213,6 +223,33 @@ function DashboardContent() {
     }
   };
 
+  const handleRenameQuiz = async (id: string) => {
+    if (!newTitle.trim()) {
+      setEditingQuizId(null);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('sugarclass_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ title: newTitle })
+      });
+
+      if (!response.ok) throw new Error('Failed to rename quiz');
+
+      setEditingQuizId(null);
+      fetchQuizzes();
+    } catch (error) {
+      console.error('Rename failed:', error);
+      alert('Failed to rename exercise.');
+    }
+  };
+
   const handlePageSelection = async (selectedPages: number[], selectedQuestionType: 'mcq' | 'short' | 'mixed', selectedNumQuestions: number) => {
     if (!pendingUpload) return;
 
@@ -259,7 +296,8 @@ function DashboardContent() {
         question_type: selectedQuestionType
       };
 
-      const quizResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/generate`, {
+      // Use generate-preview to get questions for review
+      const quizResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/generate-preview`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -274,13 +312,96 @@ function DashboardContent() {
         throw new Error(responseData.detail || `Server error: ${quizResponse.status}`);
       }
 
-      setQuizData({ ...responseData, question_type: selectedQuestionType });
+      // Set up for review instead of directly starting quiz
+      setPreviewQuestions(responseData.questions);
+      setQuizTitle(processedData.filename.split('.')[0]);
       setCurrentMaterial(processedData);
       setPendingUpload(null);
       setIsGenerating(false);
+      setIsReviewing(true);
     } catch (error: any) {
       console.error('Processing failed:', error);
       setError(error.message);
+      setIsGenerating(false);
+    }
+  };
+
+  // Handler to regenerate a single question
+  const handleRegenerateQuestion = async (index: number) => {
+    if (!previewQuestions || !currentMaterial) return;
+
+    setIsRegeneratingSingle(index);
+    try {
+      const token = localStorage.getItem('sugarclass_token');
+      const currentQuestion = previewQuestions[index];
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/regenerate-single`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          text: currentMaterial.full_text,
+          existing_questions: previewQuestions.map(q => q.question),
+          question_type: currentQuestion.question_type,
+          difficulty: 'medium'
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to regenerate question');
+
+      const newQuestion = await response.json();
+      const updatedQuestions = [...previewQuestions];
+      updatedQuestions[index] = newQuestion;
+      setPreviewQuestions(updatedQuestions);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to regenerate question.');
+    } finally {
+      setIsRegeneratingSingle(null);
+    }
+  };
+
+  // Handler to remove a question from preview
+  const handleRemoveQuestion = (index: number) => {
+    if (!previewQuestions) return;
+    const updatedQuestions = [...previewQuestions];
+    updatedQuestions.splice(index, 1);
+    setPreviewQuestions(updatedQuestions);
+  };
+
+  // Handler to save approved questions and start quiz
+  const handleApproveAndStart = async () => {
+    if (!previewQuestions || !currentMaterial || previewQuestions.length === 0) return;
+
+    setIsGenerating(true);
+    setIsReviewing(false);
+
+    try {
+      const token = localStorage.getItem('sugarclass_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/create-from-preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          title: quizTitle || 'Untitled Quiz',
+          questions: previewQuestions,
+          material_id: currentMaterial.id,
+          source_text: currentMaterial.full_text
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to create quiz');
+
+      const data = await response.json();
+      setQuizData({ ...data, question_type: questionType });
+      setPreviewQuestions(null);
+      setIsGenerating(false);
+    } catch (err: any) {
+      setError(err.message);
       setIsGenerating(false);
     }
   };
@@ -335,7 +456,7 @@ function DashboardContent() {
         </div>
       )}
 
-      {!quizData && !isGenerating ? (
+      {!quizData && !isGenerating && !isReviewing ? (
         <div className="animate-fade-in">
           {/* Hero Section */}
           <div className="mb-20">
@@ -420,9 +541,47 @@ function DashboardContent() {
                         </div>
                       </div>
 
-                      <h3 className="text-2xl font-extrabold text-primary mb-4 tracking-tight group-hover:text-accent transition-colors line-clamp-2 min-h-[4rem]">
-                        {quiz.title}
-                      </h3>
+                      {editingQuizId === quiz.id ? (
+                        <div className="flex items-center gap-2 mb-4">
+                          <input
+                            type="text"
+                            value={newTitle}
+                            onChange={(e) => setNewTitle(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleRenameQuiz(quiz.id)}
+                            className="flex-1 text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleRenameQuiz(quiz.id)}
+                            className="p-2 rounded-lg bg-success text-white hover:bg-success/90 transition-all"
+                          >
+                            <CheckCircle size={18} />
+                          </button>
+                          <button
+                            onClick={() => setEditingQuizId(null)}
+                            className="p-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2 mb-4">
+                          <h3 className="text-2xl font-extrabold text-primary tracking-tight group-hover:text-accent transition-colors line-clamp-2 min-h-[4rem] flex-1">
+                            {quiz.title}
+                          </h3>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingQuizId(quiz.id);
+                              setNewTitle(quiz.title);
+                            }}
+                            className="p-2 rounded-lg text-slate-300 hover:text-primary hover:bg-primary-muted transition-all opacity-0 group-hover:opacity-100"
+                            title="Rename Exercise"
+                          >
+                            <Edit3 size={16} />
+                          </button>
+                        </div>
+                      )}
 
                       <div className="space-y-4 mb-10">
                         <div className="flex items-center gap-3 text-slate-400 font-bold uppercase tracking-widest text-[10px]">
@@ -520,7 +679,156 @@ function DashboardContent() {
                 : 'Distilling your content into high-fidelity practice items...'}
           </p>
         </div>
-      ) : (
+      ) : isReviewing && previewQuestions ? (
+        <div className="animate-fade-in max-w-4xl mx-auto">
+          {/* Review Header */}
+          <div className="mb-12">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent-muted text-accent text-xs font-black uppercase tracking-widest mb-6">
+              <Sparkles size={14} />
+              <span>Review Your Questions</span>
+            </div>
+            <h2 className="text-4xl font-black text-primary mb-4 tracking-tight">
+              {previewQuestions.length} Questions Generated
+            </h2>
+            <p className="text-lg text-slate-500 mb-6">
+              Review the questions below. Remove any you don't like or regenerate them.
+            </p>
+
+            {/* Quiz Title Input */}
+            <div className="flex flex-col sm:flex-row gap-4 mb-8">
+              <input
+                type="text"
+                value={quizTitle}
+                onChange={(e) => setQuizTitle(e.target.value)}
+                placeholder="Enter quiz title..."
+                className="flex-1 px-4 py-3 rounded-xl border border-card-border bg-white focus:ring-4 focus:ring-primary-muted outline-none font-medium"
+              />
+              <button
+                onClick={handleApproveAndStart}
+                disabled={previewQuestions.length === 0}
+                className="px-8 py-3 rounded-xl bg-success text-white font-bold hover:bg-success/90 transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckCircle size={18} />
+                Approve & Start Quiz
+              </button>
+            </div>
+          </div>
+
+          {/* Question Cards */}
+          <div className="space-y-6">
+            {previewQuestions.map((question, index) => (
+              <div key={index} className="premium-card p-6 bg-white/80 relative group">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-black text-sm">
+                      {index + 1}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${question.question_type === 'short'
+                      ? 'bg-amber-100 text-amber-600'
+                      : 'bg-blue-100 text-blue-600'
+                      }`}>
+                      {question.question_type === 'short' ? 'Short Answer' : 'Multiple Choice'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleRegenerateQuestion(index)}
+                      disabled={isRegeneratingSingle !== null}
+                      className="p-2 rounded-lg text-slate-400 hover:text-primary hover:bg-primary-muted transition-all disabled:opacity-50"
+                      title="Regenerate Question"
+                    >
+                      <RotateCcw size={18} className={isRegeneratingSingle === index ? 'animate-spin' : ''} />
+                    </button>
+                    <button
+                      onClick={() => handleRemoveQuestion(index)}
+                      className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                      title="Remove Question"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                <h4 className="text-lg font-bold text-primary mb-4 leading-relaxed">
+                  {question.question}
+                </h4>
+
+                {question.question_type === 'mcq' && question.options && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    {question.options.map((option: string, optIdx: number) => (
+                      <div
+                        key={optIdx}
+                        className={`px-4 py-3 rounded-xl border text-sm font-medium ${option === question.correct_answer
+                          ? 'bg-success/10 border-success/30 text-success'
+                          : 'bg-slate-50 border-slate-200 text-slate-600'
+                          }`}
+                      >
+                        {option}
+                        {option === question.correct_answer && (
+                          <span className="ml-2 text-xs">(Correct)</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {question.question_type === 'short' && question.expected_answer && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4">
+                    <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Expected Answer</div>
+                    <p className="text-slate-600 font-medium">{question.expected_answer}</p>
+                  </div>
+                )}
+
+                {question.explanation && (
+                  <div className="text-sm text-slate-500 bg-slate-50 px-4 py-3 rounded-lg border border-slate-100">
+                    <span className="font-bold text-slate-400">Explanation: </span>
+                    {question.explanation}
+                  </div>
+                )}
+
+                {/* Loading overlay for regenerating */}
+                {isRegeneratingSingle === index && (
+                  <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-3xl flex items-center justify-center">
+                    <div className="flex items-center gap-3 text-primary font-bold">
+                      <RotateCcw size={20} className="animate-spin" />
+                      Regenerating...
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Bottom Action Bar */}
+          <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 p-6 premium-card bg-primary/5 border-primary/20">
+            <div className="text-center sm:text-left">
+              <p className="font-bold text-primary">{previewQuestions.length} questions ready</p>
+              <p className="text-sm text-slate-500">Click approve when you're satisfied with the questions</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setIsReviewing(false);
+                  setPreviewQuestions(null);
+                  router.push('/');
+                }}
+                className="px-6 py-3 rounded-xl border border-card-border text-slate-500 font-bold hover:bg-white transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApproveAndStart}
+                disabled={previewQuestions.length === 0}
+                className="px-8 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Play size={18} fill="currentColor" />
+                Start Quiz
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : quizData ? (
         <div className="animate-fade-in max-w-6xl mx-auto">
           <div className="flex flex-col sm:flex-row items-center justify-between mb-12 gap-6">
             <button
@@ -570,7 +878,7 @@ function DashboardContent() {
             />
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
