@@ -325,9 +325,9 @@ services:
     image: postgres:15-alpine
     container_name: aiexaminer-db
     environment:
-      POSTGRES_DB: examiner
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${AIEXAMINER_DB_PASSWORD}
+      POSTGRES_DB: ${EXAMINER_DB_NAME:-examiner}
+      POSTGRES_USER: ${EXAMINER_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${EXAMINER_DB_PASSWORD:-examiner_secure_pass}
     volumes:
       - aiexaminer_db_data:/var/lib/postgresql/data
     networks:
@@ -348,11 +348,11 @@ services:
       - ./microservices/sugarclass-aiexaminer/.env
     environment:
       - DB_TYPE=postgresql
-      - POSTGRES_HOST=aiexaminer-db
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=examiner
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${AIEXAMINER_DB_PASSWORD}
+      - EXAMINER_DB_HOST=aiexaminer-db
+      - EXAMINER_DB_PORT=5432
+      - EXAMINER_DB_NAME=${EXAMINER_DB_NAME:-examiner}
+      - EXAMINER_DB_USER=${EXAMINER_DB_USER:-postgres}
+      - EXAMINER_DB_PASSWORD=${EXAMINER_DB_PASSWORD:-examiner_secure_pass}
       - SUGARCLASS_API_URL=https://sugarclass.app/api/v1
       - CORS_ORIGINS=https://sugarclass.app,https://www.sugarclass.app
       - MOBILE_BASE_URL=https://sugarclass.app/examiner

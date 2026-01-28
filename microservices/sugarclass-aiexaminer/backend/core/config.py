@@ -14,11 +14,11 @@ class Settings(BaseSettings):
     DB_TYPE: str = os.getenv("DB_TYPE", "sqlite")
     
     # PostgreSQL settings (for production)
-    POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "aiexaminer-db")
-    POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "examiner")
-    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "examiner_password")
+    POSTGRES_HOST: str = os.getenv("EXAMINER_DB_HOST", "aiexaminer-db")
+    POSTGRES_PORT: int = int(os.getenv("EXAMINER_DB_PORT", "5432"))
+    POSTGRES_DB: str = os.getenv("EXAMINER_DB_NAME", "examiner")
+    POSTGRES_USER: str = os.getenv("EXAMINER_DB_USER", "postgres")
+    POSTGRES_PASSWORD: str = os.getenv("EXAMINER_DB_PASSWORD", "examiner_secure_pass")
     
     # SQLite settings (for development)
     SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "./database/examiner.db")
