@@ -196,7 +196,7 @@ services:
       - sugarclass-network
     restart: always
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${TUTOR_CONTENT_DB_USER:-tutor}" ]
+      test: [ "CMD-SHELL", "pg_isready -U tutor -d tutor_content" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -215,7 +215,7 @@ services:
       - sugarclass-network
     restart: always
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${TUTOR_AGENT_DB_USER:-tutor}" ]
+      test: [ "CMD-SHELL", "pg_isready -U tutor -d tutor_agent" ]
       interval: 10s
       timeout: 5s
       retries: 5
