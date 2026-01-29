@@ -1,7 +1,16 @@
-from sqlalchemy import Column, String, Integer, JSON, DateTime
+from sqlalchemy import Column, String, Integer, JSON, DateTime, Text
 from backend.database import Base
 from datetime import datetime
 import uuid
+
+class Collection(Base):
+    __tablename__ = "collections"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Material(Base):
     __tablename__ = "materials"
@@ -10,6 +19,7 @@ class Material(Base):
     filename = Column(String)
     file_path = Column(String)
     extracted_text = Column(String)
+    collection_id = Column(String, index=True, nullable=True)  # Link to collection/folder
     session_id = Column(String, index=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

@@ -8,7 +8,7 @@ import QuizInterface from '@/components/QuizInterface';
 import ShortAnswerQuiz from '@/components/ShortAnswerQuiz';
 import MixedQuiz from '@/components/MixedQuiz';
 import PageSelector from '@/components/PageSelector';
-import { Search, RotateCcw, Play, CheckCircle, Sparkles, Trophy, Zap, ArrowRight, Clock, Award, GraduationCap, History, BookOpen, Upload as UploadIcon, ChevronLeft, ChevronRight, Trash2, Edit3, X } from 'lucide-react';
+import { Search, RotateCcw, Play, CheckCircle, Sparkles, Trophy, Zap, ArrowRight, Clock, Award, GraduationCap, History, BookOpen, Upload as UploadIcon, ChevronLeft, ChevronRight, Trash2, Edit3, X, Save } from 'lucide-react';
 
 interface PagePreview {
   page: number;
@@ -371,37 +371,75 @@ function DashboardContent() {
     setPreviewQuestions(updatedQuestions);
   };
 
-  // Handler to save approved questions and start quiz
+  // Helper to save quiz to database
+  const saveQuiz = async () => {
+    if (!previewQuestions || !currentMaterial || previewQuestions.length === 0) return null;
+
+    const token = localStorage.getItem('sugarclass_token');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/create-from-preview`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        title: quizTitle || 'Untitled Quiz',
+        questions: previewQuestions,
+        material_id: currentMaterial.id,
+        source_text: currentMaterial.full_text
+      })
+    });
+
+    if (!response.ok) throw new Error('Failed to create quiz');
+    return await response.json();
+  };
+
+  // Handler to save and start quiz
   const handleApproveAndStart = async () => {
-    if (!previewQuestions || !currentMaterial || previewQuestions.length === 0) return;
-
     setIsGenerating(true);
-    setIsReviewing(false);
-
     try {
-      const token = localStorage.getItem('sugarclass_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/create-from-preview`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          title: quizTitle || 'Untitled Quiz',
-          questions: previewQuestions,
-          material_id: currentMaterial.id,
-          source_text: currentMaterial.full_text
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to create quiz');
-
-      const data = await response.json();
-      setQuizData({ ...data, question_type: questionType });
-      setPreviewQuestions(null);
-      setIsGenerating(false);
+      const data = await saveQuiz();
+      if (data) {
+        setQuizData({ ...data, question_type: questionType });
+        setPreviewQuestions(null);
+        setIsReviewing(false);
+      }
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Handler to save for later (go back to list)
+  const handleSaveForLater = async () => {
+    setIsGenerating(true);
+    try {
+      await saveQuiz();
+      setIsReviewing(false);
+      setPreviewQuestions(null);
+      fetchQuizzes();
+      router.push('/');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Handler to save and open in full editor
+  const handleSaveAndEdit = async () => {
+    setIsGenerating(true);
+    try {
+      const data = await saveQuiz();
+      if (data) {
+        setIsReviewing(false);
+        setPreviewQuestions(null);
+        router.push(`/quiz/${data.id}/edit`);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
       setIsGenerating(false);
     }
   };
@@ -542,27 +580,31 @@ function DashboardContent() {
                       </div>
 
                       {editingQuizId === quiz.id ? (
-                        <div className="flex items-center gap-2 mb-4">
+                        <div className="mb-4">
                           <input
                             type="text"
                             value={newTitle}
                             onChange={(e) => setNewTitle(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleRenameQuiz(quiz.id)}
-                            className="flex-1 text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted"
+                            className="w-full text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted mb-2"
                             autoFocus
                           />
-                          <button
-                            onClick={() => handleRenameQuiz(quiz.id)}
-                            className="p-2 rounded-lg bg-success text-white hover:bg-success/90 transition-all"
-                          >
-                            <CheckCircle size={18} />
-                          </button>
-                          <button
-                            onClick={() => setEditingQuizId(null)}
-                            className="p-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all"
-                          >
-                            <X size={18} />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleRenameQuiz(quiz.id)}
+                              className="flex-1 py-2 rounded-lg bg-success text-white hover:bg-success/90 transition-all text-sm font-bold"
+                            >
+                              <CheckCircle size={16} className="inline mr-1" />
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingQuizId(null)}
+                              className="flex-1 py-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all text-sm font-bold"
+                            >
+                              <X size={16} className="inline mr-1" />
+                              Cancel
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-start gap-2 mb-4">
@@ -602,22 +644,35 @@ function DashboardContent() {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => router.push(`/quiz/${quiz.id}`)}
-                      className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-md active:scale-95"
-                    >
-                      {quiz.attempts && quiz.attempts > 0 ? (
-                        <>
-                          <RotateCcw size={18} />
-                          Replay Session
-                        </>
-                      ) : (
-                        <>
-                          <Play size={18} fill="currentColor" />
-                          Begin Session
-                        </>
-                      )}
-                    </button>
+                    <div className="space-y-3">
+                      <button
+                        onClick={() => router.push(`/quiz/${quiz.id}`)}
+                        className="flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-md active:scale-95"
+                      >
+                        {quiz.attempts && quiz.attempts > 0 ? (
+                          <>
+                            <RotateCcw size={18} />
+                            Replay Session
+                          </>
+                        ) : (
+                          <>
+                            <Play size={18} fill="currentColor" />
+                            Begin Session
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/quiz/${quiz.id}/edit`);
+                        }}
+                        className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border-2 border-accent/30 bg-accent/5 text-accent font-bold hover:bg-accent hover:text-white transition-all"
+                      >
+                        <Edit3 size={16} />
+                        Edit Questions
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -701,16 +756,36 @@ function DashboardContent() {
                 value={quizTitle}
                 onChange={(e) => setQuizTitle(e.target.value)}
                 placeholder="Enter quiz title..."
-                className="flex-1 px-4 py-3 rounded-xl border border-card-border bg-white focus:ring-4 focus:ring-primary-muted outline-none font-medium"
+                className="flex-1 px-4 py-3 rounded-xl border border-card-border bg-white focus:ring-4 focus:ring-primary-muted outline-none font-medium text-lg"
               />
-              <button
-                onClick={handleApproveAndStart}
-                disabled={previewQuestions.length === 0}
-                className="px-8 py-3 rounded-xl bg-success text-white font-bold hover:bg-success/90 transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <CheckCircle size={18} />
-                Approve & Start Quiz
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveForLater}
+                  disabled={previewQuestions.length === 0 || isGenerating}
+                  className="px-6 py-3 rounded-xl border-2 border-primary/20 bg-white text-primary font-bold hover:bg-primary-muted transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                  title="Save question set without starting"
+                >
+                  <Save size={18} />
+                  Save
+                </button>
+                <button
+                  onClick={handleSaveAndEdit}
+                  disabled={previewQuestions.length === 0 || isGenerating}
+                  className="px-6 py-3 rounded-xl border-2 border-accent/20 bg-white text-accent font-bold hover:bg-accent-muted transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                  title="Open in full editor"
+                >
+                  <Edit3 size={18} />
+                  Edit Details
+                </button>
+                <button
+                  onClick={handleApproveAndStart}
+                  disabled={previewQuestions.length === 0 || isGenerating}
+                  className="px-8 py-3 rounded-xl bg-success text-white font-bold hover:bg-success/90 transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <CheckCircle size={18} />
+                  Approve & Start Quiz
+                </button>
+              </div>
             </div>
           </div>
 
@@ -806,7 +881,7 @@ function DashboardContent() {
               <p className="font-bold text-primary">{previewQuestions.length} questions ready</p>
               <p className="text-sm text-slate-500">Click approve when you're satisfied with the questions</p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap justify-center sm:justify-end gap-3">
               <button
                 onClick={() => {
                   setIsReviewing(false);
@@ -818,8 +893,24 @@ function DashboardContent() {
                 Cancel
               </button>
               <button
+                onClick={handleSaveForLater}
+                disabled={previewQuestions.length === 0 || isGenerating}
+                className="px-6 py-3 rounded-xl border-2 border-primary/20 bg-white text-primary font-bold hover:bg-primary-muted transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+              >
+                <Save size={18} />
+                Save
+              </button>
+              <button
+                onClick={handleSaveAndEdit}
+                disabled={previewQuestions.length === 0 || isGenerating}
+                className="px-6 py-3 rounded-xl border-2 border-accent/20 bg-white text-accent font-bold hover:bg-accent-muted transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+              >
+                <Edit3 size={18} />
+                Full Editor
+              </button>
+              <button
                 onClick={handleApproveAndStart}
-                disabled={previewQuestions.length === 0}
+                disabled={previewQuestions.length === 0 || isGenerating}
                 className="px-8 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Play size={18} fill="currentColor" />

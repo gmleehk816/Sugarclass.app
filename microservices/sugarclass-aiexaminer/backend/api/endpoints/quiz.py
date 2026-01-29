@@ -66,6 +66,11 @@ class QuizCreateFromPreviewRequest(BaseModel):
 class QuizRenameRequest(BaseModel):
     title: str
 
+class QuizUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    questions: Optional[List[dict]] = None
+
+
 
 @router.post("/generate-preview")
 async def generate_quiz_preview(request: QuizGenerationRequest):
@@ -175,19 +180,42 @@ async def create_quiz_from_preview(request: QuizCreateFromPreviewRequest, db: As
 
 
 @router.patch("/{quiz_id}")
-async def rename_quiz(quiz_id: str, request: QuizRenameRequest, db: AsyncSession = Depends(get_db)):
-    """Rename an existing quiz"""
+async def update_quiz(quiz_id: str, request: QuizUpdateRequest, db: AsyncSession = Depends(get_db)):
+    """Update quiz title and/or questions"""
     result = await db.execute(select(Quiz).where(Quiz.id == quiz_id))
     quiz = result.scalar_one_or_none()
     
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
-        
-    quiz.title = request.title
+    
+    # Update fields if provided
+    if request.title is not None:
+        quiz.title = request.title
+    if request.questions is not None:
+        quiz.questions = request.questions
+    
     await db.commit()
     await db.refresh(quiz)
     
-    return {"status": "success", "id": quiz.id, "title": quiz.title}
+    return {"status": "success", "id": quiz.id, "title": quiz.title, "questions": quiz.questions}
+
+
+@router.get("/{quiz_id}")
+async def get_quiz(quiz_id: str, db: AsyncSession = Depends(get_db)):
+    """Get a specific quiz by ID"""
+    result = await db.execute(select(Quiz).where(Quiz.id == quiz_id))
+    quiz = result.scalar_one_or_none()
+    
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    
+    return {
+        "id": quiz.id,
+        "title": quiz.title,
+        "questions": quiz.questions,
+        "material_id": quiz.material_id,
+        "created_at": quiz.created_at
+    }
 
 
 @router.post("/generate")

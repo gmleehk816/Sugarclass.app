@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import UploadSection from '@/components/UploadSection';
-import { FileText, Trash2, Play, Search, Clock, FileType } from 'lucide-react';
+import { FileText, Trash2, Play, Search, Clock, FileType, Edit3, CheckCircle, X, Plus, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
 
 interface Material {
@@ -27,6 +27,11 @@ export default function MaterialsPage() {
     const [materials, setMaterials] = useState<Material[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
+    const [newFilename, setNewFilename] = useState('');
+    const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+    const [newSessionName, setNewSessionName] = useState('');
+    const [selectedSession, setSelectedSession] = useState<MaterialGroup | null>(null);
 
     useEffect(() => {
         fetchMaterials();
@@ -72,6 +77,75 @@ export default function MaterialsPage() {
         } catch (error) {
             console.error('Group delete failed:', error);
         }
+    };
+
+    const renameMaterial = async (id: string) => {
+        if (!newFilename.trim()) {
+            setEditingMaterialId(null);
+            return;
+        }
+
+        try {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: newFilename }),
+            });
+            setMaterials(materials.map(m => m.id === id ? { ...m, filename: newFilename } : m));
+            setEditingMaterialId(null);
+        } catch (error) {
+            console.error('Rename failed:', error);
+            alert('Failed to rename material.');
+        }
+    };
+
+    const renameSession = async (sessionId: string, newName: string) => {
+        if (!newName.trim()) {
+            setEditingSessionId(null);
+            return;
+        }
+
+        try {
+            // Update all materials in this session with new naming pattern
+            const sessionMaterials = materials.filter(m => m.session_id === sessionId);
+            for (const material of sessionMaterials) {
+                const extension = material.filename.split('.').pop();
+                const baseName = newName.replace(/\s+/g, '_');
+                const newFilename = sessionMaterials.length > 1
+                    ? `${baseName}_${sessionMaterials.indexOf(material) + 1}.${extension}`
+                    : `${baseName}.${extension}`;
+
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${material.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: newFilename }),
+                });
+            }
+            setEditingSessionId(null);
+            fetchMaterials();
+        } catch (error) {
+            console.error('Failed to rename session:', error);
+            alert('Failed to rename folder.');
+        }
+    };
+
+    const handleAddFilesToSession = async (sessionId: string, files: FileList) => {
+        for (const file of Array.from(files)) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('session_id', sessionId);
+
+            try {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/`, {
+                    method: 'POST',
+                    body: formData,
+                });
+            } catch (error) {
+                console.error('Failed to upload file:', error);
+            }
+        }
+        fetchMaterials();
+        setSelectedSession(null);
     };
 
     const handleUploadComplete = (uploadResponse: any) => {
@@ -189,14 +263,103 @@ export default function MaterialsPage() {
                                         <div className={`p-4 rounded-2xl transition-all ${group.materials.length > 1 ? 'bg-accent-muted text-accent group-hover:bg-accent group-hover:text-white' : 'bg-primary-muted text-primary group-hover:bg-primary group-hover:text-white'}`}>
                                             <FileType size={28} />
                                         </div>
-                                        <button
-                                            onClick={(e) => group.sessionId ? deleteGroup(group, e) : deleteMaterial(group.materials[0].id, e)}
-                                            className="p-2 text-slate-300 hover:text-error transition-colors"
-                                        >
-                                            <Trash2 size={20} />
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            {group.sessionId && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEditingSessionId(group.sessionId);
+                                                        setNewSessionName(group.title.replace(` (${group.materials.length} files)`, '').replace('Session Bundle', 'Folder'));
+                                                    }}
+                                                    className="p-2 text-slate-300 hover:text-primary hover:bg-primary-muted rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                    title="Rename folder"
+                                                >
+                                                    <Edit3 size={18} />
+                                                </button>
+                                            )}
+                                            {!group.sessionId && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEditingMaterialId(group.materials[0].id);
+                                                        setNewFilename(group.materials[0].filename);
+                                                    }}
+                                                    className="p-2 text-slate-300 hover:text-primary hover:bg-primary-muted rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                    title="Edit material name"
+                                                >
+                                                    <Edit3 size={18} />
+                                                </button>
+                                            )}
+                                            {group.sessionId && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedSession(group);
+                                                    }}
+                                                    className="p-2 text-slate-300 hover:text-accent hover:bg-accent-muted rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                    title="Manage files"
+                                                >
+                                                    <FolderOpen size={18} />
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={(e) => group.sessionId ? deleteGroup(group, e) : deleteMaterial(group.materials[0].id, e)}
+                                                className="p-2 text-slate-300 hover:text-error hover:bg-red-50 rounded-lg transition-colors"
+                                            >
+                                                <Trash2 size={20} />
+                                            </button>
+                                        </div>
                                     </div>
-                                    <h3 className="text-xl font-black text-primary mb-2 line-clamp-2 leading-tight group-hover:text-accent transition-colors">{group.title}</h3>
+
+                                    {editingSessionId === group.sessionId ? (
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <input
+                                                type="text"
+                                                value={newSessionName}
+                                                onChange={(e) => setNewSessionName(e.target.value)}
+                                                onKeyDown={(e) => e.key === 'Enter' && group.sessionId && renameSession(group.sessionId, newSessionName)}
+                                                className="flex-1 text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted"
+                                                autoFocus
+                                            />
+                                            <button
+                                                onClick={() => group.sessionId && renameSession(group.sessionId, newSessionName)}
+                                                className="p-2 rounded-lg bg-success text-white hover:bg-success/90 transition-all"
+                                            >
+                                                <CheckCircle size={18} />
+                                            </button>
+                                            <button
+                                                onClick={() => setEditingSessionId(null)}
+                                                className="p-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all"
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                        </div>
+                                    ) : editingMaterialId === group.materials[0]?.id ? (
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <input
+                                                type="text"
+                                                value={newFilename}
+                                                onChange={(e) => setNewFilename(e.target.value)}
+                                                onKeyDown={(e) => e.key === 'Enter' && renameMaterial(group.materials[0].id)}
+                                                className="flex-1 text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted"
+                                                autoFocus
+                                            />
+                                            <button
+                                                onClick={() => renameMaterial(group.materials[0].id)}
+                                                className="p-2 rounded-lg bg-success text-white hover:bg-success/90 transition-all"
+                                            >
+                                                <CheckCircle size={18} />
+                                            </button>
+                                            <button
+                                                onClick={() => setEditingMaterialId(null)}
+                                                className="p-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all"
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <h3 className="text-xl font-black text-primary mb-2 line-clamp-2 leading-tight group-hover:text-accent transition-colors">{group.title}</h3>
+                                    )}
                                     <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest mb-6">
                                         <Clock size={14} />
                                         <span>{new Date(group.createdAt).toLocaleDateString()}</span>
@@ -235,6 +398,80 @@ export default function MaterialsPage() {
                                 </Link>
                             </div>
                         ))}
+                    </div>
+                )}
+
+                {/* Folder Detail Modal */}
+                {selectedSession && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+                        <div className="premium-card p-8 max-w-3xl w-full bg-white max-h-[80vh] overflow-y-auto">
+                            <div className="flex items-start justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <FolderOpen size={32} className="text-accent" />
+                                    <div>
+                                        <h2 className="text-2xl font-black text-primary">{selectedSession.title}</h2>
+                                        <p className="text-sm text-slate-500">{selectedSession.materials.length} files</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedSession(null)}
+                                    className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            {/* Add Files Button */}
+                            <label
+                                htmlFor="add-files-input"
+                                className="flex items-center justify-center gap-3 w-full py-4 rounded-xl border-2 border-dashed border-primary/30 bg-primary-muted text-primary font-bold hover:bg-primary hover:text-white transition-all cursor-pointer mb-6"
+                            >
+                                <Plus size={20} />
+                                Add More Files
+                                <input
+                                    id="add-files-input"
+                                    type="file"
+                                    multiple
+                                    accept=".pdf,.png,.jpg,.jpeg"
+                                    onChange={(e) => {
+                                        if (e.target.files && selectedSession.sessionId) {
+                                            handleAddFilesToSession(selectedSession.sessionId, e.target.files);
+                                        }
+                                    }}
+                                    className="hidden"
+                                />
+                            </label>
+
+                            {/* Files List */}
+                            <div className="space-y-3">
+                                {selectedSession.materials.map((material) => (
+                                    <div
+                                        key={material.id}
+                                        className="flex items-center justify-between p-4 rounded-xl bg-slate-50 hover:bg-slate-100 transition-all group"
+                                    >
+                                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            <FileText size={20} className="text-slate-400 flex-shrink-0" />
+                                            <span className="font-medium text-slate-700 truncate">{material.filename}</span>
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                deleteMaterial(material.id, e);
+                                                setTimeout(() => {
+                                                    if (selectedSession?.sessionId) {
+                                                        const updatedMaterials = selectedSession.materials.filter(m => m.id !== material.id);
+                                                        setSelectedSession({ ...selectedSession, materials: updatedMaterials });
+                                                    }
+                                                }, 100);
+                                            }}
+                                            className="p-2 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                                            title="Delete File"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

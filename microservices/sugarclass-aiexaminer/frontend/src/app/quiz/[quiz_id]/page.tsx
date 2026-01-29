@@ -121,10 +121,10 @@ function QuizReplayContent() {
                         </button>
                         <div className="flex items-center gap-4">
                             <div className={`status-badge border ${quizData.question_type === 'mixed'
-                                    ? 'bg-gradient-to-r from-blue-50 to-amber-50 text-purple-600 border-purple-200'
-                                    : quizData.question_type === 'short'
-                                        ? 'bg-amber-50 text-amber-600 border-amber-200'
-                                        : 'bg-blue-50 text-blue-600 border-blue-200'
+                                ? 'bg-gradient-to-r from-blue-50 to-amber-50 text-purple-600 border-purple-200'
+                                : quizData.question_type === 'short'
+                                    ? 'bg-amber-50 text-amber-600 border-amber-200'
+                                    : 'bg-blue-50 text-blue-600 border-blue-200'
                                 }`}>
                                 {quizData.question_type === 'mixed' ? 'Mixed Format' : quizData.question_type === 'short' ? 'Short Answer Mode' : 'Multiple Choice Mode'}
                             </div>

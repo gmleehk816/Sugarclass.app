@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
     CheckCircle2,
     XCircle,
@@ -15,7 +16,8 @@ import {
     Sparkles,
     AlertCircle,
     Send,
-    CheckSquare
+    CheckSquare,
+    Edit3
 } from 'lucide-react';
 
 interface MCQQuestion {
@@ -57,6 +59,7 @@ export default function MixedQuiz({
     onReset: () => void,
     onTryAnotherType: () => void
 }) {
+    const router = useRouter();
     const [currentIndex, setCurrentIndex] = useState(0);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [userAnswer, setUserAnswer] = useState('');
@@ -212,6 +215,12 @@ export default function MixedQuiz({
                         </button>
                     )}
                     <button
+                        onClick={() => router.push(`/quiz/${quizId}/edit`)}
+                        className="flex-1 px-8 py-4 rounded-2xl border-2 border-accent/20 bg-white text-accent font-bold hover:bg-accent-muted transition-all active:scale-95 flex items-center justify-center gap-2"
+                    >
+                        <Edit3 size={20} /> Edit Questions
+                    </button>
+                    <button
                         onClick={onReset}
                         className="flex-1 px-8 py-4 rounded-2xl bg-accent text-white font-bold hover:bg-accent-light shadow-xl transition-all active:scale-95"
                     >
@@ -229,8 +238,8 @@ export default function MixedQuiz({
                             <div key={idx} className="premium-card p-6 md:p-8 bg-white/60">
                                 <div className="flex items-start gap-4 mb-4">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${resp.type === 'mcq'
-                                            ? resp.answer === (resp.question as MCQQuestion).correct_answer ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
-                                            : resp.validation?.score >= 0.7 ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
+                                        ? resp.answer === (resp.question as MCQQuestion).correct_answer ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
+                                        : resp.validation?.score >= 0.7 ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
                                         }`}>
                                         {idx + 1}
                                     </div>
@@ -252,10 +261,10 @@ export default function MixedQuiz({
                                                 <div
                                                     key={oIdx}
                                                     className={`p-4 rounded-xl border text-sm font-medium ${opt === (resp.question as MCQQuestion).correct_answer
-                                                            ? 'border-success bg-success/5 text-success'
-                                                            : opt === resp.answer
-                                                                ? 'border-error bg-error/5 text-error'
-                                                                : 'border-slate-100 bg-slate-50 opacity-50'
+                                                        ? 'border-success bg-success/5 text-success'
+                                                        : opt === resp.answer
+                                                            ? 'border-error bg-error/5 text-error'
+                                                            : 'border-slate-100 bg-slate-50 opacity-50'
                                                         }`}
                                                 >
                                                     <span className="opacity-60 mr-2">{String.fromCharCode(65 + oIdx)}.</span> {opt}

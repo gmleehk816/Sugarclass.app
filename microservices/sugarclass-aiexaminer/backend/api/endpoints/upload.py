@@ -40,11 +40,15 @@ class PageSelectionRequest(BaseModel):
     material_id: str
     selected_pages: List[int]
 
+class MaterialUpdateRequest(BaseModel):
+    filename: str
+
 
 @router.post("/")
 async def upload_material(
     file: UploadFile = File(...),
     session_id: Optional[str] = Form(None),
+    collection_id: Optional[str] = Form(None),
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ):
@@ -88,12 +92,13 @@ async def upload_material(
     if requires_page_selection:
         page_previews = await pdf_service.get_page_previews(file_path)
     
-    # Save to database with page info
+    # Save to database with page info and collection_id
     material = Material(
         id=file_id,
         filename=file.filename,
         file_path=file_path,
         extracted_text=text,
+        collection_id=collection_id,
         session_id=session_id
     )
     db.add(material)
@@ -239,6 +244,19 @@ async def get_upload_session(session_id: str, db: AsyncSession = Depends(get_db)
     if materials:
         return {"session_id": session_id, "status": "completed", "materials": materials}
     return {"session_id": session_id, "status": "active"}
+
+@router.patch("/{material_id}")
+async def update_material(material_id: str, request: MaterialUpdateRequest, db: AsyncSession = Depends(get_db)):
+    """Update material details (e.g., rename file)"""
+    result = await db.execute(select(Material).where(Material.id == material_id))
+    material = result.scalar_one_or_none()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    
+    material.filename = request.filename
+    await db.commit()
+    await db.refresh(material)
+    return material
 
 @router.delete("/{material_id}")
 async def delete_material(material_id: str, db: AsyncSession = Depends(get_db)):

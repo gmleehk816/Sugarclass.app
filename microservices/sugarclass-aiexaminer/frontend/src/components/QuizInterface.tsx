@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
     CheckCircle2,
     XCircle,
@@ -14,7 +15,8 @@ import {
     MessageSquare,
     Sparkles,
     AlertCircle,
-    Send
+    Send,
+    Edit3
 } from 'lucide-react';
 
 interface Question {
@@ -37,6 +39,7 @@ export default function QuizInterface({
     onReset: () => void,
     onTryAnotherType: () => void
 }) {
+    const router = useRouter();
     const [currentIndex, setCurrentIndex] = useState(0);
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [showResult, setShowResult] = useState(false);
@@ -136,6 +139,12 @@ export default function QuizInterface({
                         className="flex-1 px-8 py-4 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3"
                     >
                         <MessageSquare size={20} /> Try Another Format
+                    </button>
+                    <button
+                        onClick={() => router.push(`/quiz/${quizId}/edit`)}
+                        className="flex-1 px-8 py-4 rounded-2xl border-2 border-accent/20 bg-white text-accent font-bold hover:bg-accent-muted transition-all active:scale-95 flex items-center justify-center gap-2"
+                    >
+                        <Edit3 size={20} /> Edit Questions
                     </button>
                     <button
                         onClick={onReset}
