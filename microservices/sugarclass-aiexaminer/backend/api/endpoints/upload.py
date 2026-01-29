@@ -314,83 +314,132 @@ async def get_upload_session(session_id: str, db: AsyncSession = Depends(get_db)
         return {"session_id": session_id, "status": "completed", "materials": materials}
     return {"session_id": session_id, "status": "active"}
 
-
 @router.post("/session/{session_id}/extract-all")
 async def extract_all_session_texts(session_id: str, db: AsyncSession = Depends(get_db)):
-    """Extract text from ALL materials in a session and return combined text for quiz generation."""
+    """
+    Extract text from ALL materials in a session and return combined text for quiz generation.
+    Uses parallel processing for speed. Sends progress via WebSocket.
+    """
+    import asyncio
+    from backend.api.endpoints.websocket import notify_session
+    
     result = await db.execute(select(Material).where(Material.session_id == session_id))
-    materials = result.scalars().all()
+    materials = list(result.scalars().all())
     
     if not materials:
         raise HTTPException(status_code=404, detail="No materials found in this session")
     
-    combined_texts = []
-    extraction_results = []
-    has_errors = False
+    # Notify start
+    await notify_session(session_id, {
+        "type": "extraction_started",
+        "total_files": len(materials)
+    })
     
-    for material in materials:
+    # Helper function to extract text from a single material
+    async def extract_single(material, index: int):
         is_image = material.file_path.lower().endswith(('.png', '.jpg', '.jpeg'))
-        
-        # Check if this material needs text extraction
         needs_extraction = is_image and (
             not material.extracted_text or 
             material.extracted_text.startswith("[Image")
         )
         
         if needs_extraction:
-            # Extract text from image
+            # Notify progress
+            await notify_session(session_id, {
+                "type": "extracting_file",
+                "index": index + 1,
+                "total": len(materials),
+                "filename": material.filename
+            })
+            
             extracted = await gemini_service.extract_text_from_image(material.file_path)
             
-            # Update material in database
-            material.extracted_text = extracted
-            await db.commit()
+            # Update in a new session to avoid conflicts
+            async with AsyncSession(db.get_bind()) as new_db:
+                mat_result = await new_db.execute(select(Material).where(Material.id == material.id))
+                mat = mat_result.scalar_one()
+                mat.extracted_text = extracted
+                await new_db.commit()
             
-            # Check for extraction issues
-            if extracted.startswith("[QUALITY_ISSUE]") or extracted.startswith("[EXTRACTION_ERROR]"):
-                extraction_results.append({
-                    "id": material.id,
-                    "filename": material.filename,
-                    "status": "error",
-                    "message": extracted
-                })
-                has_errors = True
-            elif extracted.startswith("[NO_TEXT]") or extracted.startswith("[LIMITED_TEXT]"):
-                extraction_results.append({
-                    "id": material.id,
-                    "filename": material.filename,
-                    "status": "warning",
-                    "message": extracted
-                })
-                # Still add limited text to combined
-                if extracted.startswith("[LIMITED_TEXT]"):
-                    combined_texts.append(f"--- From {material.filename} ---\n{extracted}")
-            else:
-                extraction_results.append({
-                    "id": material.id,
-                    "filename": material.filename,
-                    "status": "success",
-                    "text_length": len(extracted)
-                })
-                combined_texts.append(f"--- From {material.filename} ---\n{extracted}")
+            return {
+                "id": material.id,
+                "filename": material.filename,
+                "extracted": extracted,
+                "needed_extraction": True
+            }
         else:
-            # Already has text
-            if material.extracted_text and not material.extracted_text.startswith("["):
-                combined_texts.append(f"--- From {material.filename} ---\n{material.extracted_text}")
-                extraction_results.append({
-                    "id": material.id,
-                    "filename": material.filename,
-                    "status": "success",
-                    "text_length": len(material.extracted_text)
-                })
-            elif material.extracted_text:
-                extraction_results.append({
-                    "id": material.id,
-                    "filename": material.filename,
-                    "status": "warning",
-                    "message": material.extracted_text
-                })
+            return {
+                "id": material.id,
+                "filename": material.filename,
+                "extracted": material.extracted_text,
+                "needed_extraction": False
+            }
+    
+    # Process ALL materials in parallel for speed
+    extraction_tasks = [extract_single(mat, i) for i, mat in enumerate(materials)]
+    results = await asyncio.gather(*extraction_tasks, return_exceptions=True)
+    
+    # Process results
+    combined_texts = []
+    extraction_results = []
+    has_errors = False
+    
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            extraction_results.append({
+                "id": materials[i].id,
+                "filename": materials[i].filename,
+                "status": "error",
+                "message": f"[EXTRACTION_ERROR] {str(result)}"
+            })
+            has_errors = True
+            continue
+            
+        extracted = result["extracted"]
+        material = materials[i]
+        
+        if not extracted or extracted.startswith("[QUALITY_ISSUE]") or extracted.startswith("[EXTRACTION_ERROR]"):
+            extraction_results.append({
+                "id": material.id,
+                "filename": material.filename,
+                "status": "error",
+                "message": extracted or "[NO_TEXT]"
+            })
+            has_errors = True
+        elif extracted.startswith("[NO_TEXT]") or extracted.startswith("[LIMITED_TEXT]"):
+            extraction_results.append({
+                "id": material.id,
+                "filename": material.filename,
+                "status": "warning",
+                "message": extracted
+            })
+            if extracted.startswith("[LIMITED_TEXT]"):
+                combined_texts.append(f"--- From {material.filename} ---\n{extracted}")
+        elif extracted.startswith("[Image"):
+            # Still needs extraction but wasn't processed (shouldn't happen)
+            extraction_results.append({
+                "id": material.id,
+                "filename": material.filename,
+                "status": "pending",
+                "message": "Extraction pending"
+            })
+        else:
+            extraction_results.append({
+                "id": material.id,
+                "filename": material.filename,
+                "status": "success",
+                "text_length": len(extracted)
+            })
+            combined_texts.append(f"--- From {material.filename} ---\n{extracted}")
     
     combined_text = "\n\n".join(combined_texts)
+    
+    # Notify completion
+    await notify_session(session_id, {
+        "type": "extraction_complete",
+        "success_count": len([r for r in extraction_results if r["status"] == "success"]),
+        "error_count": len([r for r in extraction_results if r["status"] == "error"])
+    })
     
     return {
         "session_id": session_id,
