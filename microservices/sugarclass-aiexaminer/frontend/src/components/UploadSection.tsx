@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Upload, Smartphone, Camera, FileText, CheckCircle2, RotateCcw } from 'lucide-react';
 
 export default function UploadSection({
@@ -10,6 +11,7 @@ export default function UploadSection({
     onUploadComplete: (data: any) => void;
     onShowLibrary: () => void;
 }) {
+    const router = useRouter();
     const [isUploading, setIsUploading] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
@@ -191,10 +193,10 @@ export default function UploadSection({
 
                     {mobileStatus === 'done' && (
                         <button
-                            onClick={() => window.location.href = `/?sid=${sessionId}`}
+                            onClick={() => router.push(`/?sid=${sessionId}`)}
                             className="px-6 py-2 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-md active:scale-95 animate-fade-in"
                         >
-                            Start Session Quiz
+                            Configure Quiz
                         </button>
                     )}
                 </div>
