@@ -322,12 +322,19 @@ async def extract_all_session_texts(session_id: str, db: AsyncSession = Depends(
     """
     import asyncio
     from backend.api.endpoints.websocket import notify_session
+    from backend.database import AsyncSessionLocal
     
     result = await db.execute(select(Material).where(Material.session_id == session_id))
     materials = list(result.scalars().all())
     
     if not materials:
         raise HTTPException(status_code=404, detail="No materials found in this session")
+    
+    # Store material IDs and paths for parallel processing (avoid sharing ORM objects)
+    material_info = [
+        {"id": m.id, "filename": m.filename, "file_path": m.file_path, "extracted_text": m.extracted_text}
+        for m in materials
+    ]
     
     # Notify start
     await notify_session(session_id, {
@@ -336,11 +343,11 @@ async def extract_all_session_texts(session_id: str, db: AsyncSession = Depends(
     })
     
     # Helper function to extract text from a single material
-    async def extract_single(material, index: int):
-        is_image = material.file_path.lower().endswith(('.png', '.jpg', '.jpeg'))
+    async def extract_single(mat_info: dict, index: int):
+        is_image = mat_info["file_path"].lower().endswith(('.png', '.jpg', '.jpeg'))
         needs_extraction = is_image and (
-            not material.extracted_text or 
-            material.extracted_text.startswith("[Image")
+            not mat_info["extracted_text"] or 
+            mat_info["extracted_text"].startswith("[Image")
         )
         
         if needs_extraction:
@@ -348,35 +355,35 @@ async def extract_all_session_texts(session_id: str, db: AsyncSession = Depends(
             await notify_session(session_id, {
                 "type": "extracting_file",
                 "index": index + 1,
-                "total": len(materials),
-                "filename": material.filename
+                "total": len(material_info),
+                "filename": mat_info["filename"]
             })
             
-            extracted = await gemini_service.extract_text_from_image(material.file_path)
+            extracted = await gemini_service.extract_text_from_image(mat_info["file_path"])
             
-            # Update in a new session to avoid conflicts
-            async with AsyncSession(db.get_bind()) as new_db:
-                mat_result = await new_db.execute(select(Material).where(Material.id == material.id))
+            # Update in a fresh database session
+            async with AsyncSessionLocal() as new_db:
+                mat_result = await new_db.execute(select(Material).where(Material.id == mat_info["id"]))
                 mat = mat_result.scalar_one()
                 mat.extracted_text = extracted
                 await new_db.commit()
             
             return {
-                "id": material.id,
-                "filename": material.filename,
+                "id": mat_info["id"],
+                "filename": mat_info["filename"],
                 "extracted": extracted,
                 "needed_extraction": True
             }
         else:
             return {
-                "id": material.id,
-                "filename": material.filename,
-                "extracted": material.extracted_text,
+                "id": mat_info["id"],
+                "filename": mat_info["filename"],
+                "extracted": mat_info["extracted_text"],
                 "needed_extraction": False
             }
     
     # Process ALL materials in parallel for speed
-    extraction_tasks = [extract_single(mat, i) for i, mat in enumerate(materials)]
+    extraction_tasks = [extract_single(mat, i) for i, mat in enumerate(material_info)]
     results = await asyncio.gather(*extraction_tasks, return_exceptions=True)
     
     # Process results
@@ -387,8 +394,8 @@ async def extract_all_session_texts(session_id: str, db: AsyncSession = Depends(
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             extraction_results.append({
-                "id": materials[i].id,
-                "filename": materials[i].filename,
+                "id": material_info[i]["id"],
+                "filename": material_info[i]["filename"],
                 "status": "error",
                 "message": f"[EXTRACTION_ERROR] {str(result)}"
             })
@@ -396,41 +403,41 @@ async def extract_all_session_texts(session_id: str, db: AsyncSession = Depends(
             continue
             
         extracted = result["extracted"]
-        material = materials[i]
+        mat = material_info[i]
         
         if not extracted or extracted.startswith("[QUALITY_ISSUE]") or extracted.startswith("[EXTRACTION_ERROR]"):
             extraction_results.append({
-                "id": material.id,
-                "filename": material.filename,
+                "id": mat["id"],
+                "filename": mat["filename"],
                 "status": "error",
                 "message": extracted or "[NO_TEXT]"
             })
             has_errors = True
         elif extracted.startswith("[NO_TEXT]") or extracted.startswith("[LIMITED_TEXT]"):
             extraction_results.append({
-                "id": material.id,
-                "filename": material.filename,
+                "id": mat["id"],
+                "filename": mat["filename"],
                 "status": "warning",
                 "message": extracted
             })
             if extracted.startswith("[LIMITED_TEXT]"):
-                combined_texts.append(f"--- From {material.filename} ---\n{extracted}")
+                combined_texts.append(f"--- From {mat['filename']} ---\n{extracted}")
         elif extracted.startswith("[Image"):
             # Still needs extraction but wasn't processed (shouldn't happen)
             extraction_results.append({
-                "id": material.id,
-                "filename": material.filename,
+                "id": mat["id"],
+                "filename": mat["filename"],
                 "status": "pending",
                 "message": "Extraction pending"
             })
         else:
             extraction_results.append({
-                "id": material.id,
-                "filename": material.filename,
+                "id": mat["id"],
+                "filename": mat["filename"],
                 "status": "success",
                 "text_length": len(extracted)
             })
-            combined_texts.append(f"--- From {material.filename} ---\n{extracted}")
+            combined_texts.append(f"--- From {mat['filename']} ---\n{extracted}")
     
     combined_text = "\n\n".join(combined_texts)
     
@@ -443,7 +450,7 @@ async def extract_all_session_texts(session_id: str, db: AsyncSession = Depends(
     
     return {
         "session_id": session_id,
-        "material_count": len(materials),
+        "material_count": len(material_info),
         "extraction_results": extraction_results,
         "has_errors": has_errors,
         "combined_text": combined_text,
