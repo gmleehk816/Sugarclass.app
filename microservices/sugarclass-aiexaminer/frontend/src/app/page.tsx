@@ -146,9 +146,28 @@ function DashboardContent() {
 
       // Artificial delay for better UX feel
       await new Promise(r => setTimeout(r, 800));
+      setProcessingStep(1);
+
+      // If this is an image that needs OCR, extract text now
+      if (material.requires_text_extraction) {
+        setProcessingStep(2); // "Extracting text from image..."
+        const extractRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/${materialId}/extract-text`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+
+        if (extractRes.ok) {
+          const extractData = await extractRes.json();
+          material.full_text = extractData.full_text;
+          material.requires_text_extraction = false;
+        } else {
+          throw new Error("Failed to extract text from image. Please try again.");
+        }
+      }
+
       setProcessingStep(2);
 
-      const hasText = material.full_text && material.full_text.trim() !== '';
+      const hasText = material.full_text && material.full_text.trim() !== '' && !material.full_text.startsWith('[Image');
       const canSelectPages = material.requires_page_selection && material.total_pages > 0;
 
       if (!hasText && !canSelectPages) {

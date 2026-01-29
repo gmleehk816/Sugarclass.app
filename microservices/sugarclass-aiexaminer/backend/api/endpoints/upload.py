@@ -73,8 +73,11 @@ async def upload_material(
         requires_page_selection = total_pages > MAX_PAGES_LIMIT
     
     # Extract text (with page limit for large PDFs)
+    # NOTE: For images, we defer OCR to quiz generation time for faster uploads
     text = ""
     processed_pages = []
+    is_image = extension.lower() in ['.png', '.jpg', '.jpeg']
+    
     if is_pdf:
         if requires_page_selection:
             # Don't extract text yet - user needs to select pages first
@@ -82,8 +85,10 @@ async def upload_material(
             processed_pages = []
         else:
             text, _, processed_pages = await pdf_service.extract_text_with_metadata(file_path)
-    else:
-        text = await gemini_service.extract_text_from_image(file_path)
+    elif is_image:
+        # For images, we DON'T extract text during upload (too slow)
+        # OCR will happen when generating questions
+        text = "[Image - text will be extracted when generating quiz]"
         total_pages = 1
         processed_pages = [1]
     
@@ -200,6 +205,51 @@ async def process_selected_pages(
     }
 
 
+@router.post("/{material_id}/extract-text")
+async def extract_text_from_material(
+    material_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Extract text from an image material using OCR (called on-demand before quiz generation)"""
+    result = await db.execute(select(Material).where(Material.id == material_id))
+    material = result.scalar_one_or_none()
+    
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    
+    # Check if this is an image that needs OCR
+    is_image = material.file_path.lower().endswith(('.png', '.jpg', '.jpeg'))
+    
+    if not is_image:
+        # PDFs already have text extracted, just return it
+        return {
+            "id": material.id,
+            "full_text": material.extracted_text,
+            "status": "already_extracted"
+        }
+    
+    # Check if text was already extracted (not the placeholder)
+    if material.extracted_text and not material.extracted_text.startswith("[Image"):
+        return {
+            "id": material.id,
+            "full_text": material.extracted_text,
+            "status": "already_extracted"
+        }
+    
+    # Perform OCR using Gemini Vision
+    text = await gemini_service.extract_text_from_image(material.file_path)
+    
+    # Update the material with extracted text
+    material.extracted_text = text
+    await db.commit()
+    
+    return {
+        "id": material.id,
+        "full_text": text,
+        "status": "extracted"
+    }
+
+
 @router.get("/{material_id}/config")
 async def get_material_config(material_id: str, db: AsyncSession = Depends(get_db)):
     """Get full material configuration for re-generating quizzes"""
@@ -210,16 +260,20 @@ async def get_material_config(material_id: str, db: AsyncSession = Depends(get_d
         raise HTTPException(status_code=404, detail="Material not found")
     
     is_pdf = material.file_path.lower().endswith('.pdf')
+    is_image = material.file_path.lower().endswith(('.png', '.jpg', '.jpeg'))
     total_pages = 0
     page_previews = []
     requires_page_selection = False
+    requires_text_extraction = False
     
     if is_pdf:
         total_pages = await pdf_service.get_page_count(material.file_path)
         requires_page_selection = total_pages > MAX_PAGES_LIMIT
         page_previews = await pdf_service.get_page_previews(material.file_path)
-    else:
+    elif is_image:
         total_pages = 1
+        # Check if OCR is needed
+        requires_text_extraction = not material.extracted_text or material.extracted_text.startswith("[Image")
     
     return {
         "id": material.id,
@@ -227,8 +281,9 @@ async def get_material_config(material_id: str, db: AsyncSession = Depends(get_d
         "text_preview": material.extracted_text[:500] + "..." if len(material.extracted_text) > 500 else material.extracted_text,
         "full_text": material.extracted_text,
         "total_pages": total_pages,
-        "processed_pages": [], # We don't track which ones were selected yet
+        "processed_pages": [],
         "requires_page_selection": requires_page_selection,
+        "requires_text_extraction": requires_text_extraction,
         "max_pages_limit": MAX_PAGES_LIMIT,
         "page_previews": page_previews
     }
