@@ -68,11 +68,18 @@ function DashboardContent() {
   const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
 
+  // Extraction Progress State
+  const [extractionProgress, setExtractionProgress] = useState<{
+    current: number;
+    total: number;
+    filename: string;
+  } | null>(null);
+
   // Comprehensive Loading State
   const [processingStep, setProcessingStep] = useState(0);
   const steps = [
-    { title: "Reading Material", description: "Extracting text and structure from your document...", icon: <BookOpen className="text-blue-500" /> },
-    { title: "Analyzing Context", description: "Identifying key concepts and learning objectives...", icon: <Sparkles className="text-amber-500" /> },
+    { title: "Reading Material", description: "Loading your uploaded documents...", icon: <BookOpen className="text-blue-500" /> },
+    { title: extractionProgress ? `Extracting Text (${extractionProgress.current}/${extractionProgress.total})` : "Analyzing Images", description: extractionProgress ? `Processing: ${extractionProgress.filename}` : "Running OCR on your images...", icon: <Sparkles className="text-amber-500" /> },
     { title: "Crafting Questions", description: "Developing high-quality personalized quiz items...", icon: <Zap className="text-indigo-500" /> },
     { title: "Finalizing", description: "Organizing your exercise for review...", icon: <CheckCircle className="text-success" /> }
   ];
@@ -193,8 +200,38 @@ function DashboardContent() {
   const handleGenerateFromSession = async (sid: string) => {
     setIsGenerating(true);
     setProcessingStep(0);
+    setExtractionProgress(null);
     setError(null);
+
+    // Set up WebSocket for live progress updates
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/examiner/api/ws/session/${sid}`;
+    let ws: WebSocket | null = null;
+
     try {
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          console.log('[WS] Progress update:', message);
+
+          if (message.type === 'extraction_started') {
+            setExtractionProgress({ current: 0, total: message.total_files, filename: 'Starting...' });
+          } else if (message.type === 'extracting_file') {
+            setExtractionProgress({
+              current: message.index,
+              total: message.total,
+              filename: message.filename
+            });
+          } else if (message.type === 'extraction_complete') {
+            setExtractionProgress(null);
+          }
+        } catch (e) {
+          console.error('[WS] Failed to parse message:', e);
+        }
+      };
+
       const token = localStorage.getItem('sugarclass_token');
 
       // Step 1: Check session status
@@ -220,6 +257,7 @@ function DashboardContent() {
       const sessionConfig = await configRes.json();
 
       // Step 3: Extract text from all materials (handles images)
+      // WebSocket will send progress updates during this
       setProcessingStep(2); // "Extracting text..."
       const extractRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${sid}/extract-all`, {
         method: 'POST',
@@ -272,6 +310,11 @@ function DashboardContent() {
       setError(error.message);
     } finally {
       setIsGenerating(false);
+      setExtractionProgress(null);
+      // Close WebSocket if still open
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
     }
   };
 
