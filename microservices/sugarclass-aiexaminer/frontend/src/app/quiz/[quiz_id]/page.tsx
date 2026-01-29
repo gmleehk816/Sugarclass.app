@@ -6,7 +6,7 @@ import Navbar from '@/components/Navbar';
 import QuizInterface from '@/components/QuizInterface';
 import ShortAnswerQuiz from '@/components/ShortAnswerQuiz';
 import MixedQuiz from '@/components/MixedQuiz';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Edit3 } from 'lucide-react';
 
 function QuizReplayContent() {
     const params = useParams();
@@ -26,7 +26,7 @@ function QuizReplayContent() {
     const fetchQuiz = async () => {
         try {
             setIsLoading(true);
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/${quiz_id}`);
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/${quiz_id}`);
 
             if (!response.ok) {
                 throw new Error('Quiz not found');
@@ -63,7 +63,7 @@ function QuizReplayContent() {
     const handleQuizFinished = async (score: number, total: number) => {
         const token = localStorage.getItem('sugarclass_token');
         try {
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/submit`, {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/submit`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -113,12 +113,20 @@ function QuizReplayContent() {
             ) : quizData ? (
                 <div className="animate-fade-in max-w-6xl mx-auto">
                     <div className="flex flex-col sm:flex-row items-center justify-between mb-12 gap-6">
-                        <button
-                            onClick={() => router.push('/')}
-                            className="flex items-center gap-3 px-6 py-2.5 rounded-xl border border-card-border hover:bg-white text-slate-500 hover:text-primary font-bold transition-all active:scale-95 shadow-sm"
-                        >
-                            &larr; Back to Exercises
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => router.push('/')}
+                                className="flex items-center gap-3 px-6 py-2.5 rounded-xl border border-card-border hover:bg-white text-slate-500 hover:text-primary font-bold transition-all active:scale-95 shadow-sm"
+                            >
+                                &larr; Back to Exercises
+                            </button>
+                            <button
+                                onClick={() => router.push(`/quiz/${quiz_id}/edit`)}
+                                className="flex items-center gap-3 px-6 py-2.5 rounded-xl border-2 border-accent/20 bg-white text-accent font-bold hover:bg-accent hover:text-white transition-all active:scale-95 shadow-sm"
+                            >
+                                <Edit3 size={18} /> Edit Exercise
+                            </button>
+                        </div>
                         <div className="flex items-center gap-4">
                             <div className={`status-badge border ${quizData.question_type === 'mixed'
                                 ? 'bg-gradient-to-r from-blue-50 to-amber-50 text-purple-600 border-purple-200'

@@ -8,7 +8,7 @@ import QuizInterface from '@/components/QuizInterface';
 import ShortAnswerQuiz from '@/components/ShortAnswerQuiz';
 import MixedQuiz from '@/components/MixedQuiz';
 import PageSelector from '@/components/PageSelector';
-import { Search, RotateCcw, Play, CheckCircle, Sparkles, Trophy, Zap, ArrowRight, Clock, Award, GraduationCap, History, BookOpen, Upload as UploadIcon, ChevronLeft, ChevronRight, Trash2, Edit3, X, Save } from 'lucide-react';
+import { Search, RotateCcw, Play, CheckCircle, Sparkles, Trophy, Zap, ArrowRight, Clock, Award, GraduationCap, History, BookOpen, Upload as UploadIcon, ChevronLeft, ChevronRight, Trash2, Edit3, X, Save, Check } from 'lucide-react';
 
 interface PagePreview {
   page: number;
@@ -64,6 +64,15 @@ function DashboardContent() {
   const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
 
+  // Comprehensive Loading State
+  const [processingStep, setProcessingStep] = useState(0);
+  const steps = [
+    { title: "Reading Material", description: "Extracting text and structure from your document...", icon: <BookOpen className="text-blue-500" /> },
+    { title: "Analyzing Context", description: "Identifying key concepts and learning objectives...", icon: <Sparkles className="text-amber-500" /> },
+    { title: "Crafting Questions", description: "Developing high-quality personalized quiz items...", icon: <Zap className="text-indigo-500" /> },
+    { title: "Finalizing", description: "Organizing your exercise for review...", icon: <CheckCircle className="text-success" /> }
+  ];
+
   useEffect(() => {
     if (materialId) {
       handleGenerateFromMaterial(materialId);
@@ -76,10 +85,10 @@ function DashboardContent() {
   const fetchQuizzes = async () => {
     try {
       setIsLoadingQuizzes(true);
-      const quizzesResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/`);
+      const quizzesResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/`);
       const quizzesData = await quizzesResponse.json();
 
-      const progressResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/progress/`);
+      const progressResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/progress/`);
       const progressData = await progressResponse.json();
 
       const quizzesWithProgress = quizzesData.map((quiz: any) => {
@@ -120,10 +129,11 @@ function DashboardContent() {
 
   const handleGenerateFromMaterial = async (id: string) => {
     setIsGenerating(true);
+    setProcessingStep(0);
     setError(null);
     try {
       const token = localStorage.getItem('sugarclass_token');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${id}/config`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/${id}/config`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
 
@@ -131,7 +141,13 @@ function DashboardContent() {
         throw new Error("Material config not found");
       }
 
+      setProcessingStep(1);
       const material = await res.json();
+
+      // Artificial delay for better UX feel
+      await new Promise(r => setTimeout(r, 800));
+      setProcessingStep(2);
+
       const hasText = material.full_text && material.full_text.trim() !== '';
       const canSelectPages = material.requires_page_selection && material.total_pages > 0;
 
@@ -141,6 +157,7 @@ function DashboardContent() {
 
       setPendingUpload(material);
       setShowPageSelector(true);
+      setProcessingStep(3);
       setIsGenerating(false);
     } catch (error: any) {
       console.error('Quiz configuration failed:', error);
@@ -152,38 +169,39 @@ function DashboardContent() {
 
   const handleGenerateFromSession = async (sid: string) => {
     setIsGenerating(true);
+    setProcessingStep(0);
     setError(null);
     try {
       const token = localStorage.getItem('sugarclass_token');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/session/${sid}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${sid}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
 
-      if (!res.ok) throw new Error("Session not found");
-
-      const data = await res.json();
-      if (!data.materials || data.materials.length === 0) {
-        throw new Error("No materials found in this session.");
+      if (!res.ok) {
+        throw new Error("Mobile session not found");
       }
 
-      // Combine text from all materials in the session
-      const combinedText = data.materials.map((m: any) => m.extracted_text).join('\n\n');
-      const firstMaterial = data.materials[0];
+      setProcessingStep(1);
+      const data = await res.json();
 
-      const virtualMaterial: UploadResponse = {
-        id: `session-${sid}`,
-        filename: `Session Bundle (${data.materials.length} files)`,
-        text_preview: combinedText.substring(0, 500),
-        full_text: combinedText,
-        total_pages: data.materials.reduce((acc: number, m: any) => acc + (m.total_pages || 1), 0),
-        processed_pages: [],
-        requires_page_selection: false, // For bundles, we use combined text directly
-        max_pages_limit: 20,
-        page_previews: []
-      };
+      await new Promise(r => setTimeout(r, 800));
+      setProcessingStep(2);
 
-      setPendingUpload(virtualMaterial);
+      if (data.status !== 'completed' || !data.materials || data.materials.length === 0) {
+        throw new Error("Session is not ready or has no documents.");
+      }
+
+      // Check the first material for page selection
+      const firstMatId = data.materials[0].id;
+      const configRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/${firstMatId}/config`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      const configData = await configRes.json();
+
+      setProcessingStep(3);
+      setPendingUpload(configData);
       setShowPageSelector(true);
+      setIsGenerating(false);
     } catch (error: any) {
       console.error('Session generation failed:', error);
       setError(error.message);
@@ -206,7 +224,7 @@ function DashboardContent() {
 
     try {
       const token = localStorage.getItem('sugarclass_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/${id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/${id}`, {
         method: 'DELETE',
         headers: {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -231,7 +249,7 @@ function DashboardContent() {
 
     try {
       const token = localStorage.getItem('sugarclass_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/${id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -253,8 +271,8 @@ function DashboardContent() {
   const handlePageSelection = async (selectedPages: number[], selectedQuestionType: 'mcq' | 'short' | 'mixed', selectedNumQuestions: number) => {
     if (!pendingUpload) return;
 
-    setShowPageSelector(false);
     setIsGenerating(true);
+    setProcessingStep(0);
     setError(null);
     setQuestionType(selectedQuestionType);
     setNumQuestions(selectedNumQuestions);
@@ -264,7 +282,8 @@ function DashboardContent() {
       let processedData = pendingUpload;
 
       if (pendingUpload.requires_page_selection) {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/process-pages`, {
+        setProcessingStep(1);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/process-pages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -281,7 +300,11 @@ function DashboardContent() {
         }
 
         processedData = await response.json();
+        setProcessingStep(2);
       }
+
+      setCurrentMaterial(processedData);
+      setShowPageSelector(false);
 
       if (!processedData.full_text || processedData.full_text.trim() === '') {
         throw new Error("No text content could be extracted. Please try a different document.");
@@ -296,8 +319,9 @@ function DashboardContent() {
         question_type: selectedQuestionType
       };
 
+      setProcessingStep(3);
       // Use generate-preview to get questions for review
-      const quizResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/generate-preview`, {
+      const quizResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/generate-preview`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -315,7 +339,6 @@ function DashboardContent() {
       // Set up for review instead of directly starting quiz
       setPreviewQuestions(responseData.questions);
       setQuizTitle(processedData.filename.split('.')[0]);
-      setCurrentMaterial(processedData);
       setPendingUpload(null);
       setIsGenerating(false);
       setIsReviewing(true);
@@ -335,7 +358,7 @@ function DashboardContent() {
       const token = localStorage.getItem('sugarclass_token');
       const currentQuestion = previewQuestions[index];
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/regenerate-single`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/regenerate-single`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -371,12 +394,32 @@ function DashboardContent() {
     setPreviewQuestions(updatedQuestions);
   };
 
+  const handlePreviewQuestionChange = (index: number, field: string, value: any) => {
+    if (!previewQuestions) return;
+    const updated = [...previewQuestions];
+    updated[index] = { ...updated[index], [field]: value };
+    setPreviewQuestions(updated);
+  };
+
+  const handlePreviewOptionChange = (questionIndex: number, optionIndex: number, value: string) => {
+    if (!previewQuestions) return;
+    const updated = [...previewQuestions];
+    const question = { ...updated[questionIndex] };
+    if (question.options) {
+      const updatedOptions = [...question.options];
+      updatedOptions[optionIndex] = value;
+      question.options = updatedOptions;
+      updated[questionIndex] = question;
+      setPreviewQuestions(updated);
+    }
+  };
+
   // Helper to save quiz to database
   const saveQuiz = async () => {
     if (!previewQuestions || !currentMaterial || previewQuestions.length === 0) return null;
 
     const token = localStorage.getItem('sugarclass_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/create-from-preview`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/create-from-preview`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -397,9 +440,11 @@ function DashboardContent() {
   // Handler to save and start quiz
   const handleApproveAndStart = async () => {
     setIsGenerating(true);
+    setProcessingStep(0); // Start processing steps for saving
     try {
       const data = await saveQuiz();
       if (data) {
+        setProcessingStep(3); // Mark as finalized
         setQuizData({ ...data, question_type: questionType });
         setPreviewQuestions(null);
         setIsReviewing(false);
@@ -414,8 +459,10 @@ function DashboardContent() {
   // Handler to save for later (go back to list)
   const handleSaveForLater = async () => {
     setIsGenerating(true);
+    setProcessingStep(0); // Start processing steps for saving
     try {
       await saveQuiz();
+      setProcessingStep(3); // Mark as finalized
       setIsReviewing(false);
       setPreviewQuestions(null);
       fetchQuizzes();
@@ -430,9 +477,11 @@ function DashboardContent() {
   // Handler to save and open in full editor
   const handleSaveAndEdit = async () => {
     setIsGenerating(true);
+    setProcessingStep(0); // Start processing steps for saving
     try {
       const data = await saveQuiz();
       if (data) {
+        setProcessingStep(3); // Mark as finalized
         setIsReviewing(false);
         setPreviewQuestions(null);
         router.push(`/quiz/${data.id}/edit`);
@@ -447,7 +496,7 @@ function DashboardContent() {
   const handleQuizFinished = async (score: number, total: number) => {
     const token = localStorage.getItem('sugarclass_token');
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/submit`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -494,6 +543,61 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* Comprehensive Processing Overlay */}
+      {isGenerating && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-10 overflow-hidden">
+          <div className="absolute inset-0 bg-primary/20 backdrop-blur-3xl animate-pulse"></div>
+          <div className="absolute inset-0 bg-gradient-to-tr from-primary/30 via-transparent to-accent/20"></div>
+
+          <div className="relative w-full max-w-xl">
+            <div className="premium-card p-8 md:p-12 bg-white/70 shadow-3xl text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-100 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-primary via-accent to-indigo-500 transition-all duration-1000 ease-out"
+                  style={{ width: `${((processingStep + 1) / steps.length) * 100}%` }}
+                ></div>
+              </div>
+
+              <div className="mb-8 relative inline-block">
+                <div className="absolute -inset-4 bg-primary/10 rounded-full animate-ping opacity-40"></div>
+                <div className="w-20 h-20 md:w-24 md:h-24 rounded-3xl bg-white shadow-xl flex items-center justify-center text-primary group-hover:scale-110 transition-transform duration-500">
+                  <div className="scale-150 transform transition-all duration-1000">
+                    {steps[processingStep]?.icon}
+                  </div>
+                </div>
+              </div>
+
+              <h2 className="text-3xl md:text-4xl font-black text-primary mb-3 tracking-tight animate-fade-in">
+                {steps[processingStep]?.title}
+              </h2>
+              <p className="text-slate-500 font-medium mb-10 max-w-sm mx-auto animate-fade-in delay-100">
+                {steps[processingStep]?.description}
+              </p>
+
+              <div className="flex justify-center gap-3 mb-8">
+                {steps.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1.5 rounded-full transition-all duration-500 ${i === processingStep
+                      ? 'w-10 bg-primary shadow-lg shadow-primary/20'
+                      : i < processingStep ? 'w-4 bg-success' : 'w-4 bg-slate-200'
+                      }`}
+                  ></div>
+                ))}
+              </div>
+
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary/40">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"></div>
+                  Neural Engine Active
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main UI */}
       {!quizData && !isGenerating && !isReviewing ? (
         <div className="animate-fade-in">
           {/* Hero Section */}
@@ -717,23 +821,6 @@ function DashboardContent() {
         </div>
 
 
-      ) : isGenerating ? (
-        <div className="min-h-[60vh] flex flex-col items-center justify-center text-center animate-fade-in">
-          <div className="relative mb-12">
-            <div className="w-32 h-32 rounded-full border-[6px] border-primary-muted border-t-primary animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center text-primary">
-              <Sparkles className="animate-pulse" size={40} />
-            </div>
-          </div>
-          <h2 className="text-4xl font-extrabold mb-4 text-primary tracking-tight">Synthesizing Materials</h2>
-          <p className="text-xl text-slate-400 max-w-md mx-auto font-medium leading-relaxed">
-            {questionType === 'mixed'
-              ? 'Creating a balanced mix of MCQ and short-answer questions...'
-              : questionType === 'short'
-                ? 'Generating thoughtful short-answer questions...'
-                : 'Distilling your content into high-fidelity practice items...'}
-          </p>
-        </div>
       ) : isReviewing && previewQuestions ? (
         <div className="animate-fade-in max-w-4xl mx-auto">
           {/* Review Header */}
@@ -825,24 +912,40 @@ function DashboardContent() {
                   </div>
                 </div>
 
-                <h4 className="text-lg font-bold text-primary mb-4 leading-relaxed">
-                  {question.question}
-                </h4>
+                <textarea
+                  value={question.question}
+                  onChange={(e) => handlePreviewQuestionChange(index, 'question', e.target.value)}
+                  className="w-full text-lg font-bold text-primary mb-4 p-3 rounded-lg border border-transparent focus:border-primary/20 focus:ring-4 focus:ring-primary-muted bg-primary-muted/10 outline-none resize-none"
+                  rows={2}
+                />
 
                 {question.question_type === 'mcq' && question.options && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                     {question.options.map((option: string, optIdx: number) => (
-                      <div
-                        key={optIdx}
-                        className={`px-4 py-3 rounded-xl border text-sm font-medium ${option === question.correct_answer
-                          ? 'bg-success/10 border-success/30 text-success'
-                          : 'bg-slate-50 border-slate-200 text-slate-600'
-                          }`}
-                      >
-                        {option}
+                      <div key={optIdx} className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            value={option}
+                            onChange={(e) => handlePreviewOptionChange(index, optIdx, e.target.value)}
+                            className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none focus:ring-4 ${option === question.correct_answer
+                              ? 'bg-success/10 border-success/30 text-success focus:ring-success/10'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 focus:ring-primary-muted'
+                              }`}
+                          />
+                        </div>
                         {option === question.correct_answer && (
-                          <span className="ml-2 text-xs">(Correct)</span>
+                          <div className="w-8 h-8 rounded-full bg-success/20 text-success flex items-center justify-center" title="Correct Answer">
+                            <Check size={16} />
+                          </div>
                         )}
+                        <button
+                          onClick={() => handlePreviewQuestionChange(index, 'correct_answer', option)}
+                          className={`p-2 rounded-lg transition-all ${option === question.correct_answer ? 'text-success' : 'text-slate-300 hover:text-success'}`}
+                          title="Set as correct answer"
+                        >
+                          <CheckCircle size={18} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -851,14 +954,24 @@ function DashboardContent() {
                 {question.question_type === 'short' && question.expected_answer && (
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4">
                     <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Expected Answer</div>
-                    <p className="text-slate-600 font-medium">{question.expected_answer}</p>
+                    <textarea
+                      value={question.expected_answer || ''}
+                      onChange={(e) => handlePreviewQuestionChange(index, 'expected_answer', e.target.value)}
+                      className="w-full text-slate-600 font-medium bg-white border border-slate-200 rounded-lg p-3 outline-none focus:ring-4 focus:ring-primary-muted resize-none"
+                      rows={3}
+                    />
                   </div>
                 )}
 
                 {question.explanation && (
-                  <div className="text-sm text-slate-500 bg-slate-50 px-4 py-3 rounded-lg border border-slate-100">
-                    <span className="font-bold text-slate-400">Explanation: </span>
-                    {question.explanation}
+                  <div className="text-sm">
+                    <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Explanation (Optional)</div>
+                    <textarea
+                      value={question.explanation || ''}
+                      onChange={(e) => handlePreviewQuestionChange(index, 'explanation', e.target.value)}
+                      className="w-full text-slate-500 bg-slate-50 px-4 py-3 rounded-lg border border-slate-100 outline-none focus:ring-4 focus:ring-primary-muted resize-none"
+                      rows={2}
+                    />
                   </div>
                 )}
 

@@ -83,7 +83,7 @@ export default function ShortAnswerQuiz({
         setIsValidating(true);
         try {
             const token = localStorage.getItem('sugarclass_token');
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/validate-short-answer`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/validate-short-answer`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

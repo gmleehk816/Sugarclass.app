@@ -17,12 +17,14 @@ export default function UploadSection({
     const [isPolling, setIsPolling] = useState(false);
     const [mobileStatus, setMobileStatus] = useState<'idle' | 'syncing' | 'done'>('idle');
     const [uploadedCount, setUploadedCount] = useState(0);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [fileName, setFileName] = useState("");
 
     // Fetch initial session and QR
     useEffect(() => {
         const startSession = async () => {
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/start-session`);
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/start-session`);
                 const data = await response.json();
                 setSessionId(data.session_id);
                 setQrCode(data.qr_code);
@@ -38,7 +40,7 @@ export default function UploadSection({
         if (!sessionId || !isPolling || isUploading) return;
 
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/session/${sessionId}`);
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${sessionId}`);
             const data = await response.json();
 
             if (data.status === 'completed' && data.materials?.length > 0) {
@@ -66,14 +68,21 @@ export default function UploadSection({
 
         try {
             const token = localStorage.getItem('sugarclass_token');
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/`, {
                 method: 'POST',
                 body: formData,
                 headers: token ? { 'Authorization': `Bearer ${token}` } : {}
             });
             const data = await response.json();
             setIsPolling(false);
-            onUploadComplete(data);
+            setFileName(file.name);
+            setShowSuccess(true);
+
+            // Wait for 1.5 seconds to show the success UI
+            setTimeout(() => {
+                onUploadComplete(data);
+                setShowSuccess(false);
+            }, 1500);
         } catch (error) {
             console.error('Upload failed:', error);
         } finally {
@@ -85,7 +94,7 @@ export default function UploadSection({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
             {/* Desktop Upload */}
             <div
-                className={`premium-card p-12 flex flex-col items-center justify-center min-h-[380px] cursor-pointer group
+                className={`premium-card p-12 flex flex-col items-center justify-center min-h-[380px] cursor-pointer group relative overflow-hidden
           ${dragActive ? 'border-accent bg-accent-muted ring-4 ring-accent-muted' : ''}`}
                 onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
                 onDragLeave={() => setDragActive(false)}
@@ -100,24 +109,36 @@ export default function UploadSection({
                     input?.click();
                 }}
             >
-                <div className="p-5 rounded-2xl bg-primary-muted text-primary mb-6 group-hover:bg-primary group-hover:text-white transition-all duration-500">
-                    {isUploading ? <div className="animate-spin"><RotateCcw size={36} /></div> : <Upload size={36} />}
-                </div>
-                <h3 className="text-2xl font-extrabold mb-3 text-primary text-center">Reference Materials</h3>
-                <p className="text-slate-500 text-center mb-8 max-w-xs font-medium">
-                    Drag and drop textbooks, lecture notes, or handwritten papers (PDF, PNG, JPG)
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="px-8 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-lg active:scale-95 text-center">
-                        {isUploading ? 'Processing...' : 'Select Source File'}
+                {showSuccess ? (
+                    <div className="flex flex-col items-center animate-fade-in scale-110">
+                        <div className="w-24 h-24 rounded-full bg-success text-white mb-6 flex items-center justify-center shadow-2xl shadow-success/30">
+                            <CheckCircle2 size={48} />
+                        </div>
+                        <h3 className="text-3xl font-black text-primary mb-2">Well Done!</h3>
+                        <p className="text-slate-500 font-bold max-w-[200px] text-center">{fileName} uploaded successfully</p>
                     </div>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onShowLibrary(); }}
-                        className="px-8 py-3 rounded-xl border-2 border-primary/10 text-primary font-bold hover:bg-white transition-all active:scale-95"
-                    >
-                        Browse Library
-                    </button>
-                </div>
+                ) : (
+                    <>
+                        <div className="p-5 rounded-2xl bg-primary-muted text-primary mb-6 group-hover:bg-primary group-hover:text-white transition-all duration-500">
+                            {isUploading ? <div className="animate-spin"><RotateCcw size={36} /></div> : <Upload size={36} />}
+                        </div>
+                        <h3 className="text-2xl font-extrabold mb-3 text-primary text-center">Reference Materials</h3>
+                        <p className="text-slate-500 text-center mb-8 max-w-xs font-medium">
+                            Drag and drop textbooks, lecture notes, or handwritten papers (PDF, PNG, JPG)
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <div className="px-8 py-3 rounded-xl bg-primary text-white font-bold hover:bg-primary-light transition-all shadow-lg active:scale-95 text-center">
+                                {isUploading ? 'Gathering context...' : 'Select Source File'}
+                            </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onShowLibrary(); }}
+                                className="px-8 py-3 rounded-xl border-2 border-primary/10 text-primary font-bold hover:bg-white transition-all active:scale-95"
+                            >
+                                Browse Library
+                            </button>
+                        </div>
+                    </>
+                )}
                 <input
                     id="file-upload"
                     type="file"

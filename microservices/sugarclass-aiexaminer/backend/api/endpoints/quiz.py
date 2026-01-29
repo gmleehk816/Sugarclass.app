@@ -214,6 +214,7 @@ async def get_quiz(quiz_id: str, db: AsyncSession = Depends(get_db)):
         "title": quiz.title,
         "questions": quiz.questions,
         "material_id": quiz.material_id,
+        "source_text": quiz.source_text,
         "created_at": quiz.created_at
     }
 
@@ -316,24 +317,6 @@ async def get_quizzes(
         .offset(offset)
     )
     return result.scalars().all()
-
-
-@router.get("/{quiz_id}")
-async def get_quiz_by_id(quiz_id: str, db: AsyncSession = Depends(get_db)):
-    """Fetch a specific quiz by ID to replay it"""
-    result = await db.execute(select(Quiz).where(Quiz.id == quiz_id))
-    quiz = result.scalar_one_or_none()
-    
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    
-    return {
-        "id": quiz.id,
-        "title": quiz.title,
-        "questions": quiz.questions,
-        "material_id": quiz.material_id,
-        "created_at": quiz.created_at
-    }
 
 
 @router.delete("/{quiz_id}")

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, use } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { Edit3, Save, X, Trash2, Plus, RotateCcw, CheckCircle } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 
@@ -20,25 +20,32 @@ interface Quiz {
     title: string;
     questions: Question[];
     material_id?: string;
+    source_text: string;
     created_at: string;
 }
 
-export default function QuizEditorPage({ params }: { params: { quiz_id: string } }) {
+export default function QuizEditorPage() {
+    const params = useParams();
     const router = useRouter();
+    const quiz_id = params.quiz_id as string;
+
     const [quiz, setQuiz] = useState<Quiz | null>(null);
     const [editedTitle, setEditedTitle] = useState('');
     const [editedQuestions, setEditedQuestions] = useState<Question[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
+    const [isRegeneratingSingle, setIsRegeneratingSingle] = useState<number | null>(null);
 
     useEffect(() => {
-        fetchQuiz();
-    }, [params.quiz_id]);
+        if (quiz_id) {
+            fetchQuiz();
+        }
+    }, [quiz_id]);
 
     const fetchQuiz = async () => {
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/${params.quiz_id}`);
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/${quiz_id}`);
             if (!response.ok) throw new Error('Quiz not found');
             const data = await response.json();
             setQuiz(data);
@@ -56,7 +63,7 @@ export default function QuizEditorPage({ params }: { params: { quiz_id: string }
     const handleSave = async () => {
         setIsSaving(true);
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/quiz/${params.quiz_id}`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/${quiz_id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -114,6 +121,44 @@ export default function QuizEditorPage({ params }: { params: { quiz_id: string }
             };
         setEditedQuestions([...editedQuestions, newQuestion]);
         setEditingIndex(editedQuestions.length);
+    };
+
+    const handleRegenerateQuestion = async (index: number) => {
+        if (!quiz?.source_text) {
+            alert("No source text available for regeneration.");
+            return;
+        }
+
+        setIsRegeneratingSingle(index);
+        try {
+            const token = localStorage.getItem('sugarclass_token');
+            const currentQuestion = editedQuestions[index];
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/quiz/regenerate-single`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({
+                    text: quiz.source_text,
+                    existing_questions: editedQuestions.map(q => q.question),
+                    question_type: currentQuestion.question_type,
+                    difficulty: 'medium'
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to regenerate question');
+
+            const newQuestion = await response.json();
+            const updatedQuestions = [...editedQuestions];
+            updatedQuestions[index] = newQuestion;
+            setEditedQuestions(updatedQuestions);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to regenerate question.');
+        } finally {
+            setIsRegeneratingSingle(null);
+        }
     };
 
     if (isLoading) {
@@ -181,13 +226,23 @@ export default function QuizEditorPage({ params }: { params: { quiz_id: string }
                                         {question.question_type === 'short' ? 'Short Answer' : 'Multiple Choice'}
                                     </span>
                                 </div>
-                                <button
-                                    onClick={() => handleDeleteQuestion(index)}
-                                    className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
-                                    title="Delete Question"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => handleRegenerateQuestion(index)}
+                                        disabled={isRegeneratingSingle !== null}
+                                        className="p-2 rounded-lg text-slate-400 hover:text-primary hover:bg-primary-muted transition-all disabled:opacity-50"
+                                        title="Regenerate Question"
+                                    >
+                                        <RotateCcw size={18} className={isRegeneratingSingle === index ? 'animate-spin' : ''} />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteQuestion(index)}
+                                        className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                                        title="Delete Question"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Question Text */}
