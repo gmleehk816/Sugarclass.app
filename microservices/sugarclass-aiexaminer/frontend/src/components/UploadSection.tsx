@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, Smartphone, Camera, FileText, CheckCircle2, RotateCcw } from 'lucide-react';
 
@@ -16,7 +16,6 @@ export default function UploadSection({
     const [dragActive, setDragActive] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [qrCode, setQrCode] = useState<string | null>(null);
-    const [isPolling, setIsPolling] = useState(false);
     const [mobileStatus, setMobileStatus] = useState<'idle' | 'syncing' | 'done'>('idle');
     const [uploadedCount, setUploadedCount] = useState(0);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -30,7 +29,6 @@ export default function UploadSection({
                 const data = await response.json();
                 setSessionId(data.session_id);
                 setQrCode(data.qr_code);
-                setIsPolling(true);
             } catch (error) {
                 console.error('Failed to start mobile session:', error);
             }
@@ -38,29 +36,58 @@ export default function UploadSection({
         startSession();
     }, []);
 
-    const pollSession = useCallback(async () => {
-        if (!sessionId || !isPolling || isUploading) return;
-
-        try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${sessionId}`);
-            const data = await response.json();
-
-            if (data.status === 'completed' && data.materials?.length > 0) {
-                setMobileStatus('done');
-                setUploadedCount(data.materials.length);
-            }
-        } catch (error) {
-            console.error('Polling error:', error);
-        }
-    }, [sessionId, isPolling, isUploading, onUploadComplete]);
-
+    // WebSocket connection for real-time sync
     useEffect(() => {
-        let interval: NodeJS.Timeout;
-        if (isPolling) {
-            interval = setInterval(pollSession, 3000);
-        }
-        return () => clearInterval(interval);
-    }, [isPolling, pollSession]);
+        if (!sessionId) return;
+
+        // Build WebSocket URL based on current location
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/examiner/api/ws/session/${sessionId}`;
+
+        console.log('[WS] Connecting to:', wsUrl);
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            console.log('[WS] Connected to session:', sessionId);
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                console.log('[WS] Received:', message);
+
+                if (message.type === 'upload_complete') {
+                    setMobileStatus('syncing');
+                    setUploadedCount(prev => prev + 1);
+
+                    // Brief syncing state, then show done
+                    setTimeout(() => {
+                        setMobileStatus('done');
+                    }, 500);
+                } else if (message.type === 'ping') {
+                    // Respond to keep-alive pings
+                    ws.send(JSON.stringify({ type: 'pong' }));
+                }
+            } catch (e) {
+                console.error('[WS] Failed to parse message:', e);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('[WS] WebSocket error:', error);
+        };
+
+        ws.onclose = (event) => {
+            console.log('[WS] Connection closed:', event.code, event.reason);
+        };
+
+        // Cleanup on unmount or session change
+        return () => {
+            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+                ws.close();
+            }
+        };
+    }, [sessionId]);
 
     const handleUpload = async (file: File) => {
         setIsUploading(true);
@@ -76,7 +103,6 @@ export default function UploadSection({
                 headers: token ? { 'Authorization': `Bearer ${token}` } : {}
             });
             const data = await response.json();
-            setIsPolling(false);
             setFileName(file.name);
             setShowSuccess(true);
 

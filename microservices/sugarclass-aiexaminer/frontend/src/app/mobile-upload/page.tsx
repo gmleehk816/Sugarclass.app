@@ -41,7 +41,7 @@ function MobileUploadContent() {
         formData.append('session_id', sessionId || '');
 
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/`, {
                 method: 'POST',
                 body: formData,
             });

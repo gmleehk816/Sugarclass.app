@@ -112,6 +112,20 @@ async def upload_material(
             token=authorization,
             metadata={"material_id": file_id, "filename": file.filename, "total_pages": total_pages}
         )
+    
+    # Notify WebSocket clients if this is a session upload (mobile sync)
+    if session_id:
+        from backend.api.endpoints.websocket import notify_session
+        import asyncio
+        asyncio.create_task(notify_session(session_id, {
+            "type": "upload_complete",
+            "material": {
+                "id": file_id,
+                "filename": file.filename,
+                "total_pages": total_pages,
+                "requires_page_selection": requires_page_selection
+            }
+        }))
         
     return {
         "id": file_id,

@@ -39,7 +39,7 @@ export default function MaterialsPage() {
 
     const fetchMaterials = async () => {
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/`);
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/`);
             const data = await response.json();
             setMaterials(data);
         } catch (error) {
@@ -53,7 +53,7 @@ export default function MaterialsPage() {
         e?.stopPropagation();
         if (!confirm('Are you sure you want to delete this material?')) return;
         try {
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${id}`, {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/${id}`, {
                 method: 'DELETE',
             });
             setMaterials(materials.filter(m => m.id !== id));
@@ -68,7 +68,7 @@ export default function MaterialsPage() {
 
         try {
             for (const material of group.materials) {
-                await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${material.id}`, {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/${material.id}`, {
                     method: 'DELETE',
                 });
             }
@@ -86,7 +86,7 @@ export default function MaterialsPage() {
         }
 
         try {
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${id}`, {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ filename: newFilename }),
@@ -115,7 +115,7 @@ export default function MaterialsPage() {
                     ? `${baseName}_${sessionMaterials.indexOf(material) + 1}.${extension}`
                     : `${baseName}.${extension}`;
 
-                await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/${material.id}`, {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/${material.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ filename: newFilename }),
@@ -136,7 +136,7 @@ export default function MaterialsPage() {
             formData.append('session_id', sessionId);
 
             try {
-                await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/aiexaminer/api/v1'}/upload/`, {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/`, {
                     method: 'POST',
                     body: formData,
                 });

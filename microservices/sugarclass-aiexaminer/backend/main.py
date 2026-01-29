@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 from backend.database import engine, Base
-from backend.api.endpoints import quiz, upload, progress, collections
+from backend.api.endpoints import quiz, upload, progress, collections, websocket
 import backend.models.quiz
 
 # Load environment variables
@@ -42,6 +42,7 @@ app.include_router(upload.router, prefix="/v1/upload", tags=["upload"])
 app.include_router(quiz.router, prefix="/v1/quiz", tags=["quiz"])
 app.include_router(progress.router, prefix="/v1/progress", tags=["progress"])
 app.include_router(collections.router, prefix="/v1/collections", tags=["collections"])
+app.include_router(websocket.router, prefix="/ws", tags=["websocket"])
 
 @app.get("/health")
 async def health_check():
