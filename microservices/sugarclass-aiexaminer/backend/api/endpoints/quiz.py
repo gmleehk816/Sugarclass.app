@@ -39,6 +39,7 @@ class QuizGenerationRequest(BaseModel):
     difficulty: str = "medium"
     topic: Optional[str] = None
     material_id: Optional[str] = None
+    session_id: Optional[str] = None
     question_type: str = "mixed"  # "mcq", "short", or "mixed"
 
 
@@ -60,6 +61,7 @@ class QuizCreateFromPreviewRequest(BaseModel):
     title: str
     questions: List[dict]
     material_id: Optional[str] = None
+    session_id: Optional[str] = None
     source_text: str
 
 
@@ -166,7 +168,8 @@ async def create_quiz_from_preview(request: QuizCreateFromPreviewRequest, db: As
         title=request.title,
         source_text=request.source_text,
         questions=request.questions,
-        material_id=request.material_id
+        material_id=request.material_id,
+        session_id=request.session_id
     )
     db.add(quiz)
     await db.commit()
@@ -277,7 +280,8 @@ async def generate_quiz(request: QuizGenerationRequest, db: AsyncSession = Depen
         title=request.topic or "Untitled Quiz",
         source_text=request.text,
         questions=questions,
-        material_id=request.material_id
+        material_id=request.material_id,
+        session_id=request.session_id
     )
     db.add(quiz)
     await db.commit()
@@ -356,9 +360,17 @@ async def submit_quiz_score(
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ):
+    # Get session_id from quiz if not provided in request
+    session_id = None
+    result = await db.execute(select(Quiz).where(Quiz.id == request.quiz_id))
+    quiz = result.scalar_one_or_none()
+    if quiz:
+        session_id = quiz.session_id
+
     progress = Progress(
         user_id=request.user_id or "default_user",
         quiz_id=request.quiz_id,
+        session_id=session_id,
         score=request.score,
         total_questions=request.total
     )

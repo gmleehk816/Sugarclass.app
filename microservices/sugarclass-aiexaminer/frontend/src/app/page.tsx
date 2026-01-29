@@ -200,38 +200,9 @@ function DashboardContent() {
   const handleGenerateFromSession = async (sid: string) => {
     setIsGenerating(true);
     setProcessingStep(0);
-    setExtractionProgress(null);
     setError(null);
 
-    // Set up WebSocket for live progress updates
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/examiner/api/ws/session/${sid}`;
-    let ws: WebSocket | null = null;
-
     try {
-      ws = new WebSocket(wsUrl);
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          console.log('[WS] Progress update:', message);
-
-          if (message.type === 'extraction_started') {
-            setExtractionProgress({ current: 0, total: message.total_files, filename: 'Starting...' });
-          } else if (message.type === 'extracting_file') {
-            setExtractionProgress({
-              current: message.index,
-              total: message.total,
-              filename: message.filename
-            });
-          } else if (message.type === 'extraction_complete') {
-            setExtractionProgress(null);
-          }
-        } catch (e) {
-          console.error('[WS] Failed to parse message:', e);
-        }
-      };
-
       const token = localStorage.getItem('sugarclass_token');
 
       // Step 1: Check session status
@@ -248,73 +219,44 @@ function DashboardContent() {
         throw new Error("Session is not ready or has no documents.");
       }
 
-      setProcessingStep(1); // "Reading materials..."
+      setProcessingStep(1);
 
-      // Step 2: Get session config to see what needs extraction
+      // Step 2: Get session config to see the materials
       const configRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${sid}/config`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       const sessionConfig = await configRes.json();
 
-      // Step 3: Extract text from all materials (handles images)
-      // WebSocket will send progress updates during this
-      setProcessingStep(2); // "Extracting text..."
-      const extractRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${sid}/extract-all`, {
-        method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      });
-
-      if (!extractRes.ok) {
-        throw new Error("Failed to extract text from materials.");
-      }
-
-      const extractData = await extractRes.json();
-
-      // Check for extraction issues
-      const warnings = extractData.extraction_results.filter((r: any) => r.status === 'warning');
-      const errors = extractData.extraction_results.filter((r: any) => r.status === 'error');
-
-      if (errors.length > 0) {
-        const errorFiles = errors.map((e: any) => e.filename).join(', ');
-        console.warn(`Some files had extraction errors: ${errorFiles}`);
-      }
-
-      if (!extractData.combined_text || extractData.combined_text.trim() === '') {
-        throw new Error("Could not extract readable text from the uploaded materials. Please try clearer images.");
-      }
-
-      setProcessingStep(3); // "Preparing..."
-
-      // Create a combined material object for the page selector
-      const combinedMaterial: UploadResponse = {
+      // Create a pending upload object for the config screen
+      // Extraction will happen when user clicks "Generate"
+      const sessionMaterial: UploadResponse = {
         id: sid,
-        filename: `Session (${data.materials.length} files)`,
-        text_preview: extractData.combined_text.substring(0, 500) + '...',
-        full_text: extractData.combined_text,
+        filename: `${data.materials.length} file(s) uploaded`,
+        text_preview: sessionConfig.needs_extraction
+          ? `${sessionConfig.extraction_count} image(s) will be processed when you generate the quiz.`
+          : 'Ready to generate quiz.',
+        full_text: '', // Will be filled after extraction
         total_pages: data.materials.length,
         processed_pages: [],
         requires_page_selection: false,
         max_pages_limit: 50,
         page_previews: [],
-        requires_text_extraction: false,
-        is_session: true,
-        extraction_warnings: warnings.length > 0 ? warnings : undefined,
-        extraction_errors: errors.length > 0 ? errors : undefined
+        requires_text_extraction: sessionConfig.needs_extraction,
+        is_session: true
       };
 
-      setPendingUpload(combinedMaterial);
+      // Store session materials info for later
+      (sessionMaterial as any).session_materials = sessionConfig.materials;
+      (sessionMaterial as any).session_id = sid;
+
+      setPendingUpload(sessionMaterial);
       setShowPageSelector(true);
       setIsGenerating(false);
     } catch (error: any) {
-      console.error('Session generation failed:', error);
+      console.error('Session loading failed:', error);
       setError(error.message);
     } finally {
       setIsGenerating(false);
-      setExtractionProgress(null);
-      // Close WebSocket if still open
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.close();
-      }
     }
   };
 
@@ -381,15 +323,68 @@ function DashboardContent() {
 
     setIsGenerating(true);
     setProcessingStep(0);
+    setExtractionProgress(null);
     setError(null);
     setQuestionType(selectedQuestionType);
     setNumQuestions(selectedNumQuestions);
 
+    // Prepare WebSocket for session extraction if needed
+    let ws: WebSocket | null = null;
+    const sid = pendingUpload.is_session ? pendingUpload.id : null;
+
+    if (sid) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/examiner/api/ws/session/${sid}`;
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            if (message.type === 'extraction_started') {
+              setExtractionProgress({ current: 0, total: message.total_files, filename: 'Starting...' });
+            } else if (message.type === 'extracting_file') {
+              setExtractionProgress({
+                current: message.index,
+                total: message.total,
+                filename: message.filename
+              });
+            } else if (message.type === 'extraction_complete') {
+              setExtractionProgress(null);
+            }
+          } catch (e) {
+            console.error('[WS] Progress parse error:', e);
+          }
+        };
+      } catch (e) {
+        console.error('[WS] Connection error:', e);
+      }
+    }
+
     try {
       const token = localStorage.getItem('sugarclass_token');
-      let processedData = pendingUpload;
+      let processedData = { ...pendingUpload };
 
-      if (pendingUpload.requires_page_selection) {
+      if (pendingUpload.is_session) {
+        // Step A: Extract all from session
+        setProcessingStep(1);
+        const extractRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${pendingUpload.id}/extract-all`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+
+        if (!extractRes.ok) {
+          throw new Error("Failed to extract text from your images. Please try again.");
+        }
+
+        const extractData = await extractRes.json();
+
+        if (!extractData.combined_text || extractData.combined_text.trim() === '') {
+          throw new Error("Could not extract readable text from images. Please ensure they are clear.");
+        }
+
+        processedData.full_text = extractData.combined_text;
+        setProcessingStep(2); // Move to analysis
+      } else if (pendingUpload.requires_page_selection) {
         setProcessingStep(1);
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/process-pages`, {
           method: 'POST',
@@ -409,6 +404,19 @@ function DashboardContent() {
 
         processedData = await response.json();
         setProcessingStep(2);
+      } else if (pendingUpload.requires_text_extraction) {
+        // Individual image extraction if needed
+        setProcessingStep(1);
+        const extractRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/${pendingUpload.id}/extract-text`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+
+        if (extractRes.ok) {
+          const extractData = await extractRes.json();
+          processedData.full_text = extractData.full_text;
+        }
+        setProcessingStep(2);
       }
 
       setCurrentMaterial(processedData);
@@ -420,8 +428,9 @@ function DashboardContent() {
 
       const requestBody = {
         text: processedData.full_text,
-        material_id: processedData.id,
-        topic: processedData.filename.split('.')[0],
+        material_id: processedData.is_session ? undefined : processedData.id,
+        session_id: processedData.is_session ? processedData.id : undefined,
+        topic: processedData.filename.replace(/\.[^/.]+$/, "").replace(/\d+ file\(s\) uploaded/, "Session"),
         num_questions: selectedNumQuestions,
         difficulty: 'medium',
         question_type: selectedQuestionType
@@ -446,7 +455,7 @@ function DashboardContent() {
 
       // Set up for review instead of directly starting quiz
       setPreviewQuestions(responseData.questions);
-      setQuizTitle(processedData.filename.split('.')[0]);
+      setQuizTitle(requestBody.topic);
       setPendingUpload(null);
       setIsGenerating(false);
       setIsReviewing(true);
@@ -454,9 +463,14 @@ function DashboardContent() {
       console.error('Processing failed:', error);
       setError(error.message);
       setIsGenerating(false);
+    } finally {
+      setIsGenerating(false);
+      setExtractionProgress(null);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
     }
   };
-
   // Handler to regenerate a single question
   const handleRegenerateQuestion = async (index: number) => {
     if (!previewQuestions || !currentMaterial) return;
@@ -536,7 +550,8 @@ function DashboardContent() {
       body: JSON.stringify({
         title: quizTitle || 'Untitled Quiz',
         questions: previewQuestions,
-        material_id: currentMaterial.id,
+        material_id: currentMaterial.is_session ? undefined : currentMaterial.id,
+        session_id: currentMaterial.is_session ? currentMaterial.id : undefined,
         source_text: currentMaterial.full_text
       })
     });

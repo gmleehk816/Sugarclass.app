@@ -28,6 +28,7 @@ class Quiz(Base):
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     material_id = Column(String, nullable=True)
+    session_id = Column(String, nullable=True)
     title = Column(String)
     source_text = Column(String)
     questions = Column(JSON)
@@ -39,6 +40,7 @@ class Progress(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, index=True)
     quiz_id = Column(String)
+    session_id = Column(String, nullable=True)
     score = Column(Integer)
     total_questions = Column(Integer)
     completed_at = Column(DateTime, default=datetime.utcnow)
