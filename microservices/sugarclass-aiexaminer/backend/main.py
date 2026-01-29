@@ -17,6 +17,11 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def startup():
+    # Run manual migrations for existing tables
+    from backend.migrate import migrate
+    await migrate()
+    
+    # Create any brand new tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
