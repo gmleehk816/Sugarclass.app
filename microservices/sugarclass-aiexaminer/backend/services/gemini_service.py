@@ -233,6 +233,7 @@ class GeminiService:
                 }
 
     async def extract_text_from_image(self, image_path: str) -> str:
+        """Extract text from an image using Vision AI. Handles blurry/problematic images gracefully."""
         import base64
         
         try:
@@ -249,7 +250,23 @@ class GeminiService:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Extract all readable text from this study material. Preserve the structure and context. If it's a diagram, describe it briefly."},
+                            {
+                                "type": "text", 
+                                "text": """You are an OCR specialist. Analyze this image and extract all readable text.
+
+INSTRUCTIONS:
+1. Extract ALL visible text from the image exactly as written
+2. Preserve the structure (headings, paragraphs, bullet points)
+3. If there are diagrams or charts, describe their key information
+4. If handwritten, do your best to transcribe accurately
+
+QUALITY CHECK:
+- If the image is too blurry to read, start your response with "[QUALITY_ISSUE]" followed by a brief description
+- If no meaningful text is found, start with "[NO_TEXT]"
+- If partially readable, extract what you can and note unclear parts with [unclear]
+
+Extract the text now:"""
+                            },
                             {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{encoded_string}"}}
                         ]
                     }
@@ -265,18 +282,31 @@ class GeminiService:
                         "Content-Type": "application/json"
                     },
                     json=payload,
-                    timeout=60.0
+                    timeout=90.0  # Increased timeout for large images
                 )
                 
                 if response.status_code != 200:
                     print(f"Vision API Error: {response.status_code} - {response.text}")
-                    return "Error extracting text from image."
+                    return "[EXTRACTION_ERROR] Could not process this image. Please try uploading a clearer version."
 
                 result = response.json()
-                return result['choices'][0]['message']['content'].strip()
+                extracted_text = result['choices'][0]['message']['content'].strip()
+                
+                # Handle quality issues gracefully
+                if extracted_text.startswith("[QUALITY_ISSUE]"):
+                    return extracted_text  # Pass through the quality issue message
+                elif extracted_text.startswith("[NO_TEXT]"):
+                    return "[NO_TEXT] This image doesn't contain readable text. It may be a diagram, photo, or the text is not visible."
+                
+                # Basic validation: if extraction is too short, it might be problematic
+                if len(extracted_text) < 50:
+                    return f"[LIMITED_TEXT] Only partial text was extracted: {extracted_text}"
+                
+                return extracted_text
+                
         except Exception as e:
             print(f"Error in extract_text_from_image: {e}")
-            return f"Failed to process image: {str(e)}"
+            return f"[EXTRACTION_ERROR] Failed to process image: {str(e)}"
 
 gemini_service = GeminiService()
 

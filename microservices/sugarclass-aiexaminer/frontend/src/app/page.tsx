@@ -28,6 +28,10 @@ interface UploadResponse {
   requires_page_selection: boolean;
   max_pages_limit: number;
   page_previews: PagePreview[];
+  requires_text_extraction?: boolean;
+  is_session?: boolean;
+  extraction_warnings?: Array<{ id: string; filename: string; message: string }>;
+  extraction_errors?: Array<{ id: string; filename: string; message: string }>;
 }
 
 function DashboardContent() {
@@ -192,6 +196,8 @@ function DashboardContent() {
     setError(null);
     try {
       const token = localStorage.getItem('sugarclass_token');
+
+      // Step 1: Check session status
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${sid}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
@@ -200,25 +206,65 @@ function DashboardContent() {
         throw new Error("Mobile session not found");
       }
 
-      setProcessingStep(1);
       const data = await res.json();
-
-      await new Promise(r => setTimeout(r, 800));
-      setProcessingStep(2);
-
       if (data.status !== 'completed' || !data.materials || data.materials.length === 0) {
         throw new Error("Session is not ready or has no documents.");
       }
 
-      // Check the first material for page selection
-      const firstMatId = data.materials[0].id;
-      const configRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/${firstMatId}/config`, {
+      setProcessingStep(1); // "Reading materials..."
+
+      // Step 2: Get session config to see what needs extraction
+      const configRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${sid}/config`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
-      const configData = await configRes.json();
+      const sessionConfig = await configRes.json();
 
-      setProcessingStep(3);
-      setPendingUpload(configData);
+      // Step 3: Extract text from all materials (handles images)
+      setProcessingStep(2); // "Extracting text..."
+      const extractRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/examiner/api/v1'}/upload/session/${sid}/extract-all`, {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+
+      if (!extractRes.ok) {
+        throw new Error("Failed to extract text from materials.");
+      }
+
+      const extractData = await extractRes.json();
+
+      // Check for extraction issues
+      const warnings = extractData.extraction_results.filter((r: any) => r.status === 'warning');
+      const errors = extractData.extraction_results.filter((r: any) => r.status === 'error');
+
+      if (errors.length > 0) {
+        const errorFiles = errors.map((e: any) => e.filename).join(', ');
+        console.warn(`Some files had extraction errors: ${errorFiles}`);
+      }
+
+      if (!extractData.combined_text || extractData.combined_text.trim() === '') {
+        throw new Error("Could not extract readable text from the uploaded materials. Please try clearer images.");
+      }
+
+      setProcessingStep(3); // "Preparing..."
+
+      // Create a combined material object for the page selector
+      const combinedMaterial: UploadResponse = {
+        id: sid,
+        filename: `Session (${data.materials.length} files)`,
+        text_preview: extractData.combined_text.substring(0, 500) + '...',
+        full_text: extractData.combined_text,
+        total_pages: data.materials.length,
+        processed_pages: [],
+        requires_page_selection: false,
+        max_pages_limit: 50,
+        page_previews: [],
+        requires_text_extraction: false,
+        is_session: true,
+        extraction_warnings: warnings.length > 0 ? warnings : undefined,
+        extraction_errors: errors.length > 0 ? errors : undefined
+      };
+
+      setPendingUpload(combinedMaterial);
       setShowPageSelector(true);
       setIsGenerating(false);
     } catch (error: any) {

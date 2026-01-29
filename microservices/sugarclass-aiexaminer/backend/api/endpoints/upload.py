@@ -314,6 +314,132 @@ async def get_upload_session(session_id: str, db: AsyncSession = Depends(get_db)
         return {"session_id": session_id, "status": "completed", "materials": materials}
     return {"session_id": session_id, "status": "active"}
 
+
+@router.post("/session/{session_id}/extract-all")
+async def extract_all_session_texts(session_id: str, db: AsyncSession = Depends(get_db)):
+    """Extract text from ALL materials in a session and return combined text for quiz generation."""
+    result = await db.execute(select(Material).where(Material.session_id == session_id))
+    materials = result.scalars().all()
+    
+    if not materials:
+        raise HTTPException(status_code=404, detail="No materials found in this session")
+    
+    combined_texts = []
+    extraction_results = []
+    has_errors = False
+    
+    for material in materials:
+        is_image = material.file_path.lower().endswith(('.png', '.jpg', '.jpeg'))
+        
+        # Check if this material needs text extraction
+        needs_extraction = is_image and (
+            not material.extracted_text or 
+            material.extracted_text.startswith("[Image")
+        )
+        
+        if needs_extraction:
+            # Extract text from image
+            extracted = await gemini_service.extract_text_from_image(material.file_path)
+            
+            # Update material in database
+            material.extracted_text = extracted
+            await db.commit()
+            
+            # Check for extraction issues
+            if extracted.startswith("[QUALITY_ISSUE]") or extracted.startswith("[EXTRACTION_ERROR]"):
+                extraction_results.append({
+                    "id": material.id,
+                    "filename": material.filename,
+                    "status": "error",
+                    "message": extracted
+                })
+                has_errors = True
+            elif extracted.startswith("[NO_TEXT]") or extracted.startswith("[LIMITED_TEXT]"):
+                extraction_results.append({
+                    "id": material.id,
+                    "filename": material.filename,
+                    "status": "warning",
+                    "message": extracted
+                })
+                # Still add limited text to combined
+                if extracted.startswith("[LIMITED_TEXT]"):
+                    combined_texts.append(f"--- From {material.filename} ---\n{extracted}")
+            else:
+                extraction_results.append({
+                    "id": material.id,
+                    "filename": material.filename,
+                    "status": "success",
+                    "text_length": len(extracted)
+                })
+                combined_texts.append(f"--- From {material.filename} ---\n{extracted}")
+        else:
+            # Already has text
+            if material.extracted_text and not material.extracted_text.startswith("["):
+                combined_texts.append(f"--- From {material.filename} ---\n{material.extracted_text}")
+                extraction_results.append({
+                    "id": material.id,
+                    "filename": material.filename,
+                    "status": "success",
+                    "text_length": len(material.extracted_text)
+                })
+            elif material.extracted_text:
+                extraction_results.append({
+                    "id": material.id,
+                    "filename": material.filename,
+                    "status": "warning",
+                    "message": material.extracted_text
+                })
+    
+    combined_text = "\n\n".join(combined_texts)
+    
+    return {
+        "session_id": session_id,
+        "material_count": len(materials),
+        "extraction_results": extraction_results,
+        "has_errors": has_errors,
+        "combined_text": combined_text,
+        "combined_text_length": len(combined_text)
+    }
+
+
+@router.get("/session/{session_id}/config")
+async def get_session_config(session_id: str, db: AsyncSession = Depends(get_db)):
+    """Get session configuration with all materials and their extraction status."""
+    result = await db.execute(select(Material).where(Material.session_id == session_id))
+    materials = result.scalars().all()
+    
+    if not materials:
+        raise HTTPException(status_code=404, detail="No materials found in this session")
+    
+    materials_info = []
+    total_needs_extraction = 0
+    
+    for material in materials:
+        is_image = material.file_path.lower().endswith(('.png', '.jpg', '.jpeg'))
+        needs_extraction = is_image and (
+            not material.extracted_text or 
+            material.extracted_text.startswith("[Image")
+        )
+        
+        if needs_extraction:
+            total_needs_extraction += 1
+        
+        materials_info.append({
+            "id": material.id,
+            "filename": material.filename,
+            "is_image": is_image,
+            "needs_extraction": needs_extraction,
+            "has_text": bool(material.extracted_text) and not material.extracted_text.startswith("[Image")
+        })
+    
+    return {
+        "session_id": session_id,
+        "material_count": len(materials),
+        "materials": materials_info,
+        "needs_extraction": total_needs_extraction > 0,
+        "extraction_count": total_needs_extraction
+    }
+
 @router.patch("/{material_id}")
 async def update_material(material_id: str, request: MaterialUpdateRequest, db: AsyncSession = Depends(get_db)):
     """Update material details (e.g., rename file)"""
