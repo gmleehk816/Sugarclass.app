@@ -54,6 +54,20 @@ async def migrate():
         except Exception as e:
             print(f"ℹ️ Note on source_text: {e}")
 
+        # 5. Add session_id to quizzes if missing
+        try:
+            await conn.execute(text("ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS session_id VARCHAR"))
+            print("✅ Added session_id to quizzes table")
+        except Exception as e:
+            print(f"ℹ️ Note on quizzes session_id: {e}")
+
+        # 6. Add session_id to progress if missing
+        try:
+            await conn.execute(text("ALTER TABLE progress ADD COLUMN IF NOT EXISTS session_id VARCHAR"))
+            print("✅ Added session_id to progress table")
+        except Exception as e:
+            print(f"ℹ️ Note on progress session_id: {e}")
+
     print("🏁 Migration complete!")
 
 if __name__ == "__main__":

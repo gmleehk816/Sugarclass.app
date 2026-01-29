@@ -78,10 +78,14 @@ function DashboardContent() {
   // Comprehensive Loading State
   const [processingStep, setProcessingStep] = useState(0);
   const steps = [
-    { title: "Reading Material", description: "Loading your uploaded documents...", icon: <BookOpen className="text-blue-500" /> },
+    {
+      title: isReviewing ? "Saving Exercise" : "Reading Material",
+      description: isReviewing ? "Storing your personalized quiz..." : "Loading your uploaded documents...",
+      icon: isReviewing ? <Save className="text-blue-500" /> : <BookOpen className="text-blue-500" />
+    },
     { title: extractionProgress ? `Extracting Text (${extractionProgress.current}/${extractionProgress.total})` : "Analyzing Images", description: extractionProgress ? `Processing: ${extractionProgress.filename}` : "Running OCR on your images...", icon: <Sparkles className="text-amber-500" /> },
     { title: "Crafting Questions", description: "Developing high-quality personalized quiz items...", icon: <Zap className="text-indigo-500" /> },
-    { title: "Finalizing", description: "Organizing your exercise for review...", icon: <CheckCircle className="text-success" /> }
+    { title: "Finalizing", description: isReviewing ? "Redirecting to your new exercise..." : "Organizing your exercise for review...", icon: <CheckCircle className="text-success" /> }
   ];
 
   useEffect(() => {
@@ -321,6 +325,7 @@ function DashboardContent() {
   const handlePageSelection = async (selectedPages: number[], selectedQuestionType: 'mcq' | 'short' | 'mixed', selectedNumQuestions: number) => {
     if (!pendingUpload) return;
 
+    setShowPageSelector(false);
     setIsGenerating(true);
     setProcessingStep(0);
     setExtractionProgress(null);
@@ -420,7 +425,6 @@ function DashboardContent() {
       }
 
       setCurrentMaterial(processedData);
-      setShowPageSelector(false);
 
       if (!processedData.full_text || processedData.full_text.trim() === '') {
         throw new Error("No text content could be extracted. Please try a different document.");
@@ -862,6 +866,11 @@ function DashboardContent() {
                           <span className="px-3 py-1 rounded-full bg-accent-muted text-accent text-[10px] font-black uppercase tracking-widest">
                             {quiz.questions?.length || 0} Questions
                           </span>
+                          {quiz.session_id && (
+                            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-500 text-[10px] font-black uppercase tracking-widest border border-indigo-100">
+                              Mobile Sync
+                            </span>
+                          )}
                           {quiz.attempts && quiz.attempts > 0 && (
                             <span className="px-3 py-1 rounded-full bg-primary-muted text-primary text-[10px] font-black uppercase tracking-widest">
                               {quiz.attempts} Attempts
