@@ -12,17 +12,6 @@ export enum Role {
   SYSTEM = 'system'
 }
 
-export interface FileData {
-  id?: string;
-  name: string;
-  type: string;
-  size: number;
-  base64?: string;
-  content?: string;
-  status?: 'pending' | 'uploading' | 'processed' | 'error';
-  message?: string;
-}
-
 export interface Source {
   file_id: string;
   filename: string;
@@ -37,7 +26,6 @@ export interface Message {
   role: Role;
   text: string;
   timestamp: Date;
-  files?: FileData[];
   sources?: Source[];
   diagram?: string;
   documentImages?: DocumentImage[];
@@ -47,5 +35,4 @@ export interface Message {
 export interface ChatSession {
   id: string;
   messages: Message[];
-  activeFiles: FileData[];
 }

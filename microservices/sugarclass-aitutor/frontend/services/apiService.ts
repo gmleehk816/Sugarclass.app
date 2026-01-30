@@ -1,4 +1,4 @@
-import { FileData, Source, DocumentImage } from '../types';
+import { Source, DocumentImage } from '../types';
 
 // API Base URL - uses environment variable or default to /api for nginx proxy
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api';
@@ -16,14 +16,6 @@ export interface QueryResponse {
     diagram?: string;
 }
 
-export interface UploadResponse {
-    file_id: string;
-    filename: string;
-    file_type: string;
-    chunk_count: number;
-    status: string;
-    message: string;
-}
 
 export interface HealthResponse {
     status: string;
@@ -142,38 +134,81 @@ export const chatWithTutor = async (request: ChatRequest): Promise<ChatResponse>
     return response.json();
 };
 
-// Query documents with a question (RAG fallback)
-export const queryDocuments = async (
-    question: string,
-    imageBase64?: string,
-    topK: number = 5
-): Promise<QueryResponse> => {
-    const response = await fetch(`${API_BASE_URL}/query`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            question,
-            image_base64: imageBase64,
-            top_k: topK,
-        }),
-    });
+// Stream tutor chat response
+export const streamChatWithTutor = async (
+    request: ChatRequest,
+    onChunk: (chunk: string) => void,
+    onError: (error: string) => void,
+    onComplete: (metadata: any) => void
+): Promise<void> => {
+    try {
+        const response = await fetch(`${TUTOR_API_BASE}/chat/stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(request),
+        });
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to query documents');
+        if (!response.ok || !response.body) {
+            throw new Error(`Streaming unavailable (status ${response.status})`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            let boundary = buffer.indexOf('\n\n');
+
+            while (boundary !== -1) {
+                const rawEvent = buffer.slice(0, boundary);
+                buffer = buffer.slice(boundary + 2);
+                const lines = rawEvent.split('\n');
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed.startsWith('data:')) continue;
+
+                    const dataStr = trimmed.slice(5).trim();
+                    if (!dataStr) continue;
+
+                    try {
+                        const payload = JSON.parse(dataStr);
+
+                        if (payload.type === 'chunk') {
+                            onChunk(payload.text || '');
+                        } else if (payload.type === 'done') {
+                            onComplete(payload);
+                            return;
+                        } else if (payload.type === 'error') {
+                            onError(payload.message || 'Streaming error occurred.');
+                            return;
+                        }
+                    } catch (e) {
+                        console.error("Error parsing stream event:", e, dataStr);
+                    }
+                }
+
+                boundary = buffer.indexOf('\n\n');
+            }
+        }
+    } catch (error) {
+        onError(error instanceof Error ? error.message : 'Failed to stream tutor chat');
     }
-
-    return response.json();
 };
+
 
 // Stream query response (RAG fallback)
 export const streamQuery = async (
     question: string,
     onChunk: (chunk: string) => void,
     onError: (error: string) => void,
-    onComplete: () => void
+    onComplete: (metadata: any) => void
 ): Promise<void> => {
     try {
         const response = await fetch(`${API_BASE_URL}/query/stream`, {
@@ -216,7 +251,7 @@ export const streamQuery = async (
                     if (payload.type === 'chunk') {
                         onChunk(payload.text || '');
                     } else if (payload.type === 'done') {
-                        onComplete();
+                        onComplete(payload);
                         return;
                     } else if (payload.type === 'error') {
                         onError(payload.message || 'Streaming error occurred.');
@@ -232,45 +267,6 @@ export const streamQuery = async (
     }
 };
 
-// Upload a file to the backend
-export const uploadFile = async (file: File): Promise<UploadResponse> => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch(`${API_BASE_URL}/upload`, {
-        method: 'POST',
-        body: formData,
-    });
-
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to upload file');
-    }
-
-    return response.json();
-};
-
-// Clear all documents from the backend
-export const clearAllDocuments = async (): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/documents`, {
-        method: 'DELETE',
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to clear documents');
-    }
-};
-
-// Delete a specific document by file ID
-export const deleteDocument = async (fileId: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/documents/${fileId}`, {
-        method: 'DELETE',
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to delete document');
-    }
-};
 
 // Get system statistics
 export const getStats = async () => {

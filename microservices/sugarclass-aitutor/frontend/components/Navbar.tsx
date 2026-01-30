@@ -20,18 +20,25 @@ const Navbar: React.FC<NavbarProps> = ({ onNewChat, onToggleSidebar, systemStatu
 
   const getTitle = () => {
     const isMobile = window.innerWidth < 768;
-    const shortBrand = 'AI Tutor';
-    
-    if (isMobile) {
-      if (selectedSubject) {
-        return `${shortBrand} | ${selectedSubject}`;
-      }
-      return shortBrand;
+    const brand = 'AITutor';
+
+    let subject = selectedSubject;
+    if (subject) {
+      // Shorten common long subject names
+      subject = subject.replace(' Revision Guide 3rd Edition', '');
+      subject = subject.replace(' Revision Guide', '');
+      subject = subject.replace(' Revision', '');
     }
-    
-    const brand = 'Sugarclass AI Tutor';
-    if (selectedSubject) {
-      return `${brand} | ${selectedSubject}`;
+
+    if (isMobile) {
+      if (subject) {
+        return `${brand} | ${subject}`;
+      }
+      return brand;
+    }
+
+    if (subject) {
+      return `${brand} | ${subject}`;
     }
     return brand;
   };

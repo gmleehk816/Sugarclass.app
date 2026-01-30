@@ -1,19 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Navbar from './components/Navbar';
-import FileUpload from './components/FileUpload';
 import SourceCard from './components/SourceCard';
 import DiagramDisplay from './components/DiagramDisplay';
 import ScrollToBottom from './components/ScrollToBottom';
 import RecentChats from './components/RecentChats';
-import { Message, Role, FileData, Source } from './types';
+import { Message, Role, Source } from './types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
-  queryDocuments,
-  clearAllDocuments,
-  deleteDocument,
+  streamQuery,
   getHealth,
   getSubjects,
   startTutorSession,
-  chatWithTutor,
+  streamChatWithTutor,
   endTutorSession,
   Subject
 } from './services/apiService';
@@ -32,13 +31,12 @@ const App: React.FC = () => {
     {
       id: '1',
       role: Role.MODEL,
-      text: "Hello! I'm your Sugarclass AI Tutor. Select a subject to start learning, or ask me anything about your materials.",
+      text: "Hello! I'm your AITutor. Select a subject to start learning, or ask me anything about your materials.",
       timestamp: new Date()
     }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [activeFiles, setActiveFiles] = useState<FileData[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [systemStatus, setSystemStatus] = useState<'healthy' | 'error' | 'checking'>('checking');
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -90,9 +88,6 @@ const App: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    console.log('Active Files Updated:', activeFiles);
-  }, [activeFiles]);
 
   // Load chat history from localStorage
   useEffect(() => {
@@ -228,7 +223,7 @@ const App: React.FC = () => {
   };
 
   const suggestedPrompts = [
-    selectedSubject ? `Explain the basics of ${selectedSubject}` : "Summarize my files",
+    selectedSubject ? `Explain the basics of ${selectedSubject}` : "Show me the subjects",
     "What are the key concepts?",
     "Give me some practice questions",
     "Explain with examples",
@@ -322,64 +317,70 @@ const App: React.FC = () => {
       id: Date.now().toString(),
       role: Role.USER,
       text: textToSend,
-      timestamp: new Date(),
-      files: activeFiles.length > 0 ? [...activeFiles] : undefined
+      timestamp: new Date()
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
 
+    const botMessageId = (Date.now() + 1).toString();
+    let fullText = '';
+
     try {
-      let botMessage: Message | null = null;
+      // Create initial empty bot message
+      const initialBotMessage: Message = {
+        id: botMessageId,
+        role: Role.MODEL,
+        text: '',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, initialBotMessage]);
 
-      // Try tutor API first if session exists
+      const onChunk = (chunk: string) => {
+        fullText += chunk;
+        setMessages(prev => prev.map(msg =>
+          msg.id === botMessageId ? { ...msg, text: fullText } : msg
+        ));
+      };
+
       if (sessionId) {
-        try {
-          const tutorResponse = await chatWithTutor({
-            session_id: sessionId,
-            message: textToSend
-          });
-
-          botMessage = {
-            id: (Date.now() + 1).toString(),
-            role: Role.MODEL,
-            text: tutorResponse.response,
-            timestamp: new Date(),
-            sources: tutorResponse.metadata?.sources
-          };
-
-          // Add quiz indicator if active
-          if (tutorResponse.quiz_active) {
-            botMessage.text += '\n\n📝 Quiz mode active - answer the question above';
+        await streamChatWithTutor(
+          { session_id: sessionId, message: textToSend },
+          onChunk,
+          (error) => { throw new Error(error); },
+          (metadata) => {
+            // Update final message with metadata
+            setMessages(prev => prev.map(msg =>
+              msg.id === botMessageId ? {
+                ...msg,
+                sources: metadata.sources,
+                text: metadata.quiz_active ? fullText + '\n\n📝 Quiz mode active - answer the question above' : fullText
+              } : msg
+            ));
+            saveChatToHistory(textToSend, fullText);
           }
-        } catch (tutorError) {
-          console.warn('Tutor API failed, falling back to RAG:', tutorError);
-          // Continue to RAG fallback
-        }
-      }
-
-      // If tutor API failed or no session, use RAG
-      if (!botMessage) {
-        const result = await queryDocuments(textToSend);
-
-        botMessage = {
-          id: (Date.now() + 1).toString(),
-          role: Role.MODEL,
-          text: result.answer,
-          timestamp: new Date(),
-          sources: result.sources,
-          diagram: result.diagram,
-          documentImages: result.document_images,
-          ocrText: result.ocr_text
-        };
-      }
-
-      if (botMessage) {
-        setMessages(prev => [...prev, botMessage!]);
-        saveChatToHistory(textToSend, botMessage.text);
+        );
+      } else {
+        // Fallback to RAG streaming
+        await streamQuery(
+          textToSend,
+          onChunk,
+          (error) => { throw new Error(error); },
+          (metadata) => {
+            // Update final message with metadata (sources)
+            setMessages(prev => prev.map(msg =>
+              msg.id === botMessageId ? {
+                ...msg,
+                sources: metadata.sources
+              } : msg
+            ));
+            saveChatToHistory(textToSend, fullText);
+          }
+        );
       }
     } catch (error: any) {
+      console.error('Error in handleSend:', error);
       let errorMsg = error.message || 'Failed to get response from backend';
 
       // Enhanced error messages
@@ -391,37 +392,27 @@ const App: React.FC = () => {
         errorMsg = '⏱️ Query timed out. This may happen on first query while loading models. Please try again.';
       }
 
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: Role.MODEL,
-        text: errorMsg,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.id === botMessageId && lastMsg.text === '') {
+          // Replace empty bot message with error
+          return prev.map(msg => msg.id === botMessageId ? { ...msg, text: errorMsg } : msg);
+        } else {
+          // Add new error message
+          return [...prev, {
+            id: (Date.now() + 2).toString(),
+            role: Role.MODEL,
+            text: errorMsg,
+            timestamp: new Date()
+          }];
+        }
+      });
     } finally {
       setIsTyping(false);
     }
   };
 
-  const removeFile = async (index: number) => {
-    const fileToRemove = activeFiles[index];
-    if (fileToRemove.id) {
-      try {
-        await deleteDocument(fileToRemove.id);
-      } catch (error) {
-        console.error("Failed to delete document from backend:", error);
-      }
-    }
-    setActiveFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
   const clearChat = async () => {
-    try {
-      await clearAllDocuments();
-    } catch (error) {
-      console.error("Failed to clear documents from backend:", error);
-    }
-
     // Clear session
     if (sessionId) {
       try {
@@ -434,7 +425,6 @@ const App: React.FC = () => {
 
     // Reset to initial state
     updateWelcomeMessage(selectedSubject);
-    setActiveFiles([]);
   };
 
   return (
@@ -511,29 +501,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Active Files */}
-        <div className="border-t border-black/10 pt-4">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 mb-2">Active Context</p>
-          {activeFiles.length === 0 ? (
-            <p className="text-sm text-gray-400 italic px-1">No files uploaded yet.</p>
-          ) : (
-            <div className="space-y-2 max-h-40 overflow-y-auto">
-              {activeFiles.map((f, i) => (
-                <div key={i} className="flex items-center justify-between p-2 bg-[#F0F0E9] rounded-lg border border-black/5">
-                  <span className="text-xs truncate flex-1 mr-2">{f.name}</span>
-                  <button
-                    onClick={() => removeFile(i)}
-                    className="text-gray-400 hover:text-red-500 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* Recent Chats */}
         <RecentChats
@@ -568,20 +535,20 @@ const App: React.FC = () => {
                 : 'bg-white text-[#332F33] rounded-tl-none border border-black/5'
               }
             `}>
-              {msg.files && msg.files.length > 0 && (
-                <div className="mb-4 flex flex-wrap gap-2">
-                  {msg.files.map((f, i) => (
-                    <div key={i} className={`text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-2 border ${msg.role === Role.USER ? 'bg-white/10 border-white/20' : 'bg-black/5 border-black/10'}`}>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      {f.name}
+              <div className="leading-relaxed text-[15px] md:text-[17px] tracking-wide font-medium markdown-content">
+                {msg.text ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.text}
+                  </ReactMarkdown>
+                ) : (
+                  msg.role === Role.MODEL && (
+                    <div className="flex gap-1.5 py-2 items-center">
+                      <div className="w-2.5 h-2.5 bg-[#F43E01]/30 rounded-full animate-bounce"></div>
+                      <div className="w-2.5 h-2.5 bg-[#F43E01]/50 rounded-full animate-bounce [animation-delay:-.3s]"></div>
+                      <div className="w-2.5 h-2.5 bg-[#F43E01] rounded-full animate-bounce [animation-delay:-.5s]"></div>
                     </div>
-                  ))}
-                </div>
-              )}
-              <div className="whitespace-pre-wrap leading-relaxed text-[15px] md:text-[17px] tracking-wide font-medium">
-                {msg.text}
+                  )
+                )}
               </div>
 
               {/* Diagram and Images Display */}
@@ -630,17 +597,6 @@ const App: React.FC = () => {
           </div>
         ))}
 
-        {isTyping && (
-          <div className="flex justify-start">
-            <div className="bg-white p-5 rounded-[2rem] rounded-tl-none border border-black/5 shadow-sm">
-              <div className="flex gap-1.5">
-                <div className="w-2.5 h-2.5 bg-[#F43E01]/30 rounded-full animate-bounce"></div>
-                <div className="w-2.5 h-2.5 bg-[#F43E01]/50 rounded-full animate-bounce [animation-delay:-.3s]"></div>
-                <div className="w-2.5 h-2.5 bg-[#F43E01] rounded-full animate-bounce [animation-delay:-.5s]"></div>
-              </div>
-            </div>
-          </div>
-        )}
         <div ref={messagesEndRef} />
       </main>
 
@@ -663,26 +619,9 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {/* Active File Pills (Above Input) */}
-          {activeFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2 animate-in slide-in-from-bottom-2">
-              {activeFiles.map((file, idx) => (
-                <div key={idx} className="bg-[#F43E01] text-white px-3 py-1 rounded-full text-[11px] font-bold flex items-center gap-2 shadow-md">
-                  <span className="truncate max-w-[150px]">{file.name}</span>
-                  <button onClick={() => removeFile(idx)} className="hover:scale-125 transition-transform">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Enhanced Input Box */}
           <div className="bg-white rounded-[2.5rem] shadow-2xl border border-black/5 p-3 flex items-end gap-3 transition-all focus-within:ring-4 focus-within:ring-[#F43E01]/10">
-            <FileUpload
-              onFilesSelected={setActiveFiles}
-              selectedFiles={activeFiles}
-            />
 
             <textarea
               value={input}

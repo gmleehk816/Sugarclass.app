@@ -870,14 +870,13 @@ TEACHING TECHNIQUES TO USE:
 - Relevance connections: "This matters because...", "You'll use this when...", "This is similar to..."
 
 CRITICAL FORMATTING RULES (MUST FOLLOW):
-❌ NEVER use markdown headers (no #, ##, ###)
-❌ NEVER use numbered section headers like "### 1. Title" or "## Section Name"  
-❌ NEVER start lines with asterisks for bullet points (* item)
-❌ NEVER use excessive bold (**text**) - maximum 2-3 per response
-✅ Use clean paragraph breaks to organize content
-✅ Use simple numbered lists only when listing 3+ items (1. First, 2. Second)
-✅ Use simple dashes for short lists (- item)
-✅ Keep formatting minimal and professional
+✅ Always use Markdown headers for better structure (e.g., ### Topic Name)
+✅ Use bold text (**text**) to highlight key terms and concepts
+✅ Use bullet points (* item) or numbered lists (1. item) for clarity
+✅ Use code blocks (```) for any technical terms, formulas, or code snippets
+✅ Use clean horizontal rules (---) between major sections
+✅ Use Blockquotes (>) for important quotes or definitions
+✅ Keep formatting professional, clean, and easy to read
 
 STRUCTURE YOUR RESPONSES - PROFESSIONAL & CLEAN:
 1. Start with a warm, engaging opening sentence
@@ -948,13 +947,10 @@ TEACHING TECHNIQUES TO USE:
 - Clear, everyday language - avoid jargon unless necessary, then explain it
 
 CRITICAL FORMATTING RULES (MUST FOLLOW):
-❌ NEVER use markdown headers (no #, ##, ###)
-❌ NEVER use numbered section headers like "### 1. Title"
-❌ NEVER use asterisks for bullet points (* item)
-❌ NEVER use excessive bold (**text**) - maximum 1-2 per response
-✅ Use clean paragraph breaks to organize content
-✅ Use simple dashes for short lists if needed (- item)
-✅ Keep formatting minimal and conversational
+✅ Use Markdown headers if they help organize the answer (### Header)
+✅ Use bold text (**text**) for emphasis on important words
+✅ Use bullet points (* item) for lists
+✅ Use simple, clean formatting to make the answer easy to scan
 
 LENGTH MANAGEMENT:
 - Provide complete, clear explanations
@@ -1009,12 +1005,9 @@ TEACHING TECHNIQUES TO USE:
 - Make the student feel supported and understood
 
 CRITICAL FORMATTING RULES (MUST FOLLOW):
-❌ NEVER use markdown headers (no #, ##, ###)
-❌ NEVER use numbered section headers like "### 1. Title"
-❌ NEVER use asterisks for bullet points (* item)
-❌ Keep bold to minimum - only if truly needed
-✅ Use clean, simple paragraph text
-✅ Keep formatting minimal and natural
+✅ Use bold text (**text**) for the most important parts of the answer
+✅ Use bullet points (* item) if you need to list things
+✅ Keep it simple but use clear formatting to highlight the answer
 
 LENGTH: Keep responses direct but complete. Simple doesn't mean cold - keep it warm and human.
 
@@ -1086,7 +1079,7 @@ Consider:
 Respond in this format:
 VERDICT: [correct/partial/incorrect]
 SCORE: [0.0 to 1.0]
-FEEDBACK: [Encouraging feedback explaining what was right/wrong and the correct concept]"""
+FEEDBACK: [Your feedback. Use markdown signs like **bold** and *italics* for clarity.]"""
 
         try:
             if hasattr(self.llm, 'ainvoke'):
@@ -1329,6 +1322,70 @@ FEEDBACK: [Encouraging feedback explaining what was right/wrong and the correct 
                 # State is a TutorState object
                 state.response = "I encountered an error. Please try again."
                 return state
+
+    async def stream(
+        self,
+        state: TutorState | Dict[str, Any],
+        config: Dict[str, Any] = None
+    ):
+        """
+        Run workflow with given state and yield tokens/events for streaming.
+        """
+        if self.graph is None:
+            logger.error("Workflow graph not initialized")
+            yield {"type": "error", "message": "Workflow not available"}
+            return
+
+        config = config or {}
+        
+        # Prepare input dict similar to run method
+        input_subject = None
+        if isinstance(state, dict):
+            content_obj = state.get("content", {})
+            if isinstance(content_obj, dict):
+                input_subject = content_obj.get("subject")
+            elif hasattr(content_obj, 'subject'):
+                input_subject = getattr(content_obj, 'subject', None)
+        elif hasattr(state, 'content'):
+            if isinstance(state.content, dict):
+                input_subject = state.content.get("subject")
+            elif hasattr(state.content, 'subject'):
+                input_subject = getattr(state.content, 'subject', None)
+        
+        if isinstance(state, dict):
+            if "configurable" not in config and "session_id" in state:
+                config["configurable"] = {"thread_id": state["session_id"]}
+            input_dict = state
+        else:
+            if "configurable" not in config:
+                config["configurable"] = {"thread_id": state.session_id}
+            input_dict = state.model_dump()
+
+        try:
+            # Run the graph in streaming mode
+            async for event in self.graph.astream_events(input_dict, config, version="v2"):
+                kind = event["event"]
+                
+                # Check for model streaming events (tokens)
+                if kind == "on_chat_model_stream":
+                    # Filter tokens to only include from teacher or grader nodes
+                    # To avoid unwanted text like intent classification (e.g., 'learn')
+                    node_name = event.get("metadata", {}).get("langgraph_node", "")
+                    if node_name in ["teacher", "grader"]:
+                        content = event["data"]["chunk"].content
+                        if content:
+                            yield {"type": "token", "text": content}
+                
+                # Check for metadata/state updates if needed
+                elif kind == "on_chain_end":
+                    # If this is the main graph ending, we can yield final state info
+                    if event["name"] == "LangGraph":
+                        result = event["data"]["output"]
+                        yield {"type": "done", "result": result}
+                
+        except Exception as e:
+            logger.error(f"Workflow streaming error: {e}")
+            yield {"type": "error", "message": str(e)}
 
     async def chat(
         self,

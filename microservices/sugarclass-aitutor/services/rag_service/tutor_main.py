@@ -439,6 +439,73 @@ async def query_rag_system(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/query/stream")
+async def query_rag_stream(
+    question: str = Body(..., embed=True),
+    context: Optional[Dict[str, Any]] = None
+):
+    """
+    Sends a natural language query to the RAG system with streaming response.
+    """
+    if not _tutor_workflow:
+        raise HTTPException(status_code=503, detail="Tutor workflow not initialized.")
+    
+    from fastapi.responses import StreamingResponse
+    import json
+
+    async def event_generator():
+        try:
+            logger.info(f"Received streaming query: {question}")
+            
+            # Use the rag_retriever tool directly
+            from .agents.tools import rag_retriever_tool
+            
+            # Get context from request
+            syllabus = context.get("syllabus") if context else None
+            subject = context.get("subject") if context else None
+            
+            # Retrieve documents
+            sources = await rag_retriever_tool.ainvoke({
+                "query": question,
+                "syllabus": syllabus,
+                "subject": subject,
+                "limit": 5
+            })
+            
+            # Generate answer using LLM in streaming mode
+            if _llm:
+                prompt = f"""You are a helpful AI Tutor. Use the following pieces of retrieved context to answer the question. 
+                If you don't know the answer, just say that you don't know, don't try to make up an answer.
+                
+                Context: {sources}
+                
+                Question: {question}
+                
+                Answer:"""
+                
+                if hasattr(_llm, 'astream'):
+                    async for chunk in _llm.astream(prompt):
+                        content = chunk.content if hasattr(chunk, 'content') else str(chunk)
+                        if content:
+                            yield f"data: {json.dumps({'type': 'chunk', 'text': content})}\n\n"
+                    
+                    yield f"data: {json.dumps({'type': 'done', 'sources': sources})}\n\n"
+                else:
+                    # Fallback if LLM doesn't support streaming
+                    response = await _llm.ainvoke(prompt)
+                    answer = response.content
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': answer})}\n\n"
+                    yield f"data: {json.dumps({'type': 'done', 'sources': sources})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'LLM not initialized'})}\n\n"
+
+        except Exception as e:
+            logger.error(f"Error in streaming query: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.post("/api/query")
 async def proxy_rag_query(
     request: Request,

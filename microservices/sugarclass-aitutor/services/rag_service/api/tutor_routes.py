@@ -341,6 +341,89 @@ async def chat(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/chat/stream")
+async def chat_stream(
+    request: ChatRequest,
+    tutor_service = Depends(get_tutor_service),
+    db_manager = Depends(get_db_manager)
+):
+    """
+    Send a message and get a streaming response from the AI tutor.
+    """
+    from fastapi.responses import StreamingResponse
+
+    async def event_generator():
+        try:
+            # Get session
+            session = await db_manager.get_session(request.session_id)
+            if not session:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Session not found'})}\n\n"
+                return
+
+            # Increment message count
+            await db_manager.increment_session_messages(request.session_id)
+
+            # Get student info
+            student = await db_manager.get_student_by_id(session["student_id"])
+
+            from ..agents.state import ContentContext, StudentContext
+            
+            state_dict = {
+                "session_id": request.session_id,
+                "user_input": request.message,
+                "student": StudentContext(
+                    student_id=session["student_id"],
+                    user_id=student["user_id"] if student else "unknown",
+                    name=student.get("name") if student else None,
+                    grade_level=student.get("grade_level") if student else None,
+                    curriculum=student.get("curriculum") if student else None
+                ).model_dump(),
+                "content": ContentContext(
+                    subject=session.get("subject"),
+                    subtopic=session.get("current_topic")
+                ).model_dump()
+            }
+
+            # Run workflow in streaming mode
+            async for event in tutor_service.stream(state_dict, config={}):
+                if event["type"] == "token":
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"
+                elif event["type"] == "done":
+                    # Extract result from done event
+                    result_state = event["result"]
+                    
+                    # Update session with detected subject and topic
+                    try:
+                        if hasattr(result_state, 'content') or isinstance(result_state, dict):
+                            content = getattr(result_state, 'content', result_state.get('content'))
+                            subject = getattr(content, 'subject', content.get('subject') if isinstance(content, dict) else None)
+                            subtopic = getattr(content, 'subtopic', content.get('subtopic') if isinstance(content, dict) else None)
+                            
+                            if subject or subtopic:
+                                session_updates = {}
+                                if subject: session_updates["subject"] = subject
+                                if subtopic: session_updates["current_topic"] = subtopic
+                                await db_manager.update_session(request.session_id, session_updates)
+                    except Exception as e:
+                        logger.error(f"Error updating session in stream: {e}")
+
+                    # Yield final completion event
+                    yield f"data: {json.dumps({
+                        'type': 'done', 
+                        'response_type': getattr(result_state, 'response_type', 'text') if hasattr(result_state, 'response_type') else 'text',
+                        'sources': getattr(result_state.content, 'rag_results', []) if hasattr(result_state, 'content') else [],
+                        'quiz_active': getattr(result_state.quiz, 'is_active', False) if hasattr(result_state, 'quiz') else False
+                    })}\n\n"
+                elif event["type"] == "error":
+                    yield f"data: {json.dumps({'type': 'error', 'message': event['message']})}\n\n"
+
+        except Exception as e:
+            logger.error(f"Streaming error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 # ==================== Student Endpoints ====================
 
 @router.get("/student/{user_id}", response_model=StudentProfileResponse)

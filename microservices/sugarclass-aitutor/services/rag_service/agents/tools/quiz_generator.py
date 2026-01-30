@@ -205,27 +205,27 @@ Requirements:
 
         if question_type == "multiple_choice":
             prompt += """Format your response as:
-QUESTION: [Your question]
+QUESTION: ### [Your question]
 A) [Option A]
 B) [Option B]
 C) [Option C]
 D) [Option D]
 CORRECT: [Letter of correct answer]
-EXPLANATION: [Brief explanation of why this is correct]"""
+EXPLANATION: **[Brief explanation of why this is correct]**"""
         elif question_type == "true_false":
             prompt += """Format your response as:
-QUESTION: [Your statement]
-CORRECT: [True or False]
+QUESTION: ### [Your statement]
+CORRECT: **[True or False]**
 EXPLANATION: [Brief explanation]"""
         elif question_type == "fill_blank":
             prompt += """Format your response as:
-QUESTION: [Sentence with _____ for the blank]
-CORRECT: [Word or phrase that fills the blank]
+QUESTION: ### [Sentence with _____ for the blank]
+CORRECT: **[Word or phrase that fills the blank]**
 EXPLANATION: [Brief explanation]"""
         else:  # open_ended
             prompt += """Format your response as:
-QUESTION: [Your question]
-CORRECT: [Expected answer or key points]
+QUESTION: ### [Your question]
+CORRECT: **[Expected answer or key points]**
 EXPLANATION: [What a good answer should include]"""
 
         try:
@@ -429,7 +429,7 @@ Evaluate:
 Respond in format:
 VERDICT: [correct/partial/incorrect]
 SCORE: [0.0-1.0]
-FEEDBACK: [Your feedback]"""
+FEEDBACK: [Your feedback. Use markdown signs like **bold** and *italics* for clarity.]"""
 
             try:
                 response = await self.llm.ainvoke(check_prompt)
