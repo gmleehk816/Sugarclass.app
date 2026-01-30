@@ -348,27 +348,29 @@ export default function CollectionsPage() {
                                 </div>
 
                                 {editingFolderId === collection.id ? (
-                                    <div className="flex items-center gap-2 mb-3" onClick={(e) => e.stopPropagation()}>
+                                    <div className="mb-3" onClick={(e) => e.stopPropagation()}>
                                         <input
                                             type="text"
                                             value={editedFolderName}
                                             onChange={(e) => setEditedFolderName(e.target.value)}
                                             onKeyDown={(e) => e.key === 'Enter' && renameFolder(collection.id)}
-                                            className="flex-1 text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted"
+                                            className="w-full text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted mb-2"
                                             autoFocus
                                         />
-                                        <button
-                                            onClick={() => renameFolder(collection.id)}
-                                            className="p-2 rounded-lg bg-success text-white hover:bg-success/90"
-                                        >
-                                            <CheckCircle size={16} />
-                                        </button>
-                                        <button
-                                            onClick={() => setEditingFolderId(null)}
-                                            className="p-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300"
-                                        >
-                                            <X size={16} />
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => renameFolder(collection.id)}
+                                                className="flex-1 py-2 rounded-lg bg-success text-white text-sm font-bold hover:bg-success/90 flex items-center justify-center gap-1"
+                                            >
+                                                <CheckCircle size={16} /> Save
+                                            </button>
+                                            <button
+                                                onClick={() => setEditingFolderId(null)}
+                                                className="flex-1 py-2 rounded-lg bg-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-300 flex items-center justify-center gap-1"
+                                            >
+                                                <X size={16} /> Cancel
+                                            </button>
+                                        </div>
                                     </div>
                                 ) : (
                                     <h3 className="text-xl font-black text-primary mb-3 line-clamp-1 group-hover:text-accent transition-colors">

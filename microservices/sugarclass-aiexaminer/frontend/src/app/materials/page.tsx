@@ -312,50 +312,54 @@ export default function MaterialsPage() {
                                     </div>
 
                                     {editingSessionId === group.sessionId ? (
-                                        <div className="flex items-center gap-2 mb-4">
+                                        <div className="mb-4">
                                             <input
                                                 type="text"
                                                 value={newSessionName}
                                                 onChange={(e) => setNewSessionName(e.target.value)}
                                                 onKeyDown={(e) => e.key === 'Enter' && group.sessionId && renameSession(group.sessionId, newSessionName)}
-                                                className="flex-1 text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted"
+                                                className="w-full text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted mb-2"
                                                 autoFocus
                                             />
-                                            <button
-                                                onClick={() => group.sessionId && renameSession(group.sessionId, newSessionName)}
-                                                className="p-2 rounded-lg bg-success text-white hover:bg-success/90 transition-all"
-                                            >
-                                                <CheckCircle size={18} />
-                                            </button>
-                                            <button
-                                                onClick={() => setEditingSessionId(null)}
-                                                className="p-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all"
-                                            >
-                                                <X size={18} />
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => group.sessionId && renameSession(group.sessionId, newSessionName)}
+                                                    className="flex-1 py-2 rounded-lg bg-success text-white text-sm font-bold hover:bg-success/90 transition-all flex items-center justify-center gap-1"
+                                                >
+                                                    <CheckCircle size={16} /> Save
+                                                </button>
+                                                <button
+                                                    onClick={() => setEditingSessionId(null)}
+                                                    className="flex-1 py-2 rounded-lg bg-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-300 transition-all flex items-center justify-center gap-1"
+                                                >
+                                                    <X size={16} /> Cancel
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : editingMaterialId === group.materials[0]?.id ? (
-                                        <div className="flex items-center gap-2 mb-4">
+                                        <div className="mb-4">
                                             <input
                                                 type="text"
                                                 value={newFilename}
                                                 onChange={(e) => setNewFilename(e.target.value)}
                                                 onKeyDown={(e) => e.key === 'Enter' && renameMaterial(group.materials[0].id)}
-                                                className="flex-1 text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted"
+                                                className="w-full text-lg font-bold px-3 py-2 rounded-lg border border-primary outline-none focus:ring-2 focus:ring-primary-muted mb-2"
                                                 autoFocus
                                             />
-                                            <button
-                                                onClick={() => renameMaterial(group.materials[0].id)}
-                                                className="p-2 rounded-lg bg-success text-white hover:bg-success/90 transition-all"
-                                            >
-                                                <CheckCircle size={18} />
-                                            </button>
-                                            <button
-                                                onClick={() => setEditingMaterialId(null)}
-                                                className="p-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all"
-                                            >
-                                                <X size={18} />
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => renameMaterial(group.materials[0].id)}
+                                                    className="flex-1 py-2 rounded-lg bg-success text-white text-sm font-bold hover:bg-success/90 transition-all flex items-center justify-center gap-1"
+                                                >
+                                                    <CheckCircle size={16} /> Save
+                                                </button>
+                                                <button
+                                                    onClick={() => setEditingMaterialId(null)}
+                                                    className="flex-1 py-2 rounded-lg bg-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-300 transition-all flex items-center justify-center gap-1"
+                                                >
+                                                    <X size={16} /> Cancel
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <h3 className="text-xl font-black text-primary mb-2 line-clamp-2 leading-tight group-hover:text-accent transition-colors">{group.title}</h3>

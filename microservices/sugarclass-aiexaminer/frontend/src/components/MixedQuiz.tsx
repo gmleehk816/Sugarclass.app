@@ -115,7 +115,8 @@ export default function MixedQuiz({
             setValidationResult(result);
             setShowResult(true);
 
-            if (result.score >= 0.7) {
+            // Score is 0-100, so 70+ is passing
+            if (result.score >= 70) {
                 setScore(prev => prev + 1);
             }
         } catch (error) {
@@ -165,8 +166,9 @@ export default function MixedQuiz({
     };
 
     const getScoreColor = (score: number) => {
-        if (score >= 0.8) return 'text-success';
-        if (score >= 0.5) return 'text-amber-500';
+        // Score is 0-100 scale
+        if (score >= 80) return 'text-success';
+        if (score >= 50) return 'text-amber-500';
         return 'text-error';
     };
 
@@ -239,7 +241,7 @@ export default function MixedQuiz({
                                 <div className="flex items-start gap-4 mb-4">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${resp.type === 'mcq'
                                         ? resp.answer === (resp.question as MCQQuestion).correct_answer ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
-                                        : resp.validation?.score >= 0.7 ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
+                                        : resp.validation?.score >= 70 ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
                                         }`}>
                                         {idx + 1}
                                     </div>
@@ -404,14 +406,14 @@ export default function MixedQuiz({
 
                 {/* Validation Result for Short Answer */}
                 {showResult && !isMCQ && validationResult && (
-                    <div className={`p-6 md:p-8 rounded-2xl md:rounded-3xl mb-8 md:mb-10 animate-fade-in ${validationResult.score >= 0.7 ? 'bg-success/10 border border-success/20' : 'bg-amber-50 border border-amber-200'
+                    <div className={`p-6 md:p-8 rounded-2xl md:rounded-3xl mb-8 md:mb-10 animate-fade-in ${validationResult.score >= 70 ? 'bg-success/10 border border-success/20' : 'bg-amber-50 border border-amber-200'
                         }`}>
                         <div className="flex items-center justify-between mb-4">
                             <h4 className="font-extrabold text-sm uppercase tracking-widest flex items-center gap-2">
                                 <Sparkles size={16} /> AI Assessment
                             </h4>
                             <span className={`text-2xl font-black ${getScoreColor(validationResult.score)}`}>
-                                {Math.round(validationResult.score * 100)}%
+                                {Math.round(validationResult.score)}%
                             </span>
                         </div>
                         <p className="text-slate-700 text-base leading-relaxed mb-4">{validationResult.feedback}</p>
