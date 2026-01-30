@@ -4,6 +4,7 @@ import SourceCard from './components/SourceCard';
 import DiagramDisplay from './components/DiagramDisplay';
 import ScrollToBottom from './components/ScrollToBottom';
 import RecentChats from './components/RecentChats';
+import SettingsModal, { UserSettings } from './components/SettingsModal';
 import { Message, Role, Source } from './types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -25,6 +26,12 @@ interface ChatHistory {
   updatedAt: string;
   messages: Array<{ question: string; answer: string; time: string }>;
 }
+
+const DEFAULT_SETTINGS: UserSettings = {
+  displayName: '',
+  curriculum: 'CIE_IGCSE',
+  gradeLevel: 'Year_11',
+};
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -50,6 +57,8 @@ const App: React.FC = () => {
   const [currentChatId, setCurrentChatId] = useState<number>(Date.now());
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [userSettings, setUserSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
 
@@ -105,6 +114,28 @@ const App: React.FC = () => {
       }
     }
   }, []);
+
+  // Load user settings from localStorage
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('ai_tutor_settings');
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        setUserSettings({ ...DEFAULT_SETTINGS, ...parsed });
+      } catch (error) {
+        console.error('Failed to load user settings:', error);
+      }
+    }
+  }, []);
+
+  const handleSaveSettings = (newSettings: UserSettings) => {
+    setUserSettings(newSettings);
+    localStorage.setItem('ai_tutor_settings', JSON.stringify(newSettings));
+
+    // Update curriculum and grade in localStorage for session start
+    localStorage.setItem('tutor_curriculum', newSettings.curriculum);
+    localStorage.setItem('tutor_grade', newSettings.gradeLevel);
+  };
 
   // Auto-scroll detection
   useEffect(() => {
@@ -453,6 +484,7 @@ const App: React.FC = () => {
       <Navbar
         onNewChat={clearChat}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        onOpenSettings={() => setSettingsOpen(true)}
         systemStatus={systemStatus}
         selectedSubject={selectedSubject}
       />
@@ -753,6 +785,14 @@ const App: React.FC = () => {
       <ScrollToBottom
         visible={showScrollButton}
         onClick={scrollToBottom}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={userSettings}
+        onSave={handleSaveSettings}
       />
     </div>
   );
