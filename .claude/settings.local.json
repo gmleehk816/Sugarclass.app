@@ -4,7 +4,9 @@
       "Bash(docker exec:*)",
       "Bash(dir /s /b \"c:\\Users\\gmhome\\SynologyDrive\\coding\\Sugarclass.app\\microservices\")",
       "Bash(del \"\\?\\c:\\Users\\gmhome\\SynologyDrive\\coding\\Sugarclass.app\\nul\")",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

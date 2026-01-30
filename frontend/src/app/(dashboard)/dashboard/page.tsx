@@ -7,15 +7,14 @@ import ActivityChart from "@/components/ActivityChart";
 import StreakBadge from "@/components/StreakBadge";
 import ServiceStats from "@/components/ServiceStats";
 import QuizStats from "@/components/QuizStats";
+import HeroSection from "@/components/HeroSection";
 import {
     BookOpen,
     PenTool,
     Activity,
     ArrowRight,
     Zap,
-    LayoutGrid,
     Clock,
-    UserCheck,
     GraduationCap,
     ShieldCheck,
     ChevronRight,
@@ -121,18 +120,13 @@ const DashboardPage = () => {
 
     return (
         <div className={`${styles.container} animate-fade-in`}>
-            {/* Header with Friendly Accents */}
-            <header className={styles.header}>
-                <div>
-                    <h1 className={styles.title}>Welcome back, <span className="gradient-text">{firstName}</span>!</h1>
-                    <p className={styles.subtitle}>Your smart learning space. You are doing a great job today!</p>
-                </div>
-                <div className={styles.headerAccents}>
-                    <div className="animate-float">
-                        <Sparkles size={32} color="var(--accent)" />
-                    </div>
-                </div>
-            </header>
+            {/* Hero Section */}
+            <HeroSection
+                firstName={firstName}
+                streak={summary.streak.current_streak}
+                totalActivities={summary.total_activities}
+                todayActivities={summary.today_activities}
+            />
 
             {/* Quick Stats Row */}
             <section className={styles.statsGrid}>
