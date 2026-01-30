@@ -1,0 +1,94 @@
+.container {
+    display: flex;
+    gap: 12px;
+}
+
+.statCard {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 16px;
+    background: white;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--card-border);
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.statCard:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.iconWrapper {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.statInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.statValue {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--primary);
+    line-height: 1;
+}
+
+.statLabel {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 32px;
+    background: #f8fafc;
+    border-radius: var(--radius-md);
+    border: 2px dashed #e2e8f0;
+    text-align: center;
+}
+
+.emptyIcon {
+    color: #94a3b8;
+}
+
+.emptyState p {
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+
+    .statCard {
+        flex-direction: row;
+        justify-content: flex-start;
+        text-align: left;
+        padding: 16px;
+    }
+
+    .statInfo {
+        align-items: flex-start;
+    }
+
+    .statValue {
+        font-size: 1.25rem;
+    }
+}

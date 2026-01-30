@@ -1,0 +1,96 @@
+.container {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+    border-radius: var(--radius-md);
+    border: 1px solid #fed7aa;
+}
+
+.fireIcon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.fireIconInactive {
+    background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+    box-shadow: none;
+    animation: none;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+.content {
+    flex: 1;
+}
+
+.streakCount {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #c2410c;
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+.streakCountInactive {
+    color: #64748b;
+}
+
+.label {
+    font-size: 0.85rem;
+    color: #9a3412;
+    font-weight: 500;
+}
+
+.labelInactive {
+    color: #94a3b8;
+}
+
+.bestStreak {
+    text-align: right;
+}
+
+.bestLabel {
+    font-size: 0.7rem;
+    color: #9a3412;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+}
+
+.bestValue {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #c2410c;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 16px 20px;
+    }
+
+    .fireIcon {
+        width: 40px;
+        height: 40px;
+    }
+
+    .streakCount {
+        font-size: 1.25rem;
+    }
+}

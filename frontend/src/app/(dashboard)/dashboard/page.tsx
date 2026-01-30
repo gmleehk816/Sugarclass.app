@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import styles from "./Dashboard.module.css";
 import StatsCard from "@/components/StatsCard";
+import ActivityChart from "@/components/ActivityChart";
+import StreakBadge from "@/components/StreakBadge";
+import ServiceStats from "@/components/ServiceStats";
+import QuizStats from "@/components/QuizStats";
 import {
     BookOpen,
     PenTool,
@@ -15,13 +19,50 @@ import {
     GraduationCap,
     ShieldCheck,
     ChevronRight,
-    Sparkles
+    Sparkles,
+    Calendar,
+    TrendingUp
 } from "lucide-react";
 import Link from "next/link";
 import { progress, auth } from "@/lib/api";
 
+interface DailyActivity {
+    date: string;
+    count: number;
+}
+
+interface ServiceBreakdown {
+    service: string;
+    count: number;
+    last_used: string | null;
+    avg_score: number | null;
+}
+
+interface StreakInfo {
+    current_streak: number;
+    longest_streak: number;
+    last_activity_date: string | null;
+}
+
+interface DashboardSummary {
+    total_activities: number;
+    last_activity: any;
+    service_stats: Record<string, number>;
+    service_breakdown: ServiceBreakdown[];
+    activity_types: any[];
+    today_activities: number;
+    this_week_activities: number;
+    this_month_activities: number;
+    daily_activity: DailyActivity[];
+    streak: StreakInfo;
+    total_quizzes: number;
+    avg_quiz_score: number | null;
+    best_quiz_score: number | null;
+    recent_history: any[];
+}
+
 const DashboardPage = () => {
-    const [summary, setSummary] = useState<any>(null);
+    const [summary, setSummary] = useState<DashboardSummary | null>(null);
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -48,6 +89,36 @@ const DashboardPage = () => {
 
     const firstName = user?.full_name?.split(' ')[0] || 'Friend';
 
+    // Format activity type for display
+    const formatActivityType = (activity: any) => {
+        const typeMap: Record<string, string> = {
+            'chat_interaction': 'AI Chat',
+            'document_created': 'Document Created',
+            'exam_completed': 'Quiz Completed',
+            'lesson_started': 'Lesson Started',
+            'writing_session': 'Writing Session'
+        };
+        return typeMap[activity.activity_type] || activity.activity_type;
+    };
+
+    // Get icon for service
+    const getServiceIcon = (service: string) => {
+        switch (service) {
+            case 'writer': return <PenTool size={18} />;
+            case 'examiner': return <ShieldCheck size={18} />;
+            default: return <BookOpen size={18} />;
+        }
+    };
+
+    // Get color for service
+    const getServiceColor = (service: string) => {
+        switch (service) {
+            case 'writer': return { bg: '#fef3c7', color: '#d97706' };
+            case 'examiner': return { bg: '#dcfce7', color: '#16a34a' };
+            default: return { bg: '#e0f2fe', color: '#0284c7' };
+        }
+    };
+
     return (
         <div className={`${styles.container} animate-fade-in`}>
             {/* Header with Friendly Accents */}
@@ -63,40 +134,67 @@ const DashboardPage = () => {
                 </div>
             </header>
 
-            {/* Fun Stats */}
+            {/* Quick Stats Row */}
             <section className={styles.statsGrid}>
                 <StatsCard
-                    title="My Learning Apps"
-                    value="3 Apps"
-                    icon={LayoutGrid}
+                    title="Today's Activities"
+                    value={summary.today_activities}
+                    icon={Calendar}
                     color="var(--primary)"
                 />
                 <StatsCard
-                    title="My Progress"
-                    value={`${Math.min(100, summary.total_activities * 12)}%`}
-                    icon={Activity}
+                    title="This Week"
+                    value={summary.this_week_activities}
+                    icon={TrendingUp}
                     color="#e67e22"
                 />
                 <StatsCard
-                    title="Star Badges"
-                    value="0 Earned"
-                    icon={UserCheck}
+                    title="Total Sessions"
+                    value={summary.total_activities}
+                    icon={Activity}
                     color="var(--accent)"
                 />
                 <StatsCard
                     title="Learning Power"
-                    value="100%"
+                    value={`${Math.min(100, summary.total_activities * 5 + summary.streak.current_streak * 10)}%`}
                     icon={Zap}
                     color="#f1c40f"
                 />
             </section>
 
-            {/* 3-Column Compact Content Grid */}
+            {/* Main Content Grid */}
             <div className={styles.contentGrid}>
-                {/* Column 1: Recent Work */}
-                <section className={styles.recentActivity}>
+                {/* Column 1: Activity Overview */}
+                <section className={styles.activityOverview}>
                     <div className={styles.sectionHeader}>
-                        <h2>My Recent Work</h2>
+                        <h2>Activity Overview</h2>
+                    </div>
+
+                    {/* Streak Badge */}
+                    <div className={styles.streakSection}>
+                        <StreakBadge streak={summary.streak} />
+                    </div>
+
+                    {/* Weekly Activity Chart */}
+                    <div className={`${styles.chartCard} premium-card`}>
+                        <ActivityChart data={summary.daily_activity} title="Weekly Activity" />
+                    </div>
+
+                    {/* Quiz Performance */}
+                    <div className={styles.quizSection}>
+                        <h3 className={styles.subSectionTitle}>Quiz Performance</h3>
+                        <QuizStats
+                            totalQuizzes={summary.total_quizzes}
+                            avgScore={summary.avg_quiz_score}
+                            bestScore={summary.best_quiz_score}
+                        />
+                    </div>
+                </section>
+
+                {/* Column 2: Recent Activity & Services */}
+                <section className={styles.middleColumn}>
+                    <div className={styles.sectionHeader}>
+                        <h2>Recent Activity</h2>
                         <Link href="/history" className={styles.seeAll}>
                             See All <ChevronRight size={14} />
                         </Link>
@@ -105,36 +203,51 @@ const DashboardPage = () => {
                     <div className={`${styles.activityCard} premium-card`}>
                         <div className={styles.activityList}>
                             {summary.recent_history.length > 0 ? (
-                                summary.recent_history.map((activity: any) => (
-                                    <div key={activity.id} className={styles.activityItem}>
-                                        <div className={styles.activityIcon} style={{
-                                            background: activity.service === 'writer' ? '#fcf9f5' : '#f5f8fc',
-                                            color: activity.service === 'writer' ? 'var(--accent)' : 'var(--primary)'
-                                        }}>
-                                            {activity.service === 'writer' ? <PenTool size={18} /> : <BookOpen size={18} />}
+                                summary.recent_history.slice(0, 5).map((activity: any) => {
+                                    const colors = getServiceColor(activity.service);
+                                    return (
+                                        <div key={activity.id} className={styles.activityItem}>
+                                            <div className={styles.activityIcon} style={{
+                                                background: colors.bg,
+                                                color: colors.color
+                                            }}>
+                                                {getServiceIcon(activity.service)}
+                                            </div>
+                                            <div className={styles.activityInfo}>
+                                                <span className={styles.activityName}>
+                                                    {formatActivityType(activity)}
+                                                </span>
+                                                <span className={styles.activityMeta}>
+                                                    {activity.score !== null && (
+                                                        <span className={styles.activityScore}>
+                                                            Score: {activity.score}%
+                                                        </span>
+                                                    )}
+                                                    <span className={styles.activityTime}>
+                                                        {new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
+                                                </span>
+                                            </div>
                                         </div>
-                                        <div className={styles.activityInfo}>
-                                            <span className={styles.activityName}>
-                                                {activity.service === 'writer' ? 'AI Stories' : 'AI Lesson'}
-                                            </span>
-                                            <span className={styles.activityTime}>
-                                                {new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
-                                        </div>
-                                        <Sparkles size={14} color="#f1c40f" opacity={0.6} />
-                                    </div>
-                                ))
+                                    );
+                                })
                             ) : (
-                                <div style={{ textAlign: 'center', padding: '40px 0', opacity: 0.5 }}>
-                                    <Clock size={24} style={{ margin: '0 auto 12px' }} />
-                                    <p style={{ fontSize: '0.85rem' }}>Start learning to see your work here!</p>
+                                <div className={styles.emptyActivity}>
+                                    <Clock size={24} />
+                                    <p>Start learning to see your activity here!</p>
                                 </div>
                             )}
                         </div>
                     </div>
+
+                    {/* Service Usage */}
+                    <div className={styles.serviceSection}>
+                        <h3 className={styles.subSectionTitle}>Service Usage</h3>
+                        <ServiceStats services={summary.service_breakdown} />
+                    </div>
                 </section>
 
-                {/* Column 2: My Learning Apps */}
+                {/* Column 3: Quick Launch */}
                 <section className={styles.quickLaunch}>
                     <div className={styles.sectionHeader}>
                         <h2>Learning Apps</h2>
@@ -147,6 +260,7 @@ const DashboardPage = () => {
                             <h3>My AI Teacher</h3>
                             <p>Ask anything and learn something new today!</p>
                         </div>
+                        <ArrowRight size={18} className={styles.launchArrow} />
                     </Link>
 
                     <Link href="/services/writer" className={`${styles.launchCard} premium-card`}>
@@ -157,38 +271,34 @@ const DashboardPage = () => {
                             <h3>AI Writing Hub</h3>
                             <p>Write amazing stories and essays with AI help.</p>
                         </div>
+                        <ArrowRight size={18} className={styles.launchArrow} />
                     </Link>
 
                     <Link href="/services/examiner" className={`${styles.launchCard} premium-card`}>
-                        <div className={`${styles.launchIconSquare}`} style={{ background: '#f0fff4', color: '#27ae60' }}>
+                        <div className={`${styles.launchIconSquare}`} style={{ background: '#dcfce7', color: '#16a34a' }}>
                             <ShieldCheck size={22} />
                         </div>
                         <div className={styles.launchText}>
                             <h3>Quiz Master</h3>
-                            <p>Test your knowledge and earn star badges!</p>
+                            <p>Test your knowledge and earn achievements!</p>
                         </div>
+                        <ArrowRight size={18} className={styles.launchArrow} />
                     </Link>
-                </section>
 
-                {/* Column 3: Fun Tips */}
-                <section className={styles.insightsColumn}>
-                    <div className={styles.sectionHeader}>
-                        <h2>Smart Tips</h2>
-                    </div>
-
-                    <div className={styles.insights}>
-                        <div className={styles.insightsDecoration}></div>
-                        <div className={styles.insightCard}>
-                            <p><strong>Did you know?</strong> Writing every day helps you become a master storyteller. Keep up the great work!</p>
+                    {/* Tips Card */}
+                    <div className={styles.tipsCard}>
+                        <div className={styles.tipsHeader}>
+                            <Sparkles size={16} />
+                            <span>Pro Tip</span>
                         </div>
-                        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', opacity: 0.8 }}>
-                            <ShieldCheck size={14} />
-                            <span>Your data is safe and private.</span>
-                        </div>
+                        <p>
+                            {summary.streak.current_streak > 0
+                                ? `Great job! You're on a ${summary.streak.current_streak}-day streak. Keep it going!`
+                                : "Start a learning streak by using any app today!"}
+                        </p>
                     </div>
                 </section>
             </div>
-
         </div>
     );
 };
