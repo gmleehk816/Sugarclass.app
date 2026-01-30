@@ -225,6 +225,7 @@ class RAGRetrieverTool(BaseTool):
 
                     formatted_results.append({
                         "score": score,
+                        "filename": payload.get("subtopic") or payload.get("chapter") or payload.get("subject") or "Source",
                         "syllabus_id": payload.get("syllabus_id"),
                         "syllabus": payload.get("syllabus"),
                         "subject": payload.get("subject"),

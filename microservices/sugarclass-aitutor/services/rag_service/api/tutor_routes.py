@@ -414,12 +414,40 @@ async def chat_stream(
                     except Exception as e:
                         logger.error(f"Error updating session in stream: {e}")
 
+                    # Extract final fields safely
+                    res_type = 'text'
+                    sources = []
+                    quiz_active = False
+
+                    if isinstance(result_state, dict):
+                        res_type = result_state.get('response_type', 'text')
+                        content = result_state.get('content', {})
+                        if isinstance(content, dict):
+                            sources = content.get('rag_results', [])
+                        else:
+                            sources = getattr(content, 'rag_results', [])
+                        
+                        quiz = result_state.get('quiz', {})
+                        if isinstance(quiz, dict):
+                            quiz_active = quiz.get('is_active', False)
+                        else:
+                            quiz_active = getattr(quiz, 'is_active', False)
+                    else:
+                        res_type = getattr(result_state, 'response_type', 'text')
+                        content = getattr(result_state, 'content', None)
+                        if content:
+                            sources = getattr(content, 'rag_results', [])
+                        
+                        quiz = getattr(result_state, 'quiz', None)
+                        if quiz:
+                            quiz_active = getattr(quiz, 'is_active', False)
+
                     # Yield final completion event
                     done_data = {
                         'type': 'done', 
-                        'response_type': getattr(result_state, 'response_type', 'text') if hasattr(result_state, 'response_type') else 'text',
-                        'sources': getattr(result_state.content, 'rag_results', []) if hasattr(result_state, 'content') else [],
-                        'quiz_active': getattr(result_state.quiz, 'is_active', False) if hasattr(result_state, 'quiz') else False
+                        'response_type': res_type,
+                        'sources': sources,
+                        'quiz_active': quiz_active
                     }
                     yield f"data: {json.dumps(done_data)}\n\n"
                 elif event["type"] == "error":
