@@ -28,7 +28,8 @@ class StartSessionRequest(BaseModel):
     grade_level: Optional[str] = Field(None, description="Grade level")
     curriculum: Optional[str] = Field(None, description="Curriculum/syllabus")
     subject: Optional[str] = Field(None, description="Subject to study")
-    topic: Optional[str] = Field(None, description="Specific topic")
+    chapter: Optional[str] = Field(None, description="Specific chapter")
+    topic: Optional[str] = Field(None, description="Specific topic/subtopic")
 
 
 class StartSessionResponse(BaseModel):
@@ -159,14 +160,17 @@ async def start_session(
             session_id=session_id,
             student_id=student_id,
             subject=request.subject,
+            current_chapter=request.chapter,
             current_topic=request.topic
         )
         await db_manager.create_session(session)
 
-        logger.info(f"Started session {session_id} for student {student_id}, subject={request.subject}, curriculum={request.curriculum}")
+        logger.info(f"Started session {session_id} for student {student_id}, subject={request.subject}, chapter={request.chapter}, curriculum={request.curriculum}")
 
-        # Create welcome message without f-string backslash issue
-        if request.subject:
+        # Create welcome message
+        if request.chapter:
+            welcome_msg = f"Welcome! I'm your AI tutor. Let's study {request.subject}: {request.chapter}!"
+        elif request.subject:
             welcome_msg = f"Welcome! I'm your AI tutor. Let's study {request.subject}!"
         else:
             welcome_msg = "Welcome! I'm your AI tutor. What would you like to learn today?"
@@ -262,9 +266,10 @@ async def chat(
         # LangGraph doesn't properly merge nested dicts into Pydantic models
         # This was causing subject to be lost (always None) even when session had a subject
         session_subject = session.get("subject")
+        session_chapter = session.get("current_chapter")
         session_topic = session.get("current_topic")
 
-        logger.info(f"Chat request - session subject: {session_subject}, topic: {session_topic}")
+        logger.info(f"Chat request - session subject: {session_subject}, chapter: {session_chapter}, topic: {session_topic}")
         logger.info(f"Chat request - session data: {session}")
 
         state_dict = {
@@ -279,6 +284,7 @@ async def chat(
             ).model_dump(),
             "content": ContentContext(
                 subject=session_subject,  # Pass subject to RAG for filtering
+                chapter=session_chapter,  # Pass chapter to RAG for filtering
                 subtopic=session_topic
             ).model_dump()
         }
@@ -380,6 +386,7 @@ async def chat_stream(
                 ).model_dump(),
                 "content": ContentContext(
                     subject=session.get("subject"),
+                    chapter=session.get("current_chapter"),
                     subtopic=session.get("current_topic")
                 ).model_dump()
             }
@@ -408,12 +415,13 @@ async def chat_stream(
                         logger.error(f"Error updating session in stream: {e}")
 
                     # Yield final completion event
-                    yield f"data: {json.dumps({
+                    done_data = {
                         'type': 'done', 
                         'response_type': getattr(result_state, 'response_type', 'text') if hasattr(result_state, 'response_type') else 'text',
                         'sources': getattr(result_state.content, 'rag_results', []) if hasattr(result_state, 'content') else [],
                         'quiz_active': getattr(result_state.quiz, 'is_active', False) if hasattr(result_state, 'quiz') else False
-                    })}\n\n"
+                    }
+                    yield f"data: {json.dumps(done_data)}\n\n"
                 elif event["type"] == "error":
                     yield f"data: {json.dumps({'type': 'error', 'message': event['message']})}\n\n"
 
@@ -529,38 +537,49 @@ async def get_review_topics(
 async def list_subjects(
     content_db = Depends(get_content_db)
 ):
-    """List all available subjects from the PostgreSQL content database."""
+    """List all available subjects and their chapters from the PostgreSQL content database."""
     try:
         # Fetch directly from PostgreSQL pool if available
         if hasattr(content_db, 'pool') and content_db.pool:
             async with content_db.pool.acquire() as conn:
+                # Get subjects and chapters in one query
                 rows = await conn.fetch("""
-                    SELECT DISTINCT 
+                    SELECT 
                         subject,
                         syllabus,
-                        COUNT(*) as topic_count
+                        chapter,
+                        COUNT(*) as subtopic_count
                     FROM syllabus_hierarchy
-                    GROUP BY subject, syllabus
-                    ORDER BY subject ASC
+                    GROUP BY subject, syllabus, chapter
+                    ORDER BY subject ASC, chapter ASC
                 """)
                 
-                subjects = []
-                for i, row in enumerate(rows):
-                    subjects.append({
-                        "id": i + 1,
-                        "name": row['subject'],
-                        "syllabus": row['syllabus'],
-                        "topic_count": row['topic_count']
-                    })
+                # Group by subject
+                subject_map = {}
+                for row in rows:
+                    subj_name = row['subject']
+                    if subj_name not in subject_map:
+                        subject_map[subj_name] = {
+                            "id": len(subject_map) + 1,
+                            "name": subj_name,
+                            "syllabus": row['syllabus'],
+                            "chapters": []
+                        }
+                    
+                    if row['chapter']:
+                        subject_map[subj_name]["chapters"].append({
+                            "name": row['chapter'],
+                            "subtopic_count": row['subtopic_count']
+                        })
                 
+                subjects = list(subject_map.values())
                 return {"subjects": subjects, "count": len(subjects)}
         
         # Fallback to empty if DB not ready
         return {"subjects": [], "count": 0}
         
     except Exception as e:
-        logger.error(f"Error listing subjects from PostgreSQL: {e}")
-        # Final fallback - might be useful during migration
+        logger.error(f"Error listing subjects and chapters from PostgreSQL: {e}")
         return {"subjects": [], "count": 0}
 
 

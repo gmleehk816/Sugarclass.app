@@ -187,7 +187,8 @@ async def init_workflow():
         profile_manager_tool,
         quiz_generator_tool,
         rag_retriever_tool,
-        chapter_list_tool
+        chapter_list_tool,
+        sql_retriever_tool
     )
 
     # Initialize tools - now using PostgreSQL as primary
@@ -227,8 +228,9 @@ async def init_workflow():
     # if postgres_retriever_tool:
     #     tools["postgres_retriever"] = postgres_retriever_tool
     #     logger.info("PostgreSQL retriever added to workflow")
-    # if sql_retriever_tool:
-    #     tools["sqlite_retriever"] = sql_retriever_tool
+    if sql_retriever_tool:
+        tools["sqlite_retriever"] = sql_retriever_tool
+        logger.info("SQL retriever added to workflow as sqlite_retriever")
     if profile_manager_tool:
         tools["profile_manager"] = profile_manager_tool
     if quiz_generator_tool:

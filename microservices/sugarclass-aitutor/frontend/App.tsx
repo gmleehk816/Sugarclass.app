@@ -42,6 +42,8 @@ const App: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectSearchTerm, setSubjectSearchTerm] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
+  const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
@@ -75,11 +77,14 @@ const App: React.FC = () => {
     const healthInterval = setInterval(checkHealth, 30000); // 30 seconds
     const subjectsInterval = setInterval(loadSubjects, 21600000); // 6 hours
 
-    // Restore selected subject from localStorage
+    // Restore selected subject and chapter from localStorage
     const savedSubject = localStorage.getItem('tutor_subject');
+    const savedChapter = localStorage.getItem('tutor_chapter');
     if (savedSubject) {
       setSelectedSubject(savedSubject);
-      updateWelcomeMessage(savedSubject);
+      setSelectedChapter(savedChapter);
+      setExpandedSubjects(new Set([savedSubject]));
+      updateWelcomeMessage(savedSubject, savedChapter);
     }
 
     return () => {
@@ -130,21 +135,35 @@ const App: React.FC = () => {
     try {
       const data = await getSubjects();
       setSubjects(data.subjects);
+
+      // Auto-expand the currently selected subject if any
+      const savedSubject = localStorage.getItem('tutor_subject');
+      if (savedSubject) {
+        setExpandedSubjects(prev => new Set([...Array.from(prev), savedSubject]));
+      }
     } catch (error) {
       console.error('Failed to load subjects:', error);
     }
   };
 
-  const selectSubject = async (subjectName: string) => {
+  const selectSubject = async (subjectName: string, chapterName: string | null = null) => {
     setSelectedSubject(subjectName);
+    setSelectedChapter(chapterName);
     localStorage.setItem('tutor_subject', subjectName);
+    if (chapterName) {
+      localStorage.setItem('tutor_chapter', chapterName);
+    } else {
+      localStorage.removeItem('tutor_chapter');
+    }
 
     // Clear chat and update welcome message
     setMessages([
       {
         id: Date.now().toString(),
         role: Role.MODEL,
-        text: getSubjectWelcomeMessage(subjectName),
+        text: chapterName
+          ? `Welcome! Let's study **${subjectName}**: *${chapterName}*. What would you like to know about this chapter?`
+          : getSubjectWelcomeMessage(subjectName),
         timestamp: new Date()
       }
     ]);
@@ -155,15 +174,15 @@ const App: React.FC = () => {
         const sessionResponse = await startTutorSession({
           user_id: userId,
           subject: subjectName,
+          chapter: chapterName || undefined,
           curriculum: localStorage.getItem('tutor_curriculum') || 'CIE_IGCSE',
           grade_level: localStorage.getItem('tutor_grade') || 'GCSE'
         });
         setSessionId(sessionResponse.session_id);
-        console.log('Session started:', sessionResponse.session_id);
+        console.log('Session started:', sessionResponse.session_id, 'chapter:', chapterName);
       }
     } catch (error) {
       console.error('Failed to start tutor session:', error);
-      // Continue without session, will use RAG fallback
     }
 
     // Close sidebar on mobile
@@ -200,7 +219,7 @@ const App: React.FC = () => {
     return `Let's study ${subject}! What would you like to learn today?`;
   };
 
-  const updateWelcomeMessage = (subject: string | null) => {
+  const updateWelcomeMessage = (subject: string | null, chapter: string | null = null) => {
     if (!subject) {
       setMessages([
         {
@@ -215,7 +234,9 @@ const App: React.FC = () => {
         {
           id: Date.now().toString(),
           role: Role.MODEL,
-          text: getSubjectWelcomeMessage(subject),
+          text: chapter
+            ? `Welcome back! We're studying **${subject}**: *${chapter}*. What would you like to learn next?`
+            : getSubjectWelcomeMessage(subject),
           timestamp: new Date()
         }
       ]);
@@ -464,39 +485,102 @@ const App: React.FC = () => {
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Available Subjects</p>
 
             {/* Subject Search Bar */}
-            <div className="relative group">
+            <div className="relative group px-1">
               <input
                 type="text"
-                placeholder="Search subjects..."
+                placeholder="Find a subject..."
                 value={subjectSearchTerm}
                 onChange={(e) => setSubjectSearchTerm(e.target.value)}
-                className="w-full bg-[#F0F0E9] border border-black/5 rounded-xl py-2 pl-9 pr-4 text-xs font-medium focus:ring-2 focus:ring-[#F43E01]/20 focus:border-[#F43E01] transition-all outline-none"
+                className="w-full bg-white/50 border border-black/5 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#F43E01]/20 focus:border-[#F43E01] transition-all placeholder:text-gray-400"
               />
-              <svg className="w-4 h-4 absolute left-3 top-2.5 text-gray-400 group-focus-within:text-[#F43E01] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1">
             {subjects.length === 0 ? (
-              <p className="text-sm text-gray-400 italic px-1">Loading subjects...</p>
+              <div className="p-4 text-center">
+                <div className="flex justify-center gap-1 mb-2">
+                  <div className="w-1.5 h-1.5 bg-[#F43E01] rounded-full animate-bounce"></div>
+                  <div className="w-1.5 h-1.5 bg-[#F43E01] rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                  <div className="w-1.5 h-1.5 bg-[#F43E01] rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                </div>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Loading Subjects...</p>
+              </div>
             ) : filteredSubjects.length === 0 ? (
               <p className="text-sm text-gray-400 italic px-1">No subjects found matching "{subjectSearchTerm}"</p>
             ) : (
-              filteredSubjects.map((subject) => (
-                <button
-                  key={subject.id}
-                  onClick={() => selectSubject(subject.name)}
-                  className={`w-full text-left p-3 rounded-xl transition-all border ${selectedSubject === subject.name
-                    ? 'bg-[#F43E01] text-white border-[#F43E01]'
-                    : 'bg-[#F0F0E9] text-main border-black/5 hover:border-[#F43E01]'
-                    }`}
-                >
-                  <div className="font-semibold text-sm">{subject.name}</div>
-                  <div className="text-xs opacity-70">{subject.syllabus}</div>
-                </button>
-              ))
+              filteredSubjects.map((subject) => {
+                const isExpanded = expandedSubjects.has(subject.name);
+                const hasChapters = subject.chapters && subject.chapters.length > 0;
+
+                return (
+                  <div key={subject.id} className="space-y-1">
+                    <div className="group relative">
+                      <button
+                        onClick={() => {
+                          const next = new Set(expandedSubjects);
+                          if (isExpanded) {
+                            next.delete(subject.name);
+                          } else {
+                            next.add(subject.name);
+                          }
+                          setExpandedSubjects(next);
+
+                          // Also select the subject if it wasn't selected
+                          if (selectedSubject !== subject.name) {
+                            selectSubject(subject.name);
+                          }
+                        }}
+                        className={`w-full text-left p-3 rounded-xl transition-all border flex items-center justify-between group/btn ${selectedSubject === subject.name
+                          ? 'bg-[#F43E01] text-white border-[#F43E01] shadow-md ring-2 ring-[#F43E01]/10'
+                          : 'bg-white text-main border-black/5 hover:border-[#F43E01]'
+                          }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm truncate">{subject.name}</div>
+                          <div className={`text-[10px] opacity-70 truncate ${selectedSubject === subject.name && !selectedChapter ? 'text-white' : ''}`}>
+                            {subject.syllabus}
+                          </div>
+                        </div>
+                        {hasChapters && (
+                          <svg
+                            className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Chapters Tree */}
+                    {isExpanded && hasChapters && (
+                      <div className="ml-4 pl-4 border-l-2 border-[#F43E01]/10 space-y-1 py-1 animate-in slide-in-from-top-2 duration-300">
+                        {subject.chapters?.map((chapter, idx) => (
+                          <button
+                            key={`${subject.id}-ch-${idx}`}
+                            onClick={() => selectSubject(subject.name, chapter.name)}
+                            className={`w-full text-left p-2 rounded-lg text-xs transition-all border ${selectedSubject === subject.name && selectedChapter === chapter.name
+                              ? 'bg-[#F43E01]/10 text-[#F43E01] border-[#F43E01]/20 font-bold'
+                              : 'text-gray-600 border-transparent hover:bg-black/5'
+                              }`}
+                          >
+                            <div className="truncate flex items-center gap-2">
+                              <span className="opacity-40">•</span>
+                              {chapter.name}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

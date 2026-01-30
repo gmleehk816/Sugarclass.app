@@ -40,6 +40,10 @@ class RAGRetrieverInput(BaseModel):
         default=None,
         description="Filter by subject (e.g., 'Mathematics')"
     )
+    chapter: Optional[str] = Field(
+        default=None,
+        description="Filter by chapter (e.g., 'Differentiation')"
+    )
     content_type: Optional[str] = Field(
         default=None,
         description="Filter by content type: 'textbook', 'exercise', 'exam_qa'"
@@ -95,6 +99,7 @@ class RAGRetrieverTool(BaseTool):
         query: str,
         syllabus: Optional[str] = None,
         subject: Optional[str] = None,
+        chapter: Optional[str] = None,
         content_type: Optional[str] = None,
         difficulty_level: Optional[str] = None,
         limit: int = 5
@@ -138,6 +143,14 @@ class RAGRetrieverTool(BaseTool):
                     FieldCondition(
                         key="subject",
                         match=MatchValue(value=subject)
+                    )
+                )
+
+            if chapter:
+                filter_conditions.append(
+                    FieldCondition(
+                        key="chapter",
+                        match=MatchValue(value=chapter)
                     )
                 )
 
@@ -289,6 +302,7 @@ if tool is not None:
         query: str,
         syllabus: Optional[str] = None,
         subject: Optional[str] = None,
+        chapter: Optional[str] = None,
         content_type: Optional[str] = None,
         difficulty_level: Optional[str] = None,
         limit: int = 5
@@ -318,6 +332,7 @@ if tool is not None:
             query=query,
             syllabus=syllabus,
             subject=subject,
+            chapter=chapter,
             content_type=content_type,
             difficulty_level=difficulty_level,
             limit=limit

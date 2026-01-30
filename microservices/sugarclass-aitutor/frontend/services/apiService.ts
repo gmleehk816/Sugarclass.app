@@ -29,6 +29,10 @@ export interface Subject {
     id: number;
     name: string;
     syllabus: string;
+    chapters?: Array<{
+        name: string;
+        subtopic_count: number;
+    }>;
 }
 
 export interface SubjectsResponse {
@@ -42,6 +46,7 @@ export interface StartSessionRequest {
     grade_level?: string;
     curriculum?: string;
     subject?: string;
+    chapter?: string;
     topic?: string;
 }
 

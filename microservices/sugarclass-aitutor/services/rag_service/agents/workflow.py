@@ -291,7 +291,34 @@ class TutorWorkflow:
             state.response = "Goodbye! Great studying with you today. Keep up the good work!"
             return {"should_end_session": True, "response": state.response}
 
-        # Classify intent using LLM
+        # QUICK PATH: Use heuristics to skip LLM classification for obvious intents
+        lower_input = state.user_input.lower().strip()
+        
+        # 1. Simple Greetings/Greetings (Keep current subject)
+        greetings = ["hi", "hello", "hey", "morning", "afternoon", "evening", "how are you"]
+        if any(lower_input == g or lower_input.startswith(g + " ") for g in greetings) and len(lower_input.split()) < 4:
+            logger.info("Quick Path: Detected greeting")
+            return {"intent": "learn", "confidence": 1.0, "turn_count": state.turn_count, "messages": state.messages}
+
+        # 2. Quiz Interactions (Grader)
+        if state.quiz.is_active:
+            # If it's a short answer (less than 10 words) or looks like an answer, route to grader
+            if len(lower_input.split()) < 15 or any(kw in lower_input for kw in ["the answer is", "it is", "i think"]):
+                logger.info("Quick Path: Detected quiz interaction")
+                return {"intent": "grader", "confidence": 1.0, "turn_count": state.turn_count, "messages": state.messages}
+
+        # 3. Clear Questions (Planner)
+        question_words = ["what", "how", "why", "where", "when", "who", "explain", "describe", "can you", "could you", "tell me"]
+        if lower_input.endswith("?") or any(lower_input.startswith(qw) for qw in question_words):
+            logger.info("Quick Path: Detected clear question")
+            return {"intent": "question", "confidence": 0.9, "turn_count": state.turn_count, "messages": state.messages}
+
+        # 4. Request for Practice (Planner -> Teacher)
+        if any(kw in lower_input for kw in ["practice", "exercise", "quiz", "test me", "question for me"]):
+            logger.info("Quick Path: Detected practice request")
+            return {"intent": "practice", "confidence": 1.0, "turn_count": state.turn_count, "messages": state.messages}
+
+        # Fallback to LLM classification for ambiguous inputs
         intent_result = await self._classify_intent(state)
 
         return {
@@ -347,330 +374,115 @@ Respond with just the intent word."""
 
     async def _planner_node(self, state: TutorState) -> Dict[str, Any]:
         """
-        Planner agent: Retrieves content and creates learning plan.
+        Planner agent: Retrieves content and creates learning plan using parallel tool execution.
         """
-        logger.info(f"Planner processing intent: {state.intent}")
-
-        # Prepare updates dict with content nested under "content" key
-        updates = {}
+        logger.info(f"Planner processing intent: {state.intent} - input: {state.user_input[:50]}")
+        
         content_updates = {}
-
-        # CRITICAL: Check for chapter list request FIRST - before RAG retrieval
-        # Chapter list requests should get ALL chapters, not RAG results
-        is_chapter_list_request = any(phrase in state.user_input.lower() for phrase in [
+        user_input_lower = state.user_input.strip().lower()
+        
+        # 1. Detect Intent Heuristics
+        is_chapter_list_request = any(phrase in user_input_lower for phrase in [
             "what are the topics", "what topics", "list chapters", "list topics", 
             "what chapters", "chapter list", "topic list", "what's in this book", 
-            "what is covered", "what does this book cover", "what are the subjects",
-            "can you give me a list", "give me a list", "list all chapters",
-            "all chapters", "all topics"
+            "what is covered", "all chapters", "all topics"
         ])
-        
-        # Only use RAG retriever if NOT a chapter list request
-        # This prevents RAG from returning incomplete results when user wants all chapters
-        if "rag_retriever" in self.tools and not is_chapter_list_request:
-            try:
-                rag_tool = self.tools["rag_retriever"]
 
-                # Determine subject to pass to RAG
-                current_subject = state.content.subject
-                user_input_lower = state.user_input.strip().lower()
+        # 2. Parallel Tool Execution Setup
+        tasks = []
+        is_rag_active = "rag_retriever" in self.tools and not is_chapter_list_request
+        is_sqlite_active = "sqlite_retriever" in self.tools and not is_chapter_list_request
+        is_chap_list_active = "chapter_list_retriever" in self.tools and is_chapter_list_request
 
-                # DEBUG: Log the current subject from state
-                logger.info(f"Planner - current_subject from state.content.subject: '{current_subject}'")
-                logger.info(f"Planner - state.content type: {type(state.content)}")
+        current_subject = state.content.subject
+        current_chapter = state.content.chapter
 
-                # Detect confirmation phrases
-                confirmation_phrases = ["yes", "no", "please", "ok", "okay", "sure", "thanks", "thank you", "go ahead", "continue"]
-                is_confirmation = any(phrase in user_input_lower for phrase in confirmation_phrases)
+        if is_rag_active:
+            tasks.append(self._invoke_tool(
+                self.tools["rag_retriever"], 
+                query=state.user_input, 
+                subject=current_subject, 
+                chapter=current_chapter, 
+                limit=4
+            ))
+        else:
+            tasks.append(asyncio.sleep(0, result=[]))
 
-                # Detect subject keywords in user query (to identify if they're asking about different subject)
-                subject_keywords = [
-                    "math", "mathematics", "maths", "algebra", "geometry", "calculus",
-                    "physics", "chemistry", "biology", "science",
-                    "english", "literature", "language",
-                    "history", "geography", "economics", "business",
-                    "computer", "computing", "ict", "programming",
-                    "engineering",
-                    "music", "ib music", "art", "drama", "theatre",
-                    "french", "spanish", "german", "chinese", "mandarin",
-                    "psychology", "sociology", "philosophy",
-                    "accounting", "statistics"
-                ]
-                
-                # Check if user mentions a different subject
-                mentioned_subject = None
-                for keyword in subject_keywords:
-                    if keyword in user_input_lower:
-                        mentioned_subject = keyword
-                        break
+        if is_sqlite_active:
+            tasks.append(self._invoke_tool(
+                self.tools["sqlite_retriever"], 
+                syllabus=state.student.curriculum, 
+                subject=current_subject, 
+                topic=current_chapter, 
+                subtopic=state.content.subtopic, 
+                limit=3
+            ))
+        else:
+            tasks.append(asyncio.sleep(0, result=[]))
 
-                current_subject_lower = current_subject.lower() if current_subject else ""
-                mentions_different_subject = (
-                    mentioned_subject and
-                    mentioned_subject not in current_subject_lower and
-                    current_subject_lower not in mentioned_subject
-                )
+        if is_chap_list_active:
+            tasks.append(self._invoke_tool(
+                self.tools["chapter_list_retriever"], 
+                subject=current_subject if current_subject != "General" else None, 
+                syllabus=state.student.curriculum
+            ))
+        else:
+            tasks.append(asyncio.sleep(0, result=None))
 
-                # STRICT SUBJECT FILTERING: Always use current subject from sidebar selection
-                # Never automatically switch - user must change from sidebar
-                subject_to_search = current_subject
-                
-                if current_subject:
-                    logger.info(f"STRICT FILTER: Only searching within {current_subject}")
-                    logger.info(f"STRICT FILTER: Current subject from session: {current_subject}")
-                else:
-                    logger.info("No current subject - searching across all subjects")
+        # Run all tools in parallel
+        logger.info(f"Planner: Running {len([t for t in [is_rag_active, is_sqlite_active, is_chap_list_active] if t])} tasks in parallel")
+        rag_results, sqlite_results, chapter_data = await asyncio.gather(*tasks)
 
-                # Check for subject keywords BEFORE RAG search
-                # Keywords that strongly suggest Engineering topics
-                engineering_keywords = ["mechanical", "electrical", "electronic", "pneumatic", "structural", "materials", "forces", "stress", "strain", "circuits", "wiring", "components"]
-                
-                # Keywords that strongly suggest Music topics
-                music_keywords = ["note", "rhythm", "melody", "harmony", "scale", "chord", "composition", "instrument", "pitch", "tempo", "dynamics"]
-                
-                # Keywords for Mathematics
-                math_keywords = ["algebra", "geometry", "calculus", "equation", "formula", "function"]
-                
-                # Check if query mentions keywords from OTHER subjects
-                has_other_subject_keywords = False
-                if current_subject:
-                    if "music" in current_subject.lower():
-                        has_other_subject_keywords = any(kw in user_input_lower for kw in engineering_keywords + math_keywords)
-                    elif "engineering" in current_subject.lower():
-                        has_other_subject_keywords = any(kw in user_input_lower for kw in music_keywords + math_keywords)
-                    elif "math" in current_subject.lower():
-                        has_other_subject_keywords = any(kw in user_input_lower for kw in music_keywords + engineering_keywords)
-                    elif "ict" in current_subject.lower():
-                        has_other_subject_keywords = any(kw in user_input_lower for kw in music_keywords + engineering_keywords + math_keywords)
+        # 3. Handle Results
+        # Chapter List
+        if chapter_data and not chapter_data.get("error"):
+            chapters = chapter_data.get("chapters", [])
+            content_updates["chapter_list"] = "\n".join([f"• {ch['name']}" for ch in chapters])
+            content_updates["chapter_list_data"] = chapter_data
+            content_updates["subject"] = current_subject
+            logger.info(f"Planner found {len(chapters)} chapters for {current_subject}")
 
-                rag_results = await self._invoke_tool(
-                    rag_tool,
-                    query=state.user_input,
-                    syllabus=None,
-                    subject=subject_to_search,  # STRICT: Always filter by current subject
-                    limit=5
-                )
-                logger.info(f"RAG search for: {state.user_input[:50]}... (subject filter: {subject_to_search})")
-                
-                # Store content updates
-                content_updates["rag_results"] = rag_results or []
+        # RAG results
+        if rag_results:
+            content_updates["rag_results"] = rag_results
+            top_rag = rag_results[0]
+            content_updates["syllabus"] = top_rag.get("syllabus")
+            content_updates["subject"] = current_subject or top_rag.get("subject")
+            content_updates["chapter"] = current_chapter or top_rag.get("chapter")
+            content_updates["subtopic"] = top_rag.get("subtopic")
 
-                # Check for subject mismatch - user asking about different subject
-                # If we have a current subject but no results, and user mentions different subject keywords
-                subject_mismatch = False
-                if current_subject and not rag_results and not is_confirmation:
-                    
-                    if has_other_subject_keywords or mentions_different_subject:
-                        # Searched for current subject but found nothing
-                        # User is clearly asking about a different subject
-                        logger.warning(f"Subject mismatch: No results in {current_subject}, user asking about different subject")
-                        subject_mismatch = True
-                        # Set flags for teacher to respond with subject switch suggestion
-                        content_updates["subject_mismatch"] = True
-                        content_updates["requested_query"] = state.user_input
-                        content_updates["current_subject"] = current_subject
-                        # Skip SQLite - don't search for content from other subjects
-                        content_updates["skip_sqlite"] = True
-                    else:
-                        logger.info(f"No RAG results - will let SQLite search within {current_subject}")
-                elif rag_results:
-                    # Check if query is clearly about a DIFFERENT subject using LLM
-                    # This is more accurate than keyword matching - catches cases like "music notes" in ICT
-                    if current_subject and (has_other_subject_keywords or mentions_different_subject):
-                        # Use LLM to determine if this is truly about a different subject
-                        llm_check_prompt = f"""Determine if the user's question is about a DIFFERENT subject than the current subject.
-
-Current subject being studied: {current_subject}
-User's question: "{state.user_input}"
-
-Rules:
-- If user asks "tell me about music notes" while in ICT → YES, different subject (tell to switch)
-- If user asks "what is mechanical engineering" while in Music → YES, different subject (tell to switch)  
-- If user asks "explain algebra" while in ICT → YES, different subject (tell to switch)
-- Even if there are some tangential connections (MIDI in ICT, robotics in ICT), if the PRIMARY topic is clearly about a different subject, say YES
-- If user asks about hardware in ICT → NO, same subject (answer normally)
-- If user asks about notes in Music → NO, same subject (answer normally)
-
-Respond with just YES or NO (uppercase)."""
-                        
-                        try:
-                            llm_response = await self.llm.ainvoke(llm_check_prompt)
-                            is_different_subject = "YES" in str(llm_response.content).upper() if hasattr(llm_response, 'content') else "YES" in str(llm_response).upper()
-                            
-                            if is_different_subject:
-                                logger.warning(f"LLM confirms subject mismatch - query '{state.user_input[:30]}...' is about different subject, not {current_subject}")
-                                subject_mismatch = True
-                                # Set flags for teacher to respond with subject switch suggestion
-                                content_updates["subject_mismatch"] = True
-                                content_updates["requested_query"] = state.user_input
-                                content_updates["current_subject"] = current_subject
-                                # Skip SQLite - don't search for content from other subjects
-                                content_updates["skip_sqlite"] = True
-                            else:
-                                logger.info(f"LLM confirms query is within {current_subject} subject - proceed with RAG results")
-                        except Exception as e:
-                            logger.error(f"LLM subject check error: {e}, using keyword-based detection")
-                            # Fallback to keyword detection
-                            subject_mismatch = True
-                            content_updates["subject_mismatch"] = True
-                            content_updates["requested_query"] = state.user_input
-                            content_updates["current_subject"] = current_subject
-                            content_updates["skip_sqlite"] = True
-                    else:
-                        # Normal case: query is within current subject
-                        # Find the first result with a valid (non-empty) subject
-                        top_result = rag_results[0]
-                        detected_subject = None
-                        for result in rag_results:
-                            subj = result.get('subject')
-                            if subj:  # Non-empty subject found
-                                detected_subject = subj
-                                top_result = result  # Use this result for metadata
-                                logger.info(f"Found valid subject '{subj}' in RAG result (scanned {rag_results.index(result) + 1} results)")
-                                break
-
-                        # If no result has a subject, fall back to first result's subject (empty)
-                        if not detected_subject:
-                            detected_subject = rag_results[0].get('subject')
-                            logger.warning(f"No RAG results have valid subject field, using first result")
-
-                        # NEVER update subject - always keep the subject from sidebar selection/session
-                        # Subject switching only happens when user selects from sidebar, not automatically
-                        # CRITICAL: current_subject comes from session, detected_subject comes from RAG
-                        # Always prefer session subject over RAG detection to maintain strict filtering
-                        if current_subject:
-                            content_updates["subject"] = current_subject
-                            logger.info(f"Subject locked to session subject: {current_subject}")
-                        else:
-                            # Only use detected_subject if no session subject exists
-                            content_updates["subject"] = detected_subject
-                            logger.info(f"Using RAG-detected subject (no session subject): {detected_subject}")
-                    
-                    content_updates["syllabus_id"] = top_result.get("syllabus_id")
-                    content_updates["syllabus"] = top_result.get("syllabus")
-                    content_updates["chapter"] = top_result.get("chapter")
-                    content_updates["subtopic"] = top_result.get("subtopic")
-                    logger.info(f"RAG content - subject: {content_updates.get('subject')}, chapter: {top_result.get('chapter')}")
-                else:
-                    # No RAG results - keep current subject from sidebar
-                    if current_subject:
-                        content_updates["subject"] = current_subject
-                        logger.info(f"No RAG results, maintaining sidebar subject: {current_subject}")
-
-            except Exception as e:
-                logger.error(f"RAG retrieval error: {e}")
-
-        # Check if user is asking for chapter/topic list - use chapter_list_retriever
-        is_chapter_list_request = any(phrase in state.user_input.lower() for phrase in [
-            "what are the topics", "what topics", "what are the topics in", "topics in this book", "list all topics",
-            "list chapters", "list topics", 
-            "what chapters", "chapter list", "topic list", "what's in this book", 
-            "what is covered", "what does this book cover", "what are the subjects",
-            "all chapters", "all topics"
-        ])
-        
-        if is_chapter_list_request and "chapter_list_retriever" in self.tools:
-            # Use current subject if available, otherwise use session subject
-            subject_for_list = state.content.subject if state.content.subject and state.content.subject != "General" else None
+        # SQLite results
+        if sqlite_results:
+            all_content = "\n\n".join([
+                f"## {r.get('title', r.get('subtopic', 'Content'))}\n{r.get('content', '')}"
+                for r in sqlite_results[:3]
+            ])
+            content_updates["textbook_content"] = all_content
             
-            if subject_for_list:
-                try:
-                    logger.info(f"Detected chapter list request, using chapter_list_retriever for {subject_for_list}")
-                    chapter_tool = self.tools["chapter_list_retriever"]
-                    
-                    chapter_data = await self._invoke_tool(
-                        chapter_tool,
-                        subject=subject_for_list,
-                        syllabus=state.student.curriculum
-                    )
-                    
-                    if chapter_data and not chapter_data.get("error"):
-                        # Format chapter list for teacher - include ALL chapters, not just first 20
-                        chapters = chapter_data.get("chapters", [])
-                        formatted_chapters = "\n".join([
-                            f"• {ch['name']}" for ch in chapters  # Removed [:20] limit - show all chapters
-                        ])
-                        content_updates["chapter_list"] = formatted_chapters
-                        content_updates["chapter_list_data"] = chapter_data
-                        # CRITICAL: Preserve subject state
-                        content_updates["subject"] = subject_for_list
-                        logger.info(f"Chapter list retrieved: {len(chapters)} chapters found, subject preserved: {subject_for_list}")
-                    else:
-                        logger.warning(f"Chapter list retriever failed: {chapter_data.get('error')}")
-                except Exception as e:
-                    logger.error(f"Chapter list retrieval error: {e}")
-            else:
-                logger.warning("Chapter list request detected but no subject available")
+            # If RAG didn't find metadata, use SQLite's
+            if not rag_results:
+                top_sql = sqlite_results[0]
+                content_updates["syllabus"] = top_sql.get("syllabus")
+                content_updates["subject"] = current_subject or top_sql.get("subject")
+                content_updates["chapter"] = current_chapter or top_sql.get("chapter")
+                content_updates["subtopic"] = top_sql.get("subtopic")
+
+        # Subject Mismatch Detection (Heuristic)
+        subject_keywords = ["math", "physics", "chemistry", "biology", "ict", "computer", "engineering", "music"]
+        mentioned_subject = next((kw for kw in subject_keywords if kw in user_input_lower), None)
+        current_lower = current_subject.lower() if current_subject else ""
+        if current_subject and not rag_results and not sqlite_results and mentioned_subject and mentioned_subject not in current_lower:
+            logger.warning(f"Planner: Heuristic mismatch - user asked {mentioned_subject} while in {current_subject}")
+            content_updates["subject_mismatch"] = True
+            content_updates["current_subject"] = current_subject
+            content_updates["requested_query"] = state.user_input
+
+        # ALWAYS preserve existing state's subject/chapter if search found nothing new
+        if not content_updates.get("subject"): content_updates["subject"] = current_subject
+        if not content_updates.get("chapter"): content_updates["chapter"] = current_chapter
+
+        return {"content": content_updates}
         
-        # Use SQLite retriever for structured content
-        # ONLY if not a chapter list request OR if chapter list retrieval failed
-        if "sqlite_retriever" in self.tools and not content_updates.get("skip_sqlite") and not content_updates.get("chapter_list"):
-            try:
-                # Get subject from RAG results (now in content_updates)
-                detected_subject = content_updates.get("subject")
-                detected_chapter = content_updates.get("chapter")
-                
-                # Check if RAG found good results
-                rag_has_results = len(content_updates.get("rag_results", [])) > 0
-                
-                # CRITICAL: ALWAYS filter by current subject
-                # SQLite should NEVER search broadly across all subjects
-                # Use current subject from state if RAG didn't detect one
-                use_subject_filter = True  # ALWAYS filter!
-                subject_to_search = detected_subject if detected_subject else state.content.subject
-                
-                logger.info(f"SQLite filter strategy: subject_filter={use_subject_filter}, subject_to_search={subject_to_search}")
-                
-                sqlite_tool = self.tools["sqlite_retriever"]
-                
-                content_results = await self._invoke_tool(
-                    sqlite_tool,
-                    syllabus=state.student.curriculum,
-                    subject=subject_to_search,  # ALWAYS filter by subject
-                    topic=detected_chapter,
-                    subtopic=content_updates.get("subtopic", state.content.subtopic),
-                    limit=5
-                )
-                
-                # NEVER search broadly - if no results, that's expected
-                # The teacher will respond appropriately
-                
-                # Only use SQLite results to update content, NOT subject
-                # Subject should only come from RAG or remain unchanged
-                if content_results and len(content_results) > 0:
-                    # Combine multiple content pieces
-                    all_content = "\n\n".join([
-                        f"## {r.get('title', r.get('subtopic', 'Content'))}\n{r.get('content', '')}"
-                        for r in content_results[:3]
-                    ])
-                    content_updates["textbook_content"] = all_content
-                    
-                    # Update content context from first result, but NOT subject
-                    # Subject should only come from RAG or remain unchanged
-                    top_result = content_results[0]
-                    content_updates["syllabus"] = top_result.get("syllabus")
-                    # DO NOT update subject from SQLite - it overrides RAG's subject detection
-                    # content_updates["subject"] = top_result.get("subject")  # <-- REMOVED
-                    content_updates["chapter"] = top_result.get("chapter")
-                    content_updates["subtopic"] = top_result.get("subtopic")
-                    
-                    logger.info(f"SQLite retriever found {len(content_results)} results (content only, no subject update)")
-
-            except Exception as e:
-                logger.error(f"SQLite retrieval error: {e}")
-
-        # Return content updates under "content" key for LangGraph to merge
-        if content_updates:
-            updates["content"] = content_updates
-
-        # Store tool results
-        updates["tool_results"] = {
-            "planner_completed": True,
-            "content_found": bool(content_updates.get("rag_results", state.content.rag_results))
-        }
-
-        return updates
-
     async def _teacher_node(self, state: TutorState) -> Dict[str, Any]:
         """
         Teacher agent: Delivers explanations and generates content.
