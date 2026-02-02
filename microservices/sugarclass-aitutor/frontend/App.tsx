@@ -396,9 +396,44 @@ const App: React.FC = () => {
         ));
       };
 
-      if (sessionId) {
+      // Check if user has selected a subject
+      if (!selectedSubject) {
+        // No subject selected - show prompt to select subject
+        const noSubjectMessage = "Please select a subject from the sidebar to start learning.";
+        setMessages(prev => prev.map(msg =>
+          msg.id === botMessageId ? { ...msg, text: noSubjectMessage } : msg
+        ));
+        setIsTyping(false);
+        return;
+      }
+
+      // Start a session if one doesn't exist
+      let currentSessionId = sessionId;
+      if (!currentSessionId && userId) {
+        try {
+          const sessionResponse = await startTutorSession({
+            user_id: userId,
+            subject: selectedSubject,
+            chapter: selectedChapter || undefined,
+            curriculum: localStorage.getItem('tutor_curriculum') || 'CIE_IGCSE',
+            grade_level: localStorage.getItem('tutor_grade') || 'GCSE'
+          });
+          currentSessionId = sessionResponse.session_id;
+          setSessionId(currentSessionId);
+        } catch (error) {
+          console.error('Failed to start session:', error);
+          setMessages(prev => prev.map(msg =>
+            msg.id === botMessageId ? { ...msg, text: 'Failed to start session. Please try selecting a subject again.' } : msg
+          ));
+          setIsTyping(false);
+          return;
+        }
+      }
+
+      // Use tutor chat streaming
+      if (currentSessionId) {
         await streamChatWithTutor(
-          { session_id: sessionId, message: textToSend },
+          { session_id: currentSessionId, message: textToSend },
           onChunk,
           (error) => { throw new Error(error); },
           (metadata) => {
@@ -414,22 +449,8 @@ const App: React.FC = () => {
           }
         );
       } else {
-        // Fallback to RAG streaming
-        await streamQuery(
-          textToSend,
-          onChunk,
-          (error) => { throw new Error(error); },
-          (metadata) => {
-            // Update final message with metadata (sources)
-            setMessages(prev => prev.map(msg =>
-              msg.id === botMessageId ? {
-                ...msg,
-                sources: metadata.sources
-              } : msg
-            ));
-            saveChatToHistory(textToSend, fullText);
-          }
-        );
+        // Should not reach here, but fallback
+        throw new Error('No active session. Please select a subject.');
       }
     } catch (error: any) {
       console.error('Error in handleSend:', error);
@@ -475,8 +496,29 @@ const App: React.FC = () => {
       setSessionId(null);
     }
 
-    // Reset to initial state
+    // Reset to initial state (keep current subject selection)
     updateWelcomeMessage(selectedSubject);
+  };
+
+  const deselectSubject = async () => {
+    // Clear session
+    if (sessionId) {
+      try {
+        await endTutorSession(sessionId);
+      } catch (error) {
+        console.error("Failed to end session:", error);
+      }
+      setSessionId(null);
+    }
+
+    // Clear subject and chapter selection
+    setSelectedSubject(null);
+    setSelectedChapter(null);
+    localStorage.removeItem('tutor_subject');
+    localStorage.removeItem('tutor_chapter');
+
+    // Reset to initial state
+    updateWelcomeMessage(null);
   };
 
   return (
@@ -513,6 +555,28 @@ const App: React.FC = () => {
 
         {/* Subjects List */}
         <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+          {/* Show selected subject info with deselect button */}
+          {selectedSubject && (
+            <div className="bg-[#F43E01]/5 border border-[#F43E01]/20 rounded-xl p-3 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-[#F43E01] uppercase tracking-widest">Selected</p>
+                <p className="font-semibold text-sm truncate text-main">{selectedSubject}</p>
+                {selectedChapter && (
+                  <p className="text-xs text-gray-500 truncate mt-0.5">→ {selectedChapter}</p>
+                )}
+              </div>
+              <button
+                onClick={deselectSubject}
+                className="p-2 rounded-lg hover:bg-[#F43E01]/10 text-[#F43E01] transition-colors"
+                title="Deselect subject"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           <div className="space-y-2">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Available Subjects</p>
 

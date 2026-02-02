@@ -397,6 +397,13 @@ Respond with just the intent word."""
         current_subject = state.content.subject
         current_chapter = state.content.chapter
 
+        # Skip RAG and SQLite retrieval if no subject is selected (user must select subject manually)
+        has_no_subject = not current_subject or current_subject == "General"
+        if has_no_subject:
+            is_rag_active = False
+            is_sqlite_active = False
+            logger.info("Planner: No subject selected, skipping RAG/SQLite retrieval - user must select subject manually")
+
         if is_rag_active:
             tasks.append(self._invoke_tool(
                 self.tools["rag_retriever"], 
