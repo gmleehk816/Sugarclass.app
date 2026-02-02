@@ -3,7 +3,6 @@
 import { ChevronRight, Home } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { motion } from 'framer-motion'
 
 interface BreadcrumbItem {
     label: string
@@ -60,64 +59,39 @@ export default function Breadcrumbs() {
         return null
     }
 
-    const containerVariants = {
-        hidden: { opacity: 0, y: -10 },
-        visible: {
-            opacity: 1,
-            y: 0,
-            transition: {
-                staggerChildren: 0.1
-            }
-        }
-    }
-
-    const itemVariants = {
-        hidden: { opacity: 0, x: -10 },
-        visible: { opacity: 1, x: 0 }
-    }
-
     return (
-        <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4"
-        >
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <nav className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto no-scrollbar" aria-label="Breadcrumb">
                 {breadcrumbs.map((item, index) => {
                     const Icon = item.icon
                     const isLast = index === breadcrumbs.length - 1
 
                     return (
-                        <motion.div
-                            key={item.href}
-                            variants={itemVariants}
-                            className="flex items-center"
-                        >
+                        <div key={item.href} className="flex items-center">
                             {index > 0 && (
                                 <ChevronRight className="w-4 h-4 text-text-muted flex-shrink-0" />
                             )}
-                            
+
                             {isLast ? (
-                                <span className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg font-medium text-sm whitespace-nowrap">
+                                <span className="px-3 py-1.5 bg-accent/10 text-accent rounded-lg font-medium text-sm whitespace-nowrap">
                                     {Icon && <Icon className="w-4 h-4 inline mr-1" />}
                                     {item.label}
                                 </span>
                             ) : (
                                 <Link
                                     href={item.href}
-                                    className="px-3 py-1.5 hover:bg-surface-dark text-text-secondary hover:text-primary rounded-lg font-medium text-sm transition-all whitespace-nowrap flex items-center gap-1 group"
+                                    className="px-3 py-1.5 hover:bg-surface-dark text-text-secondary hover:text-accent rounded-lg font-medium text-sm transition-all whitespace-nowrap flex items-center gap-1 group"
                                 >
                                     {Icon && (
-                                        <Icon className="w-4 h-4 text-text-muted group-hover:text-primary transition-colors" />
+                                        <Icon className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors" />
                                     )}
                                     {item.label}
                                 </Link>
                             )}
-                        </motion.div>
+                        </div>
                     )
                 })}
             </nav>
-        </motion.div>
+        </div>
     )
 }

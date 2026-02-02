@@ -9,39 +9,45 @@ const config: Config = {
     theme: {
         extend: {
             colors: {
-                // Primary Colors - Soft Teal/Turquoise for kids
-                'primary': '#0D9488',  // Soft teal (kid-friendly)
-                'primary-dark': '#0F766E',  // Darker teal
-                'accent': '#06B6D4',  // Bright cyan
-                'accent-light': '#22D3EE',  // Light cyan
-                'success': '#10B981',  // Green
-                'warning': '#F59E0B',  // Warm orange
+                // Main Orchestrator App Colors - Slate & Ivory
+                'primary': '#1e293b',       // Slate 800
+                'primary-light': '#334155', // Slate 700
+                'primary-muted': 'rgba(30, 41, 59, 0.05)',
 
-                // Neutral Colors - Warm Off-White/Beige (kept the same)
-                'background': '#FAF8F5',  // Warm off-white
-                'surface': '#FEFDFB',  // Very light beige
-                'surface-dark': '#F5F1EB',  // Light tan
-                'surface-darker': '#EBE6DF',  // Medium tan
-                'border': '#E0D9CF',  // Warm gray
-                'border-light': '#EDE8E1',  // Light warm gray
-                'text-primary': '#1C1917',  // Warm black
-                'text-secondary': '#57534E',  // Medium brown-gray
-                'text-muted': '#78716C',  // Light brown-gray
-                'text-light': '#A8A29E',  // Very light brown-gray
+                'accent': '#927559',        // Bronze Refined (main accent)
+                'accent-light': '#a48c73',  // Light bronze
+                'accent-muted': 'rgba(146, 117, 89, 0.1)',
 
-                // Category Colors - Bright and playful
-                'science': '#8B5CF6',  // Purple
-                'tech': '#3B82F6',  // Blue
-                'environment': '#10B981',  // Green
-                'sports': '#F97316',  // Orange
-                'arts': '#EC4899',  // Pink
-                'health': '#EF4444',  // Red
+                'success': '#3d5a45',       // Forest Sage
+                'warning': '#b45309',
+                'error': '#991b1b',
+
+                // Neutral Colors - Warm Ivory/Beige
+                'background': '#fcfaf7',    // Warm ivory
+                'surface': 'rgba(255, 255, 255, 0.85)',
+                'surface-dark': '#f5f1eb',
+                'surface-darker': '#ebe6df',
+                'border': 'rgba(0, 0, 0, 0.04)',
+                'border-light': 'rgba(0, 0, 0, 0.08)',
+
+                'text-primary': '#1a1a1b',
+                'text-secondary': '#57534e',
+                'text-muted': '#78716c',
+                'text-light': '#a8a29e',
+
+                // Category Colors - Muted to match overall theme
+                'science': '#8B5CF6',
+                'tech': '#3B82F6',
+                'environment': '#10B981',
+                'sports': '#F97316',
+                'arts': '#EC4899',
+                'health': '#EF4444',
 
                 // Legacy compatibility
-                'sky-blue': '#0D9488',
-                'ocean': '#0F766E',
+                'sky-blue': '#927559',      // Now matches accent
+                'ocean': '#1e293b',         // Now matches primary
                 'mint': '#10B981',
-                'amber': '#F59E0B',
+                'amber': '#b45309',
                 'coral': '#F97316',
                 'ai-purple': '#8B5CF6',
                 'ai-purple-light': '#F3E8FF',
@@ -52,12 +58,24 @@ const config: Config = {
                 body: ['Outfit', 'sans-serif'],
                 mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
             },
-            lineHeight: {
-                'relaxed': '1.75',
+            borderRadius: {
+                'xl': '32px',
+                'lg': '24px',
+                'md': '16px',
+                'sm': '8px',
             },
-            animation: {
-                'bounce-slow': 'bounce 3s ease-in-out infinite',
-                'pulse-slow': 'pulse 3s ease-in-out infinite',
+            boxShadow: {
+                'sm': '0 2px 4px rgba(0, 0, 0, 0.02)',
+                'md': '0 10px 25px -5px rgba(0, 0, 0, 0.04), 0 8px 10px -6px rgba(0, 0, 0, 0.02)',
+                'lg': '0 20px 50px -12px rgba(0, 0, 0, 0.08)',
+                'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.05)',
+                'glow': '0 0 20px rgba(146, 117, 89, 0.2)',
+            },
+            transitionTimingFunction: {
+                'smooth': 'cubic-bezier(0.16, 1, 0.3, 1)',
+            },
+            transitionDuration: {
+                '400': '600ms',
             },
         },
     },

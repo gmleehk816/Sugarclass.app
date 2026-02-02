@@ -551,7 +551,9 @@ def get_articles(
             query += " AND published_at <= ?"
             params.append(date_to)
         
-        query += f" ORDER BY published_at DESC LIMIT {limit} OFFSET {offset}"
+        # Order by collected_at (most recently collected first) as it's always set
+        # Fall back to id DESC for articles with same collection time
+        query += f" ORDER BY collected_at DESC, id DESC LIMIT {limit} OFFSET {offset}"
         
         cursor.execute(_convert_placeholders(query), params)
         rows = cursor.fetchall()

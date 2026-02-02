@@ -1,8 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
-import { ArrowLeft, Settings2, Search, RefreshCw } from 'lucide-react'
-import Link from 'next/link'
+import { Search, RefreshCw, Settings2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import ArticleCard from '@/components/ArticleCard'
 import { getArticles, Article, triggerCollection } from '@/lib/api'
@@ -84,11 +82,7 @@ export default function NewsPage() {
         <div className="min-h-screen bg-background pt-4">
             {/* Page Title Section */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-between mb-8"
-                >
+                <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-3xl md:text-4xl font-heading font-bold text-text-primary mb-2">
                             📰 News Feed
@@ -98,27 +92,21 @@ export default function NewsPage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                        <button
                             onClick={handleSyncNews}
                             disabled={syncing}
-                            className={`flex items-center gap-2 px-4 py-2 bg-surface rounded-xl hover:bg-surface-dark transition-colors shadow-sm text-sm font-semibold text-text-secondary ${syncing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-xl hover:bg-accent-light transition-colors shadow-sm text-sm font-semibold ${syncing ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             <div className={`${syncing ? 'animate-spin' : ''}`}>
                                 <RefreshCw className="w-4 h-4" />
                             </div>
                             {syncing ? 'Syncing...' : 'Sync Latest News'}
-                        </motion.button>
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            className="p-3 bg-surface rounded-xl hover:bg-surface-dark transition-colors shadow-sm"
-                        >
+                        </button>
+                        <button className="p-3 bg-surface rounded-xl hover:bg-surface-dark transition-colors shadow-sm">
                             <Settings2 className="w-5 h-5 text-text-secondary" />
-                        </motion.button>
+                        </button>
                     </div>
-                </motion.div>
+                </div>
                 {/* Search Bar */}
                 <div className="mb-8">
                     <div className="relative">
@@ -126,7 +114,7 @@ export default function NewsPage() {
                         <input
                             type="text"
                             placeholder="Search for news stories..."
-                            className="w-full pl-12 pr-4 py-3 bg-white border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-blue focus:border-transparent transition-all"
+                            className="w-full pl-12 pr-4 py-3 bg-white border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all"
                         />
                     </div>
                 </div>
@@ -136,18 +124,16 @@ export default function NewsPage() {
                     <h3 className="text-sm font-semibold text-text-secondary mb-3">Categories</h3>
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                         {categories.map((cat) => (
-                            <motion.button
+                            <button
                                 key={cat.name}
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
                                 onClick={() => setSelectedCategory(cat.name)}
                                 className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200 ${selectedCategory === cat.name
-                                    ? 'bg-sky-blue text-white shadow-md'
+                                    ? 'bg-accent text-white shadow-md'
                                     : 'bg-white text-text-secondary hover:bg-surface-muted border border-border'
                                     }`}
                             >
                                 {cat.icon} {cat.name}
-                            </motion.button>
+                            </button>
                         ))}
                     </div>
                 </div>
@@ -157,18 +143,16 @@ export default function NewsPage() {
                     <h3 className="text-sm font-semibold text-text-secondary mb-3">Age Group</h3>
                     <div className="flex gap-2">
                         {ageGroups.map((age) => (
-                            <motion.button
+                            <button
                                 key={age}
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
                                 onClick={() => setSelectedAge(age)}
                                 className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${selectedAge === age
-                                    ? 'bg-mint text-white shadow-md'
+                                    ? 'bg-accent text-white shadow-md'
                                     : 'bg-white text-text-secondary hover:bg-surface-muted border border-border'
                                     }`}
                             >
                                 {age}
-                            </motion.button>
+                            </button>
                         ))}
                     </div>
                 </div>
@@ -177,17 +161,17 @@ export default function NewsPage() {
                 {loading ? (
                     <div className="flex justify-center items-center py-20">
                         <div className="text-center">
-                            <div className="animate-spin w-12 h-12 border-4 border-sky-blue border-t-transparent rounded-full mx-auto mb-4" />
+                            <div className="animate-spin w-12 h-12 border-4 border-accent border-t-transparent rounded-full mx-auto mb-4" />
                             <p className="text-text-secondary">Loading articles...</p>
                         </div>
                     </div>
                 ) : error ? (
                     <div className="flex justify-center items-center py-20">
                         <div className="text-center">
-                            <p className="text-red-500 mb-4">{error}</p>
+                            <p className="text-error mb-4">{error}</p>
                             <button
                                 onClick={() => window.location.reload()}
-                                className="px-6 py-2 bg-sky-blue text-white rounded-lg font-semibold"
+                                className="px-6 py-2 bg-accent text-white rounded-lg font-semibold"
                             >
                                 Retry
                             </button>
@@ -206,23 +190,21 @@ export default function NewsPage() {
                 )}
                 {/* Load More */}
                 <div className="mt-12 text-center pb-12">
-                    <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                    <button
                         onClick={() => fetchArticles(true)}
                         disabled={loadingMore || loading}
-                        className={`px-8 py-3 bg-white border-2 border-border text-text-primary rounded-xl font-semibold hover:border-sky-blue hover:text-sky-blue transition-all duration-200 ${(loadingMore || loading) ? 'opacity-50 cursor-not-allowed' : ''
+                        className={`px-8 py-3 bg-white border-2 border-border text-text-primary rounded-xl font-semibold hover:border-accent hover:text-accent transition-all duration-200 ${(loadingMore || loading) ? 'opacity-50 cursor-not-allowed' : ''
                             }`}
                     >
                         {loadingMore ? (
                             <div className="flex items-center gap-2">
-                                <div className="animate-spin w-4 h-4 border-2 border-sky-blue border-t-transparent rounded-full" />
+                                <div className="animate-spin w-4 h-4 border-2 border-accent border-t-transparent rounded-full" />
                                 <span>Loading...</span>
                             </div>
                         ) : (
                             'Load More Articles'
                         )}
-                    </motion.button>
+                    </button>
                 </div>
             </div>
         </div >

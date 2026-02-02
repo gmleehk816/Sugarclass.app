@@ -1,5 +1,4 @@
 import React from 'react'
-import { motion } from 'framer-motion'
 import { Clock, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 import { Article } from '@/lib/api'
@@ -19,24 +18,15 @@ const categoryColors: Record<string, string> = {
     Health: 'bg-health text-white',
 }
 
-export default function ArticleCard({ article, index }: ArticleCardProps) {
+export default function ArticleCard({ article }: ArticleCardProps) {
     const readingTime = Math.ceil((article.word_count || 300) / 200) // Assuming 200 words per minute
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: index * 0.1 }}
-        >
+        <div>
             <Link href={`/news/${article.id}`}>
-                <motion.div
-                    className="group bg-white rounded-2xl shadow-md overflow-hidden cursor-pointer h-full flex flex-col"
-                    whileHover={{ y: -8, scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    transition={{ duration: 0.2 }}
-                >
+                <div className="group bg-white rounded-2xl shadow-md overflow-hidden cursor-pointer h-full flex flex-col hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                     {/* Image with gradient overlay */}
-                    <div className="relative h-48 overflow-hidden bg-gradient-to-br from-sky-blue/20 to-ai-purple/20">
+                    <div className="relative h-48 overflow-hidden bg-gradient-to-br from-accent/20 to-primary/20">
                         {article.image_url ? (
                             <img
                                 src={article.image_url}
@@ -44,14 +34,14 @@ export default function ArticleCard({ article, index }: ArticleCardProps) {
                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                             />
                         ) : (
-                            <div className="w-full h-full bg-gradient-to-br from-sky-blue/30 to-ai-purple/30 group-hover:scale-110 transition-transform duration-500" />
+                            <div className="w-full h-full bg-gradient-to-br from-accent/30 to-primary/30 group-hover:scale-110 transition-transform duration-500" />
                         )}
 
                         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
 
                         {/* Category Badge */}
                         {article.category && (
-                            <span className={`absolute top-3 left-3 px-3 py-1 ${categoryColors[article.category] || 'bg-sky-blue text-white'} backdrop-blur-sm rounded-full text-xs font-semibold shadow-lg`}>
+                            <span className={`absolute top-3 left-3 px-3 py-1 ${categoryColors[article.category] || 'bg-accent text-white'} backdrop-blur-sm rounded-full text-xs font-semibold shadow-lg`}>
                                 {article.category}
                             </span>
                         )}
@@ -59,7 +49,7 @@ export default function ArticleCard({ article, index }: ArticleCardProps) {
 
                     {/* Content */}
                     <div className="p-5 flex-1 flex flex-col">
-                        <h3 className="text-xl font-heading font-bold text-text-primary mb-2 line-clamp-2 group-hover:text-sky-blue transition-colors">
+                        <h3 className="text-xl font-heading font-bold text-text-primary mb-2 line-clamp-2 group-hover:text-accent transition-colors">
                             {article.title}
                         </h3>
                         <p className="text-sm text-text-secondary mb-4 line-clamp-3 leading-relaxed flex-1">
@@ -81,7 +71,7 @@ export default function ArticleCard({ article, index }: ArticleCardProps) {
                                 )}
                             </div>
                             {article.age_group && (
-                                <span className="px-2 py-1 bg-mint/10 text-mint rounded-full font-semibold">
+                                <span className="px-2 py-1 bg-success/10 text-success rounded-full font-semibold">
                                     Ages {article.age_group}
                                 </span>
                             )}
@@ -94,8 +84,8 @@ export default function ArticleCard({ article, index }: ArticleCardProps) {
                             </div>
                         )}
                     </div>
-                </motion.div>
+                </div>
             </Link>
-        </motion.div>
+        </div>
     )
 }
