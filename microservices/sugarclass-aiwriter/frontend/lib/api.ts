@@ -169,6 +169,7 @@ export async function improveText(params: {
     text: string;
     article_text: string;
     year_level: string | number;
+    selected_text?: string;  // Optional selected text to focus on
 }): Promise<ImprovementResponse> {
     return fetchAPI<ImprovementResponse>('/ai/improve', {
         method: 'POST',
@@ -176,6 +177,7 @@ export async function improveText(params: {
             text: params.text,
             article_text: params.article_text,
             year_level: params.year_level,
+            selected_text: params.selected_text,
         }),
     });
 }
@@ -222,6 +224,7 @@ export async function saveWriting(params: {
     word_count: number;
     year_level: string;
     milestone_message?: string;
+    writing_id?: number;  // If provided, updates existing writing instead of creating new
 }): Promise<{ success: boolean; writing_id?: number; error?: string }> {
     return fetchAPI('/ai/save-writing', {
         method: 'POST',

@@ -284,10 +284,10 @@ def generate_prewrite_summary(article_title: str, article_text: str, year_level 
     # Normalize year level to integer
     year_level = normalize_year_level(year_level)
     
-    # Truncate for prompt
-    if len(article_text) > 4000:
-        article_text = article_text[:4000]
-    
+    # Truncate for prompt - increased to provide more context
+    if len(article_text) > 8000:
+        article_text = article_text[:8000]
+
     # Adjust complexity based on year level
     if year_level <= 8:
         complexity = "Use simple language suitable for ages 11-13. Keep sentences short and clear."
@@ -305,7 +305,7 @@ Aim for 100-150 words MAX. Use plain text with asterisks (*) for bullets. Be ext
 
     user_prompt = f"Article title: {article_title}\n\nArticle text:\n{article_text}"
     
-    content, error = llm_chat(system_prompt, user_prompt, temperature=0.3, max_tokens=600, use_case="summary")
+    content, error = llm_chat(system_prompt, user_prompt, temperature=0.3, max_tokens=1200, use_case="summary")
     
     if error:
         return f"Error generating summary: {error}"
@@ -348,9 +348,9 @@ def generate_ai_suggestion(user_text: str, article_title: str = "", article_text
     else:
         next_focus = "Add deeper analysis: broader implications, connections to other events, or expert opinions from the article."
 
-    # Truncate article text
-    if len(article_text) > 2500:
-        article_text = article_text[:2500]
+    # Truncate article text - increased to provide more context
+    if len(article_text) > 5000:
+        article_text = article_text[:5000]
 
     # Adjust language for year level
     if year_level <= 8:
@@ -395,7 +395,7 @@ Do NOT repeat information they've already written. Plain text only, no markdown,
         if article_text:
             user_prompt += f"Article Content:\n{article_text[:1200]}"
 
-    content, error = llm_chat(system_prompt, user_prompt, temperature=0.4, max_tokens=600, use_case="draft")
+    content, error = llm_chat(system_prompt, user_prompt, temperature=0.4, max_tokens=1200, use_case="draft")
 
     if error:
         return f"Error generating suggestion: {error}"
@@ -403,44 +403,110 @@ Do NOT repeat information they've already written. Plain text only, no markdown,
     return content or "No suggestion generated."
 
 
-def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10) -> str:
+def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10, selected_text: str = "") -> str:
     """
-    Improve a single paragraph with better structure and language.
-    
+    Improve a student's writing with detailed mentor-style feedback.
+
     Args:
-        paragraph: The paragraph to improve
+        paragraph: The full text or paragraph to improve
         article_context: Context from the source article
         year_level: Student year level (7-13, can be int or string like 'Year 7')
-    
+        selected_text: Optional specific text selection to focus on
+
     Returns:
-        Improved version of the paragraph
+        Improved version with detailed mentor feedback
     """
-    if not paragraph or len(paragraph.strip()) < 20:
+    text_to_improve = selected_text if selected_text else paragraph
+
+    if not text_to_improve or len(text_to_improve.strip()) < 10:
         return "Please provide some text to improve."
-    
+
     # Normalize year level to integer
     year_level = normalize_year_level(year_level)
-    
-    if year_level <= 8:
-        language_note = "Keep language simple and clear for ages 11-13."
-    elif year_level <= 10:
-        language_note = "Use moderate complexity for ages 14-15."
-    else:
-        language_note = "Use sophisticated language for ages 16-18."
-    
-    system_prompt = f"""Improve this student's paragraph:
-1. Fix any grammar or spelling errors
-2. Improve sentence structure and flow
-3. Make it more engaging while keeping the core meaning
-{language_note}
-Return ONLY the improved paragraph. No explanations, no markdown."""
 
-    content, error = llm_chat(system_prompt, paragraph, temperature=0.3, max_tokens=400, use_case="draft")
-    
+    if year_level <= 8:
+        language_note = "Use simple, clear language for ages 11-13. Focus on basic spelling, grammar, and sentence structure."
+    elif year_level <= 10:
+        language_note = "Use moderate complexity for ages 14-15. Address intermediate grammar and writing mechanics."
+    else:
+        language_note = "Use sophisticated language for ages 16-18. Focus on advanced grammar, style, and clarity."
+
+    system_prompt = f"""You are a supportive writing mentor helping a student improve their writing.
+
+Analyze their text and provide detailed, categorized feedback:
+
+1. **IMPROVED** - The polished version of their text
+
+2. **FEEDBACK** - Categorized changes with specific examples:
+
+SPELLING:
+• "incorrect" → "correct" (explanation why)
+
+GRAMMAR:
+• "incorrect phrase" → "correct phrase" (brief explanation)
+
+PUNCTUATION:
+• "before" → "after" (what was fixed)
+
+CLARITY:
+• "confusing part" → "clearer version" (why it's clearer)
+
+STYLE:
+• "weak wording" → "stronger wording" (why it's better)
+
+3. **LEARNING TIP** - One helpful tip to remember for future writing
+
+Focus areas (in order of priority):
+- Spelling and grammar corrections
+- Punctuation fixes
+- Sentence structure and flow
+- Clarity and word choice
+- Style improvements
+
+{language_note}
+
+Format your response EXACTLY as:
+IMPROVED:
+[improved text here]
+
+FEEDBACK:
+SPELLING:
+• "wrong" → "right" (explanation)
+
+GRAMMAR:
+• "wrong" → "right" (explanation)
+
+PUNCTUATION:
+• "wrong" → "right" (explanation)
+
+CLARITY:
+• "wrong" → "right" (explanation)
+
+STYLE:
+• "wrong" → "right" (explanation)
+
+LEARNING TIP:
+[One helpful tip to remember]
+
+Important guidelines:
+- Only include categories that have actual changes
+- Keep explanations brief but clear
+- Use encouraging, constructive language
+- Be specific with before/after examples
+- Keep the learning tip memorable and practical
+
+If no changes are needed in a category, omit that category entirely."""
+
+    user_prompt = f"Student's writing:\n{text_to_improve}"
+    if article_context:
+        user_prompt += f"\n\nArticle context (for reference):\n{article_context[:500]}"
+
+    content, error = llm_chat(system_prompt, user_prompt, temperature=0.3, max_tokens=800, use_case="draft")
+
     if error:
-        return paragraph  # Return original on error
-    
-    return content or paragraph
+        return text_to_improve  # Return original on error
+
+    return content or text_to_improve
 
 
 # Test function

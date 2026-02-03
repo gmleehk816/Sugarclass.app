@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -31,12 +31,23 @@ import {
     Redo
 } from 'lucide-react'
 
+interface SelectionInfo {
+    text: string
+    from: number
+    to: number
+}
+
+export interface RichTextEditorRef {
+    replaceSelection: (text: string, from: number, to: number) => void
+}
+
 interface RichTextEditorProps {
     content: string
     contentJson?: string
     onChange: (content: string, html: string, json: string) => void
     placeholder?: string
     className?: string
+    onSelectionChange?: (selection: SelectionInfo) => void  // Callback for selection changes
 }
 
 const fontFamilies = [
@@ -70,36 +81,21 @@ const highlightColors = [
     { name: 'Orange', value: '#fed7aa' },
 ]
 
-export default function RichTextEditor({
+const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(function RichTextEditor({
     content,
     contentJson,
     onChange,
     placeholder = 'Start writing...',
-    className = ''
-}: RichTextEditorProps) {
+    className = '',
+    onSelectionChange
+}: RichTextEditorProps, ref) {
     // Color dropdown states
     const [textColorOpen, setTextColorOpen] = useState(false)
     const [highlightColorOpen, setHighlightColorOpen] = useState(false)
     const textColorRef = useRef<HTMLDivElement>(null)
     const highlightColorRef = useRef<HTMLDivElement>(null)
 
-    // Close dropdowns when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (textColorRef.current && !textColorRef.current.contains(event.target as Node)) {
-                setTextColorOpen(false)
-            }
-            if (highlightColorRef.current && !highlightColorRef.current.contains(event.target as Node)) {
-                setHighlightColorOpen(false)
-            }
-        }
-
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside)
-        }
-    }, [])
-
+    // Initialize editor first - must be before any useEffect that uses it
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
@@ -158,6 +154,60 @@ export default function RichTextEditor({
             }
         },
     })
+
+    // Expose methods via ref
+    useImperativeHandle(ref, () => ({
+        replaceSelection: (text: string, from: number, to: number) => {
+            if (!editor) return
+            // Delete the selected range and insert the new text
+            editor.view.dispatch(
+                editor.view.state.tr
+                    .delete(from, to)
+                    .insertText(text, from)
+            )
+            // Trigger content update
+            onChange(editor.getText(), editor.getHTML(), JSON.stringify(editor.getJSON()))
+        }
+    }), [editor, onChange])
+
+    // Close dropdowns when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (textColorRef.current && !textColorRef.current.contains(event.target as Node)) {
+                setTextColorOpen(false)
+            }
+            if (highlightColorRef.current && !highlightColorRef.current.contains(event.target as Node)) {
+                setHighlightColorOpen(false)
+            }
+        }
+
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [])
+
+    // Track text selection and notify parent
+    useEffect(() => {
+        if (!editor || !onSelectionChange) return
+
+        const handleSelectionUpdate = () => {
+            const { from, to } = editor.state.selection
+            // Only report non-empty selections
+            if (from !== to) {
+                const selectedText = editor.state.doc.textBetween(from, to, ' ')
+                onSelectionChange({ text: selectedText, from, to })
+            }
+        }
+
+        editor.on('selectionUpdate', handleSelectionUpdate)
+        editor.on('transaction', handleSelectionUpdate)
+
+        return () => {
+            editor.off('selectionUpdate', handleSelectionUpdate)
+            editor.off('transaction', handleSelectionUpdate)
+        }
+    }, [editor, onSelectionChange])
 
     // Update editor content when prop changes
     useEffect(() => {
@@ -354,7 +404,7 @@ export default function RichTextEditor({
                 <div className="flex gap-1 border-r border-border pr-2 mr-2 items-center">
                     <Type className="w-4 h-4 text-text-muted" />
                     <select
-                        value={editor.getAttributes('textStyle').fontFamily || editor.getAttributes('fontFamily').fontFamily || 'sans-serif'}
+                        value={(editor.getAttributes('textStyle') as any).fontFamily || (editor.getAttributes('fontFamily') as any).fontFamily || 'sans-serif'}
                         onChange={(e) => {
                             editor.chain().focus().setFontFamily(e.target.value).run()
                         }}
@@ -377,7 +427,7 @@ export default function RichTextEditor({
                             className={`p-2 rounded transition-colors ${textColorOpen ? 'bg-surface-dark' : 'hover:bg-surface-dark'}`}
                             title="Text Color"
                         >
-                            <div className="w-4 h-4 rounded" style={{ backgroundColor: editor.getAttributes('textStyle').color || '#000000' }} />
+                            <div className="w-4 h-4 rounded" style={{ backgroundColor: (editor.getAttributes('textStyle') as any).color || '#000000' }} />
                         </button>
                         {textColorOpen && (
                             <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg p-2 flex flex-col gap-1 z-10">
@@ -463,4 +513,6 @@ export default function RichTextEditor({
             </div>
         </div>
     )
-}
+})
+
+export default RichTextEditor

@@ -1117,28 +1117,82 @@ def save_user_writing(
     content_json: str = None,
     word_count: int = 0,
     year_level: str = None,
-    milestone_message: str = None
+    milestone_message: str = None,
+    writing_id: int = None
 ) -> int:
-    """Save user's news writing work."""
+    """Save or update user's news writing work.
+
+    If writing_id is provided, updates that specific writing.
+    Otherwise, checks for existing writing for this user+article and updates it,
+    or creates a new one if none exists.
+    """
     with get_db() as conn:
         cursor = conn.cursor()
 
-        sql = """
-            INSERT INTO user_writings (
-                user_id, article_id, title, content, content_html, content_json, word_count, year_level, milestone_message
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
+        # If writing_id is provided, update that specific writing
+        if writing_id:
+            sql = """
+                UPDATE user_writings
+                SET title = ?, content = ?, content_html = ?, content_json = ?,
+                    word_count = ?, year_level = ?, milestone_message = ?,
+                    updated_at = ?
+                WHERE id = ? AND user_id = ?
+            """
+            cursor.execute(_convert_placeholders(sql), (
+                title, content, content_html, content_json,
+                word_count, year_level, milestone_message,
+                datetime.utcnow().isoformat() if DB_TYPE == "postgresql" else datetime.utcnow().isoformat(),
+                writing_id, user_id
+            ))
+            conn.commit()
+            return writing_id
 
-        cursor.execute(_convert_placeholders(sql), (
-            user_id, article_id, title, content, content_html, content_json, word_count, year_level, milestone_message
-        ))
+        # No writing_id - check for existing writing for this user+article
+        cursor.execute(_convert_placeholders("""
+            SELECT id FROM user_writings
+            WHERE user_id = ? AND article_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        """), (user_id, article_id))
 
-        if DB_TYPE == "postgresql":
-            cursor.execute("SELECT LASTVAL() as id")
-            row = cursor.fetchone()
-            return row["id"] if row else None
+        existing = cursor.fetchone()
+
+        if existing:
+            # Update existing writing
+            existing_id = existing["id"]
+            sql = """
+                UPDATE user_writings
+                SET title = ?, content = ?, content_html = ?, content_json = ?,
+                    word_count = ?, year_level = ?, milestone_message = ?,
+                    updated_at = ?
+                WHERE id = ? AND user_id = ?
+            """
+            cursor.execute(_convert_placeholders(sql), (
+                title, content, content_html, content_json,
+                word_count, year_level, milestone_message,
+                datetime.utcnow().isoformat() if DB_TYPE == "postgresql" else datetime.utcnow().isoformat(),
+                existing_id, user_id
+            ))
+            conn.commit()
+            return existing_id
         else:
-            return cursor.lastrowid
+            # Insert new writing
+            sql = """
+                INSERT INTO user_writings (
+                    user_id, article_id, title, content, content_html, content_json, word_count, year_level, milestone_message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            cursor.execute(_convert_placeholders(sql), (
+                user_id, article_id, title, content, content_html, content_json, word_count, year_level, milestone_message
+            ))
+            conn.commit()
+
+            if DB_TYPE == "postgresql":
+                cursor.execute("SELECT LASTVAL() as id")
+                row = cursor.fetchone()
+                return row["id"] if row else None
+            else:
+                return cursor.lastrowid
 
 
 def get_user_writings(user_id: str) -> List[Dict[str, Any]]:

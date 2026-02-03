@@ -123,6 +123,7 @@ class ImprovementRequest(BaseModel):
     text: str
     article_text: str
     year_level: str | int  # Accept both "Year 7" and 7
+    selected_text: str | None = None  # Optional selected text to focus on
 
 
 @app.get("/")
@@ -185,18 +186,21 @@ def get_article(article_id: int):
     return article
 
 @app.post("/ai/prewrite")
-def generate_prewrite(request: PrewriteRequest, authorization: Optional[str] = Header(None), user: Optional[dict] = Depends(get_current_user)):
+def generate_prewrite(summary_request: PrewriteRequest, authorization: Optional[str] = Header(None), user: Optional[dict] = Depends(get_current_user)):
     """Generate prewrite summary for an article"""
     try:
+        print(f"[Prewrite] Request: title='{summary_request.title[:50]}...', text_length={len(summary_request.text)}, year_level={summary_request.year_level}")
         summary = generate_prewrite_summary(
-            request.title,
-            request.text,
-            request.year_level
+            summary_request.title,
+            summary_request.text,
+            summary_request.year_level
         )
+        print(f"[Prewrite] Response: summary_length={len(summary)}, preview={summary[:100]}")
         if user and authorization:
-            report_activity("writer", "prewrite", authorization, {"title": request.title})
+            report_activity("writer", "prewrite", authorization, {"title": summary_request.title})
         return {"summary": summary, "success": True}
     except Exception as e:
+        print(f"[Prewrite] Error: {e}")
         return {"error": str(e), "success": False}
 
 @app.post("/ai/suggest")
@@ -218,17 +222,21 @@ def generate_suggestion(request: SuggestionRequest, authorization: Optional[str]
 
 @app.post("/ai/improve")
 def improve_text(request: ImprovementRequest, authorization: Optional[str] = Header(None), user: Optional[dict] = Depends(get_current_user)):
-    """Improve user's writing"""
+    """Improve user's writing with mentor feedback"""
     try:
+        print(f"[Improve] Request: text_length={len(request.text)}, selected_length={len(request.selected_text) if request.selected_text else 0}, year_level={request.year_level}")
         improved = improve_paragraph(
             request.text,
             request.article_text,
-            request.year_level
+            request.year_level,
+            request.selected_text or ""
         )
+        print(f"[Improve] Response: improved_length={len(improved)}")
         if user and authorization:
-            report_activity("writer", "improvement", authorization, {})
+            report_activity("writer", "improvement", authorization, {"has_selection": bool(request.selected_text)})
         return {"improved": improved, "success": True}
     except Exception as e:
+        print(f"[Improve] Error: {e}")
         return {"error": str(e), "success": False}
 
 class WritingSaveRequest(BaseModel):
@@ -240,6 +248,7 @@ class WritingSaveRequest(BaseModel):
     word_count: int
     year_level: str
     milestone_message: Optional[str] = None
+    writing_id: Optional[int] = None  # If provided, updates that specific writing
 
 
 @app.post("/ai/save-writing")
@@ -261,7 +270,8 @@ def save_writing(request: WritingSaveRequest, authorization: Optional[str] = Hea
             content_json=request.content_json,
             word_count=request.word_count,
             year_level=request.year_level,
-            milestone_message=request.milestone_message
+            milestone_message=request.milestone_message,
+            writing_id=request.writing_id
         )
         
         # Report progress to Sugarclass
