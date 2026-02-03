@@ -4,6 +4,7 @@ Exposes REST API endpoints for Next.js frontend
 """
 import os
 import requests
+import threading
 from typing import List, Optional, Any
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends, Header
@@ -21,8 +22,9 @@ SUGARCLASS_API_URL = os.getenv("SUGARCLASS_API_URL", "http://backend:8000/api/v1
 
 def get_current_user(authorization: Optional[str] = Header(None)):
     if not authorization:
+        print("[Auth] No authorization header provided")
         return None  # Or raise 401 if you want to force auth
-    
+
     try:
         # Verify with Sugarclass
         response = requests.get(
@@ -31,10 +33,23 @@ def get_current_user(authorization: Optional[str] = Header(None)):
             timeout=5
         )
         if response.status_code == 200:
-            return response.json()
+            user_data = response.json()
+            print(f"[Auth] User authenticated: {user_data.get('id', 'unknown')}")
+            return user_data
+        else:
+            print(f"[Auth] Failed to validate credentials: Status {response.status_code}")
+            try:
+                error_data = response.json()
+                print(f"[Auth] Error response: {error_data}")
+            except:
+                print(f"[Auth] Error response: {response.text}")
+    except requests.exceptions.Timeout:
+        print("[Auth] Timeout connecting to Sugarclass API")
+    except requests.exceptions.ConnectionError:
+        print(f"[Auth] Connection error to Sugarclass API at {SUGARCLASS_API_URL}")
     except Exception as e:
-        print(f"Auth verification error: {e}")
-    
+        print(f"[Auth] Unexpected error: {e}")
+
     return None
 
 def report_activity(service: str, activity_type: str, token: str, metadata: dict = None):
@@ -310,15 +325,76 @@ def get_stats():
     from .database import get_stats
     return get_stats()
 
+# Background collection status tracking
+_collection_status = {
+    "running": False,
+    "last_started": None,
+    "last_completed": None,
+    "last_error": None,
+    "last_results": None,
+}
+_collection_lock = threading.Lock()
+
+
+def _run_collection_background():
+    """Run collection in background thread"""
+    from collector.collector import collect_all
+
+    try:
+        print("[Collect] Background collection started")
+        results = collect_all()
+
+        with _collection_lock:
+            _collection_status["running"] = False
+            _collection_status["last_completed"] = datetime.utcnow().isoformat()
+            _collection_status["last_results"] = results
+            _collection_status["last_error"] = None
+
+        print(f"[Collect] Background collection completed: {len(results)} sources processed")
+    except Exception as e:
+        print(f"[Collect] Background collection error: {e}")
+        with _collection_lock:
+            _collection_status["running"] = False
+            _collection_status["last_error"] = str(e)
+
+
 @app.post("/collect")
 def collect():
-    """Trigger the news collection process"""
-    from collector.collector import collect_all
-    try:
-        results = collect_all()
-        return {"status": "success", "message": "Collection completed", "results": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Trigger the news collection process in background"""
+    with _collection_lock:
+        if _collection_status["running"]:
+            return {
+                "status": "already_running",
+                "message": "Collection is already running",
+                "last_started": _collection_status["last_started"],
+            }
+
+        _collection_status["running"] = True
+        _collection_status["last_started"] = datetime.utcnow().isoformat()
+        _collection_status["last_error"] = None
+
+    # Start collection in background thread
+    thread = threading.Thread(target=_run_collection_background, daemon=True)
+    thread.start()
+
+    return {
+        "status": "started",
+        "message": "Collection started in background",
+        "started_at": _collection_status["last_started"],
+    }
+
+
+@app.get("/collect/status")
+def collect_status():
+    """Get the status of background collection"""
+    with _collection_lock:
+        return {
+            "running": _collection_status["running"],
+            "last_started": _collection_status["last_started"],
+            "last_completed": _collection_status["last_completed"],
+            "last_error": _collection_status["last_error"],
+            "last_results": _collection_status["last_results"],
+        }
 
 if __name__ == "__main__":
     import uvicorn

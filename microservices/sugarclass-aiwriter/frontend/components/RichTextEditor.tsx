@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -77,6 +77,29 @@ export default function RichTextEditor({
     placeholder = 'Start writing...',
     className = ''
 }: RichTextEditorProps) {
+    // Color dropdown states
+    const [textColorOpen, setTextColorOpen] = useState(false)
+    const [highlightColorOpen, setHighlightColorOpen] = useState(false)
+    const textColorRef = useRef<HTMLDivElement>(null)
+    const highlightColorRef = useRef<HTMLDivElement>(null)
+
+    // Close dropdowns when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (textColorRef.current && !textColorRef.current.contains(event.target as Node)) {
+                setTextColorOpen(false)
+            }
+            if (highlightColorRef.current && !highlightColorRef.current.contains(event.target as Node)) {
+                setHighlightColorOpen(false)
+            }
+        }
+
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [])
+
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
@@ -347,52 +370,66 @@ export default function RichTextEditor({
                 </div>
 
                 {/* Text Color */}
-                <div className="flex gap-1 border-r border-border pr-2 mr-2 items-center">
-                    <div className="relative group">
-                        <button className="p-2 rounded hover:bg-surface-dark transition-colors" title="Text Color">
+                <div className="flex gap-1 border-r border-border pr-2 mr-2 items-center" ref={textColorRef}>
+                    <div className="relative">
+                        <button
+                            onClick={() => setTextColorOpen(!textColorOpen)}
+                            className={`p-2 rounded transition-colors ${textColorOpen ? 'bg-surface-dark' : 'hover:bg-surface-dark'}`}
+                            title="Text Color"
+                        >
                             <div className="w-4 h-4 rounded" style={{ backgroundColor: editor.getAttributes('textStyle').color || '#000000' }} />
                         </button>
-                        <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg p-2 hidden group-hover:flex flex-col gap-1 z-10 pointer-events-auto">
-                            {textColors.map(color => (
-                                <button
-                                    key={color.value}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault()
-                                        editor.chain().focus().setColor(color.value).run()
-                                    }}
-                                    className="w-6 h-6 rounded border border-border hover:scale-110 transition-transform"
-                                    style={{ backgroundColor: color.value }}
-                                    title={color.name}
-                                />
-                            ))}
-                        </div>
+                        {textColorOpen && (
+                            <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg p-2 flex flex-col gap-1 z-10">
+                                {textColors.map(color => (
+                                    <button
+                                        key={color.value}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault()
+                                            editor.chain().focus().setColor(color.value).run()
+                                            setTextColorOpen(false)
+                                        }}
+                                        className="w-6 h-6 rounded border border-border hover:scale-110 transition-transform"
+                                        style={{ backgroundColor: color.value }}
+                                        title={color.name}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* Highlight Color */}
-                <div className="flex gap-1 border-r border-border pr-2 mr-2 items-center">
-                    <div className="relative group">
-                        <button className="p-2 rounded hover:bg-surface-dark transition-colors" title="Highlight">
+                <div className="flex gap-1 border-r border-border pr-2 mr-2 items-center" ref={highlightColorRef}>
+                    <div className="relative">
+                        <button
+                            onClick={() => setHighlightColorOpen(!highlightColorOpen)}
+                            className={`p-2 rounded transition-colors ${highlightColorOpen ? 'bg-surface-dark' : 'hover:bg-surface-dark'}`}
+                            title="Highlight"
+                        >
                             <Highlighter className="w-4 h-4" />
                         </button>
-                        <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg p-2 hidden group-hover:flex flex-col gap-1 z-10 pointer-events-auto">
-                            {highlightColors.map(color => (
-                                <button
-                                    key={color.value}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault()
-                                        if (color.value === 'transparent') {
-                                            editor.chain().focus().unsetHighlight().run()
-                                        } else {
-                                            editor.chain().focus().setHighlight({ color: color.value }).run()
-                                        }
-                                    }}
-                                    className="w-6 h-6 rounded border border-border hover:scale-110 transition-transform"
-                                    style={{ backgroundColor: color.value }}
-                                    title={color.name}
-                                />
-                            ))}
-                        </div>
+                        {highlightColorOpen && (
+                            <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg p-2 flex flex-col gap-1 z-10">
+                                {highlightColors.map(color => (
+                                    <button
+                                        key={color.value}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault()
+                                            if (color.value === 'transparent') {
+                                                editor.chain().focus().unsetHighlight().run()
+                                            } else {
+                                                editor.chain().focus().setHighlight({ color: color.value }).run()
+                                            }
+                                            setHighlightColorOpen(false)
+                                        }}
+                                        className="w-6 h-6 rounded border border-border hover:scale-110 transition-transform"
+                                        style={{ backgroundColor: color.value }}
+                                        title={color.name}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 

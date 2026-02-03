@@ -45,6 +45,20 @@ export interface StatsResponse {
     by_source: Record<string, number>;
 }
 
+export interface CollectionStatus {
+    running: boolean;
+    last_started: string | null;
+    last_completed: string | null;
+    last_error: string | null;
+    last_results: any[] | null;
+}
+
+export interface CollectionResponse {
+    status: 'started' | 'already_running' | 'success';
+    message: string;
+    started_at?: string;
+}
+
 // Helper function for API requests
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
@@ -61,7 +75,19 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     });
 
     if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        // Try to extract error detail from response
+        let errorMessage = `API Error: ${response.status} ${response.statusText}`;
+        try {
+            const errorData = await response.json();
+            if (errorData.detail) {
+                errorMessage = errorData.detail;
+            } else if (errorData.error) {
+                errorMessage = errorData.error;
+            }
+        } catch {
+            // If response is not JSON, use status text
+        }
+        throw new Error(errorMessage);
     }
 
     return response.json();
@@ -169,12 +195,19 @@ export async function healthCheck(): Promise<{ status: string; service: string; 
 }
 
 /**
- * Trigger news collection
+ * Trigger news collection (returns immediately, runs in background)
  */
-export async function triggerCollection(): Promise<{ status: string; message: string; results?: any }> {
-    return fetchAPI('/collect', {
+export async function triggerCollection(): Promise<CollectionResponse> {
+    return fetchAPI<CollectionResponse>('/collect', {
         method: 'POST',
     });
+}
+
+/**
+ * Get collection status
+ */
+export async function getCollectionStatus(): Promise<CollectionStatus> {
+    return fetchAPI<CollectionStatus>('/collect/status');
 }
 
 /**

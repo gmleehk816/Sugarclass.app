@@ -791,8 +791,14 @@ def get_articles(
             params.append(category)
         
         if age_group:
-            query += " AND age_group = ?"
-            params.append(age_group)
+            # Include NULL age_group values as they belong to the default "11-14" group
+            # This ensures older articles (collected before age_group feature) appear in filters
+            if age_group == "11-14":
+                query += " AND (age_group = ? OR age_group IS NULL)"
+                params.append(age_group)
+            else:
+                query += " AND age_group = ?"
+                params.append(age_group)
         
         if extraction_method:
             query += " AND extraction_method = ?"

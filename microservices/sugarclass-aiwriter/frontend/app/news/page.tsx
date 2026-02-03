@@ -1,9 +1,9 @@
 'use client'
 
-import { Search, RefreshCw, Settings2 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { Search, RefreshCw, Settings2, CheckCircle2, Info } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
 import ArticleCard from '@/components/ArticleCard'
-import { getArticles, Article, triggerCollection } from '@/lib/api'
+import { getArticles, Article, triggerCollection, getCollectionStatus, CollectionStatus } from '@/lib/api'
 
 export default function NewsPage() {
     const [selectedCategory, setSelectedCategory] = useState('All')
@@ -12,8 +12,10 @@ export default function NewsPage() {
     const [loading, setLoading] = useState(true)
     const [loadingMore, setLoadingMore] = useState(false)
     const [syncing, setSyncing] = useState(false)
+    const [syncMessage, setSyncMessage] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [offset, setOffset] = useState(0)
+    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
     const pageSize = 12
 
     const categories = [
@@ -64,14 +66,67 @@ export default function NewsPage() {
     async function handleSyncNews() {
         try {
             setSyncing(true)
-            await triggerCollection()
-            await fetchArticles() // Refresh the list
+            setSyncMessage('Starting sync...')
+            setError(null)
+
+            const response = await triggerCollection()
+
+            if (response.status === 'already_running') {
+                setSyncMessage('Sync already in progress...')
+                startPolling()
+            } else if (response.status === 'started') {
+                setSyncMessage('Syncing latest news... (takes 5-7 minutes)')
+                startPolling()
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to sync news')
-        } finally {
             setSyncing(false)
+            setSyncMessage(null)
         }
     }
+
+    function startPolling() {
+        // Clear any existing interval
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+        }
+
+        // Poll every 3 seconds
+        pollingIntervalRef.current = setInterval(async () => {
+            try {
+                const status: CollectionStatus = await getCollectionStatus()
+
+                if (!status.running) {
+                    // Collection completed
+                    clearInterval(pollingIntervalRef.current!)
+                    pollingIntervalRef.current = null
+
+                    if (status.last_error) {
+                        setError(`Sync completed with errors: ${status.last_error}`)
+                    } else {
+                        setSyncMessage('Sync completed!')
+                        // Show success message briefly, then refresh
+                        setTimeout(() => {
+                            setSyncMessage(null)
+                            fetchArticles()
+                        }, 2000)
+                    }
+                    setSyncing(false)
+                }
+            } catch (err) {
+                console.error('Error checking sync status:', err)
+            }
+        }, 3000)
+    }
+
+    // Cleanup polling on unmount
+    useEffect(() => {
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current)
+            }
+        }
+    }, [])
 
     // Fetch articles from API
     useEffect(() => {
@@ -95,18 +150,38 @@ export default function NewsPage() {
                         <button
                             onClick={handleSyncNews}
                             disabled={syncing}
-                            className={`flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-xl hover:bg-accent-light transition-colors shadow-sm text-sm font-semibold ${syncing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-xl hover:bg-accent-light transition-colors shadow-sm text-sm font-semibold ${syncing ? 'opacity-90 cursor-wait' : ''}`}
                         >
-                            <div className={`${syncing ? 'animate-spin' : ''}`}>
-                                <RefreshCw className="w-4 h-4" />
-                            </div>
-                            {syncing ? 'Syncing...' : 'Sync Latest News'}
+                            {syncing && syncMessage === 'Sync completed!' ? (
+                                <CheckCircle2 className="w-4 h-4" />
+                            ) : (
+                                <div className={`${syncing ? 'animate-spin' : ''}`}>
+                                    <RefreshCw className="w-4 h-4" />
+                                </div>
+                            )}
+                            {syncing ? (syncMessage || 'Syncing...') : 'Sync Latest News'}
                         </button>
                         <button className="p-3 bg-surface rounded-xl hover:bg-surface-dark transition-colors shadow-sm">
                             <Settings2 className="w-5 h-5 text-text-secondary" />
                         </button>
                     </div>
                 </div>
+
+                {/* Sync Notification */}
+                {syncing && (
+                    <div className="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                            <p className="font-medium text-blue-900 dark:text-blue-100 mb-1">
+                                News sync in progress
+                            </p>
+                            <p className="text-sm text-blue-700 dark:text-blue-300">
+                                This takes 5-7 minutes to complete. You can continue browsing while we fetch the latest articles. The page will refresh automatically when done.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Search Bar */}
                 <div className="mb-8">
                     <div className="relative">
