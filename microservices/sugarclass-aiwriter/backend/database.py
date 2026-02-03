@@ -382,6 +382,22 @@ def init_db():
                 )
             """)
         
+        # Migrations for user_writings table (add content_html and content_json if missing)
+        if DB_TYPE == "postgresql":
+            # PostgreSQL supports IF NOT EXISTS for ALTER TABLE
+            cursor.execute("ALTER TABLE user_writings ADD COLUMN IF NOT EXISTS content_html TEXT")
+            cursor.execute("ALTER TABLE user_writings ADD COLUMN IF NOT EXISTS content_json TEXT")
+        else:
+            # SQLite - use try-except since it doesn't support IF NOT EXISTS for ADD COLUMN
+            try:
+                cursor.execute("ALTER TABLE user_writings ADD COLUMN content_html TEXT")
+            except Exception:
+                pass  # Column already exists
+            try:
+                cursor.execute("ALTER TABLE user_writings ADD COLUMN content_json TEXT")
+            except Exception:
+                pass  # Column already exists
+
         # Create indexes for better query performance (only for columns that exist)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category)")
