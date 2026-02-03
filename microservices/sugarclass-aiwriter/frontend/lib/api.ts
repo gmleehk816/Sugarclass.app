@@ -182,6 +182,8 @@ export async function saveWriting(params: {
     article_id: number;
     title: string;
     content: string;
+    content_html?: string;
+    content_json?: string;
     word_count: number;
     year_level: string;
     milestone_message?: string;
@@ -190,4 +192,32 @@ export async function saveWriting(params: {
         method: 'POST',
         body: JSON.stringify(params),
     });
+}
+
+export interface UserWriting {
+    id: number;
+    user_id: string;
+    article_id: number;
+    title: string;
+    content: string;
+    content_html?: string;
+    content_json?: string;
+    word_count: number;
+    year_level?: string;
+    milestone_message?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface MyWritingsResponse {
+    writings: UserWriting[];
+    success: boolean;
+    error?: string;
+}
+
+/**
+ * Get all user's saved writings
+ */
+export async function getMyWritings(): Promise<MyWritingsResponse> {
+    return fetchAPI<MyWritingsResponse>('/ai/my-writings');
 }

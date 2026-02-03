@@ -341,6 +341,8 @@ def init_db():
                     article_id INTEGER REFERENCES articles(id),
                     title TEXT NOT NULL,
                     content TEXT NOT NULL,
+                    content_html TEXT,
+                    content_json TEXT,
                     word_count INTEGER DEFAULT 0,
                     year_level TEXT,
                     milestone_message TEXT,
@@ -370,6 +372,8 @@ def init_db():
                     article_id INTEGER REFERENCES articles(id),
                     title TEXT NOT NULL,
                     content TEXT NOT NULL,
+                    content_html TEXT,
+                    content_json TEXT,
                     word_count INTEGER DEFAULT 0,
                     year_level TEXT,
                     milestone_message TEXT,
@@ -836,24 +840,26 @@ def save_user_writing(
     article_id: int,
     title: str,
     content: str,
-    word_count: int,
-    year_level: str,
+    content_html: str = None,
+    content_json: str = None,
+    word_count: int = 0,
+    year_level: str = None,
     milestone_message: str = None
 ) -> int:
     """Save user's news writing work."""
     with get_db() as conn:
         cursor = conn.cursor()
-        
+
         sql = """
             INSERT INTO user_writings (
-                user_id, article_id, title, content, word_count, year_level, milestone_message
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                user_id, article_id, title, content, content_html, content_json, word_count, year_level, milestone_message
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        
+
         cursor.execute(_convert_placeholders(sql), (
-            user_id, article_id, title, content, word_count, year_level, milestone_message
+            user_id, article_id, title, content, content_html, content_json, word_count, year_level, milestone_message
         ))
-        
+
         if DB_TYPE == "postgresql":
             cursor.execute("SELECT LASTVAL() as id")
             row = cursor.fetchone()
@@ -871,6 +877,28 @@ def get_user_writings(user_id: str) -> List[Dict[str, Any]]:
         """), (user_id,))
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+def delete_user_writing(writing_id: int, user_id: str) -> bool:
+    """Delete a specific writing for a user."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(_convert_placeholders("""
+            DELETE FROM user_writings WHERE id = ? AND user_id = ?
+        """), (writing_id, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def get_user_writing(writing_id: int, user_id: str) -> Optional[Dict[str, Any]]:
+    """Get a specific writing for a user."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(_convert_placeholders("""
+            SELECT * FROM user_writings WHERE id = ? AND user_id = ?
+        """), (writing_id, user_id))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 # Initialize database on import

@@ -218,6 +218,8 @@ class WritingSaveRequest(BaseModel):
     article_id: int
     title: str
     content: str
+    content_html: Optional[str] = None
+    content_json: Optional[str] = None
     word_count: int
     year_level: str
     milestone_message: Optional[str] = None
@@ -238,6 +240,8 @@ def save_writing(request: WritingSaveRequest, authorization: Optional[str] = Hea
             article_id=request.article_id,
             title=request.title,
             content=request.content,
+            content_html=request.content_html,
+            content_json=request.content_json,
             word_count=request.word_count,
             year_level=request.year_level,
             milestone_message=request.milestone_message
@@ -267,14 +271,33 @@ def save_writing(request: WritingSaveRequest, authorization: Optional[str] = Hea
 def get_my_writings(user: Optional[dict] = Depends(get_current_user)):
     """Get all writings for the current user"""
     from .database import get_user_writings
-    
+
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
-        
+
     try:
         user_id = str(user.get("id"))
         writings = get_user_writings(user_id)
         return {"writings": writings, "success": True}
+    except Exception as e:
+        return {"error": str(e), "success": False}
+
+
+@app.delete("/ai/writings/{writing_id}")
+def delete_writing(writing_id: int, user: Optional[dict] = Depends(get_current_user)):
+    """Delete a specific writing for the current user"""
+    from .database import delete_user_writing
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    try:
+        user_id = str(user.get("id"))
+        success = delete_user_writing(writing_id, user_id)
+        if success:
+            return {"success": True}
+        else:
+            return {"error": "Writing not found or you don't have permission", "success": False}
     except Exception as e:
         return {"error": str(e), "success": False}
 

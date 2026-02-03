@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { BookOpen, Menu, X, Home, Newspaper, Sparkles, ChevronDown, Zap } from 'lucide-react'
+import { BookOpen, Menu, X, Home, Newspaper, Sparkles, ChevronDown, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -22,6 +22,7 @@ export default function Navbar() {
     const navItems = [
         { href: '/', label: 'Home', icon: Home },
         { href: '/news', label: 'News Stories', icon: Newspaper },
+        { href: '/my-writings', label: 'My Writings', icon: FileText },
     ]
 
     const mobileMenuVariants = {
@@ -87,15 +88,6 @@ export default function Navbar() {
                             })}
                         </div>
 
-                        {/* Desktop CTA */}
-                        <div className="hidden md:block">
-                            <Link href="/news">
-                                <button className="px-6 py-2.5 bg-accent hover:bg-accent-light text-white rounded-xl font-semibold text-sm shadow-md hover:shadow-lg transition-all flex items-center gap-2">
-                                    <Zap className="w-4 h-4" />
-                                    Start Writing
-                                </button>
-                            </Link>
-                        </div>
 
                         {/* Mobile Menu Button */}
                         <button
@@ -167,15 +159,6 @@ export default function Navbar() {
                                 })}
                             </div>
 
-                            {/* Menu Footer */}
-                            <div className="p-4 border-t border-border">
-                                <Link href="/news" onClick={() => setIsMenuOpen(false)}>
-                                    <button className="w-full px-6 py-4 bg-accent hover:bg-accent-light text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2">
-                                        <Zap className="w-5 h-5" />
-                                        Start Writing Now
-                                    </button>
-                                </Link>
-                            </div>
                         </div>
                     </div>
                 </>

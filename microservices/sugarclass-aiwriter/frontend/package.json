@@ -12,7 +12,17 @@
     "clean": "rimraf .next"
   },
   "dependencies": {
+    "@tiptap/extension-color": "^2.12.2",
+    "@tiptap/extension-font-family": "^2.12.2",
+    "@tiptap/extension-highlight": "^2.27.2",
+    "@tiptap/extension-link": "^2.12.2",
+    "@tiptap/extension-text-align": "^2.12.2",
+    "@tiptap/extension-text-style": "^2.12.2",
+    "@tiptap/extension-underline": "^2.12.2",
+    "@tiptap/react": "^2.12.2",
+    "@tiptap/starter-kit": "^2.12.2",
     "framer-motion": "^12.27.1",
+    "lowlight": "^3.3.0",
     "lucide-react": "^0.562.0",
     "next": "16.1.4",
     "react": "19.2.3",

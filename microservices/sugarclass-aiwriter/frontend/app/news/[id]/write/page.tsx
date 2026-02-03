@@ -6,6 +6,18 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { getArticle, Article, generatePrewrite, generateSuggestion, improveText, saveWriting } from '@/lib/api'
+import dynamic from 'next/dynamic'
+
+const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), {
+    ssr: false,
+    loading: () => (
+        <div className="w-full h-[500px] p-4 border border-border rounded-lg bg-surface animate-pulse">
+            <div className="h-4 bg-surface-dark rounded w-3/4 mb-2"></div>
+            <div className="h-4 bg-surface-dark rounded w-1/2 mb-2"></div>
+            <div className="h-4 bg-surface-dark rounded w-5/6"></div>
+        </div>
+    )
+})
 
 type TabType = 'plan' | 'suggest' | 'improve'
 
@@ -16,6 +28,8 @@ export default function WriterPage() {
     const [article, setArticle] = useState<Article | null>(null)
     const [loading, setLoading] = useState(true)
     const [userText, setUserText] = useState('')
+    const [contentHtml, setContentHtml] = useState('')
+    const [contentJson, setContentJson] = useState('')
     const [prewriteSummary, setPrewriteSummary] = useState<string | null>(null)
     const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
     const [aiLoading, setAiLoading] = useState(false)
@@ -61,6 +75,8 @@ export default function WriterPage() {
                 article_id: articleId,
                 title: article.title,
                 content: userText,
+                content_html: contentHtml,
+                content_json: contentJson,
                 word_count: wordCount,
                 year_level: yearLevel,
                 milestone_message: currentMilestone?.message
@@ -77,6 +93,12 @@ export default function WriterPage() {
             setSaveStatus('error')
             setAiError('Failed to connect to server')
         }
+    }
+
+    function handleEditorChange(text: string, html: string, json: string) {
+        setUserText(text)
+        setContentHtml(html)
+        setContentJson(json)
     }
 
     async function handleGeneratePrewrite() {
@@ -327,11 +349,10 @@ export default function WriterPage() {
                         {/* Text Editor */}
                         <div className="bg-surface rounded-xl shadow-sm border border-border p-4">
                             <h2 className="text-lg font-heading font-bold text-text-primary mb-2">Write Your Article</h2>
-                            <textarea
-                                value={userText}
-                                onChange={(e) => setUserText(e.target.value)}
+                            <RichTextEditor
+                                content={userText}
+                                onChange={handleEditorChange}
                                 placeholder="Start writing your article here... Use the AI assistant for help!"
-                                className="w-full h-[500px] p-4 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none text-text-primary leading-relaxed text-base bg-surface"
                             />
 
                             {/* Milestone Encouragement */}
@@ -412,7 +433,7 @@ export default function WriterPage() {
                                             whileTap={{ scale: 0.98 }}
                                             onClick={handleGeneratePrewrite}
                                             disabled={aiLoading}
-                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary to-primary-dark text-white rounded-lg font-semibold hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                                         >
                                             {aiLoading ? (
                                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -453,7 +474,7 @@ export default function WriterPage() {
                                             whileTap={{ scale: 0.98 }}
                                             onClick={handleGenerateSuggestion}
                                             disabled={aiLoading || userText.length < 10}
-                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-accent to-accent-dark text-white rounded-lg font-semibold hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-accent text-white rounded-lg font-semibold hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                                         >
                                             {aiLoading ? (
                                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -478,7 +499,7 @@ export default function WriterPage() {
                                                 </div>
                                                 <button
                                                     onClick={handleAddToEditor}
-                                                    className="w-full px-3 py-2 bg-accent text-white rounded-lg text-sm font-semibold hover:bg-accent-dark transition-colors"
+                                                    className="w-full px-3 py-2 bg-accent text-white rounded-lg text-sm font-semibold hover:bg-accent/90 transition-colors"
                                                 >
                                                     Add to My Writing
                                                 </button>
@@ -500,7 +521,7 @@ export default function WriterPage() {
                                             whileTap={{ scale: 0.98 }}
                                             onClick={handleImproveText}
                                             disabled={aiLoading || userText.length < 20}
-                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-success to-success-dark text-white rounded-lg font-semibold hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-success text-white rounded-lg font-semibold hover:bg-success/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                                         >
                                             {aiLoading ? (
                                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -526,7 +547,7 @@ export default function WriterPage() {
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={handleReplaceWithImproved}
-                                                        className="flex-1 px-3 py-2 bg-success text-white rounded-lg text-sm font-semibold hover:bg-success-dark transition-colors"
+                                                        className="flex-1 px-3 py-2 bg-success text-white rounded-lg text-sm font-semibold hover:bg-success/90 transition-colors"
                                                     >
                                                         Use This
                                                     </button>

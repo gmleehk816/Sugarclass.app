@@ -15,7 +15,11 @@
       "Bash(docker:*)",
       "Bash(timeout:*)",
       "Bash(curl:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run clean:*)",
+      "Bash(set:*)"
     ],
     "deny": [],
     "ask": []
