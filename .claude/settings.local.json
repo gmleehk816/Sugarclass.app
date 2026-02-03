@@ -19,7 +19,10 @@
       "Bash(pip install:*)",
       "Bash(npm run build:*)",
       "Bash(npm run clean:*)",
-      "Bash(set:*)"
+      "Bash(set:*)",
+      "Bash(findstr:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

@@ -122,6 +122,7 @@ export async function generateSuggestion(params: {
     title: string;
     article_text: string;
     year_level: string | number;
+    prewrite_summary?: string;
 }): Promise<SuggestionResponse> {
     return fetchAPI<SuggestionResponse>('/ai/suggest', {
         method: 'POST',
@@ -130,6 +131,7 @@ export async function generateSuggestion(params: {
             title: params.title,
             article_text: params.article_text,
             year_level: params.year_level,
+            prewrite_summary: params.prewrite_summary,
         }),
     });
 }

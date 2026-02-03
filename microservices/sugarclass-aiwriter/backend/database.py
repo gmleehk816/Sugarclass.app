@@ -6,7 +6,7 @@ Supports both SQLite (development) and PostgreSQL (production).
 import sqlite3
 import os
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any, Union, Tuple
 from contextlib import contextmanager
 
 # Database configuration
@@ -420,6 +420,11 @@ def init_db():
             ("theguardian.com", "The Guardian", "https://www.theguardian.com/world/rss"),
             ("phys.org", "Phys.org", "https://phys.org/rss-feed/"),
             ("sciencenewsforstudents.org", "Science News Explores", "https://www.snexplores.org/feed"),
+            # Kid-friendly news sources (age-appropriate content)
+            ("bbc.co.uk", "BBC Newsround", "https://feeds.bbci.co.uk/newsround/rss.xml"),
+            ("dogonews.com", "Dogo News", "https://www.dogonews.com/rss"),
+            ("timeforkids.com", "Time for Kids", "https://www.timeforkids.com/g34/feed/"),
+            ("kids.nationalgeographic.com", "Nat Geo Kids", "https://kids.nationalgeographic.com/feed"),
         ]
         
         for domain, name, rss_url in default_sources:
@@ -429,29 +434,273 @@ def init_db():
             """), (domain, name, rss_url))
 
 
-def insert_article(article: Dict[str, Any]) -> Optional[int]:
-    """Insert or update an article in the database. Returns article ID if successful."""
-    with get_db() as conn:
+# ============================================================================
+# DUPLICATE PREVENTION
+# ============================================================================
+
+def normalize_url(url: str) -> str:
+    """
+    Normalize URL for duplicate detection.
+
+    Removes:
+    - Tracking parameters (utm_*, fbclid, gclid, etc.)
+    - Session IDs
+    - Protocol variations (force https)
+    - www prefix
+    - Trailing slashes
+
+    Args:
+        url: URL to normalize
+
+    Returns:
+        Normalized URL suitable for duplicate comparison
+    """
+    if not url:
+        return ""
+
+    from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+
+    try:
+        # Parse URL
+        parsed = urlparse(url.strip())
+
+        # Force https and remove www
+        scheme = "https"
+        netloc = parsed.netloc.lower()
+        if netloc.startswith("www."):
+            netloc = netloc[4:]
+
+        # Remove tracking parameters
+        query_params = parse_qs(parsed.query, keep_blank_values=False)
+        tracking_params = {
+            "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+            "fbclid", "gclid", "msclkid", "ncid", "cid", "ref",
+            "share", "utm_reader", "utm_referrer", "utm_social", "ei",
+            "fb", "ig", "tw", "_ga", "_gid", "mc_cid", "mc_eid",
+            "WT.mc_id", "s", "source", "trk", "trkCampaign",
+        }
+
+        # Keep only non-tracking params
+        clean_params = {k: v for k, v in query_params.items() if k not in tracking_params}
+
+        # Rebuild query string
+        query = urlencode(clean_params, doseq=True) if clean_params else ""
+
+        # Remove trailing slash from path
+        path = parsed.path.rstrip("/")
+
+        # Rebuild URL
+        normalized = urlunparse((scheme, netloc, path, parsed.params, query, parsed.fragment))
+
+        return normalized
+
+    except Exception as e:
+        print(f"[URL Normalization Error] {e}")
+        return url.strip().lower()
+
+
+def check_duplicate_before_insert(
+    url: str,
+    title: str,
+    source: str,
+    conn=None
+) -> Optional[Dict[str, Any]]:
+    """
+    Check if an article already exists before insertion.
+
+    Checks in order:
+    1. Exact URL match (normalized)
+    2. Title + Source match (for same article from different URLs)
+    3. Similar title match (fuzzy matching)
+
+    Args:
+        url: Article URL
+        title: Article title
+        source: Article source/domain
+        conn: Optional database connection (creates new if None)
+
+    Returns:
+        Existing article dict if duplicate found, None otherwise
+    """
+    from . import database as db_module  # Import at runtime to avoid circular import
+
+    should_close = False
+    if conn is None:
+        conn = db_module.get_db().__enter__()
+        should_close = True
+
+    try:
         cursor = conn.cursor()
-        
-        # Calculate word count
-        full_text = article.get("full_text") or ""
-        word_count = len(full_text.split()) if full_text else 0
-        
-        # Determine if we have full article
-        has_full_article = 1 if word_count > 100 else 0
-        
-        # Determine extraction status
-        extraction_status = "success" if has_full_article else "partial"
-        
-        try:
+
+        # Normalize URL for comparison
+        normalized_url = normalize_url(url)
+
+        # Check 1: Exact URL match (normalized)
+        # First check by exact match
+        cursor.execute(_convert_placeholders("""
+            SELECT * FROM articles WHERE url = ?
+        """), (url,))
+        existing = cursor.fetchone()
+
+        if existing:
+            return dict(existing)
+
+        # Check normalized URLs by getting all and comparing in Python
+        # (SQLite doesn't support regex replace, so we do this in Python)
+        cursor.execute(_convert_placeholders("""
+            SELECT id, url, title, source FROM articles WHERE source = ?
+            LIMIT 100
+        """), (source,))
+
+        rows = cursor.fetchall()
+
+        for row in rows:
+            row_dict = dict(row)
+            existing_url = row_dict.get("url", "")
+            existing_normalized = normalize_url(existing_url)
+
+            if existing_normalized == normalized_url:
+                # Found duplicate by normalized URL - fetch full article
+                cursor.execute(_convert_placeholders("""
+                    SELECT * FROM articles WHERE id = ?
+                """), (row_dict["id"],))
+                return dict(cursor.fetchone())
+
+        # Check 2: Title + Source match
+        # Normalize titles for comparison (remove extra whitespace, lower case)
+        normalized_title = " ".join(title.lower().split())
+
+        cursor.execute(_convert_placeholders("""
+            SELECT * FROM articles
+            WHERE source = ?
+            AND LOWER(TRIM(title)) = ?
+            LIMIT 1
+        """), (source, normalized_title))
+
+        existing = cursor.fetchone()
+        if existing:
+            return dict(existing)
+
+        # Check 3: Similar title match (using simple similarity)
+        # Check if title is very similar to any existing title from same source
+        cursor.execute(_convert_placeholders("""
+            SELECT id, url, title, source FROM articles
+            WHERE source = ?
+            ORDER BY id DESC
+            LIMIT 50
+        """), (source,))
+
+        rows = cursor.fetchall()
+
+        for row in rows:
+            row_dict = dict(row)
+            existing_title = row_dict.get("title", "")
+
+            # Calculate similarity using simple character matching
+            similarity = _calculate_title_similarity(normalized_title, existing_title.lower())
+
+            if similarity >= 0.85:  # 85% similarity threshold
+                # Found highly similar title - likely a duplicate
+                cursor.execute(_convert_placeholders("""
+                    SELECT * FROM articles WHERE id = ?
+                """), (row_dict["id"],))
+                return dict(cursor.fetchone())
+
+        # No duplicate found
+        return None
+
+    finally:
+        if should_close:
+            conn.__exit__(None, None, None)
+
+
+def _calculate_title_similarity(title1: str, title2: str) -> float:
+    """
+    Calculate similarity between two titles using a simple algorithm.
+
+    Args:
+        title1: First title (already normalized)
+        title2: Second title
+
+    Returns:
+        Similarity score between 0 and 1
+    """
+    if not title1 or not title2:
+        return 0.0
+
+    # Quick check: if one is contained in the other, high similarity
+    if title1 in title2 or title2 in title1:
+        return 0.9
+
+    # Word-based similarity (Jaccard index)
+    words1 = set(title1.split())
+    words2 = set(title2.split())
+
+    if not words1 or not words2:
+        return 0.0
+
+    intersection = words1 & words2
+    union = words1 | words2
+
+    if not union:
+        return 0.0
+
+    return len(intersection) / len(union)
+
+
+def insert_article(article: Dict[str, Any], check_duplicate: bool = True) -> Optional[int]:
+    """
+    Insert or update an article in the database. Returns article ID if successful.
+
+    Args:
+        article: Article data dictionary
+        check_duplicate: Whether to check for duplicates before inserting (default: True)
+
+    Returns:
+        Article ID if successful, None if duplicate found or error occurred
+    """
+    try:
+        # Pre-insert duplicate check (before expensive operations)
+        if check_duplicate:
+            url = article.get("url", "")
+            title = article.get("title", "")
+            source = article.get("source", "")
+
+            existing = check_duplicate_before_insert(url, title, source)
+            if existing:
+                # Update existing article with new data if it has better content
+                existing_id = existing.get("id")
+                existing_full_text = existing.get("full_text", "")
+                new_full_text = article.get("full_text", "")
+
+                # Only update if new content is better (longer/more complete)
+                if new_full_text and len(new_full_text) > len(existing_full_text):
+                    print(f"[Duplicate Update] Improving existing article: {title[:50]}...")
+                    # This will be handled by ON CONFLICT below
+                else:
+                    print(f"[Duplicate Skipped] Article already exists: {title[:50]}...")
+                    return existing_id
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+
+            # Calculate word count
+            full_text = article.get("full_text") or ""
+            word_count = len(full_text.split()) if full_text else 0
+
+            # Determine if we have full article
+            has_full_article = 1 if word_count > 100 else 0
+
+            # Determine extraction status
+            extraction_status = "success" if has_full_article else "partial"
+
             sql = """
                 INSERT INTO articles (
                     uuid, title, description, full_text, url, image_url,
                     source, category, published_at, collected_at,
                     extraction_status, extraction_method, word_count, has_full_article,
-                    api_source
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    api_source, age_group
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(url) DO UPDATE SET
                     title = excluded.title,
                     description = excluded.description,
@@ -463,13 +712,14 @@ def insert_article(article: Dict[str, Any]) -> Optional[int]:
                     extraction_method = excluded.extraction_method,
                     word_count = excluded.word_count,
                     has_full_article = excluded.has_full_article,
-                    api_source = excluded.api_source
+                    api_source = excluded.api_source,
+                    age_group = excluded.age_group
             """
             # Prepare article data, handling empty strings for PostgreSQL timestamp compatibility
             published_at = article.get("published_at")
             if not published_at:
                 published_at = None
-                
+
             collected_at = article.get("collected_at")
             if not collected_at:
                 collected_at = datetime.utcnow().isoformat()
@@ -489,7 +739,8 @@ def insert_article(article: Dict[str, Any]) -> Optional[int]:
                 article.get("extraction_method"),
                 word_count,
                 has_full_article,
-                article.get("api_source", "rss")
+                article.get("api_source", "rss"),
+                article.get("age_group")  # NEW: age_group parameter
             )
 
             if DB_TYPE == "postgresql":
@@ -500,18 +751,18 @@ def insert_article(article: Dict[str, Any]) -> Optional[int]:
             else:
                 cursor.execute(_convert_placeholders(sql), params)
                 article_id = cursor.lastrowid
-            
+
             # Trigger WebSocket broadcast after successful insert
             try:
                 from app_enhanced import broadcast_update
                 broadcast_update('collection')
             except ImportError:
                 pass  # Server not running, skip broadcast
-            
+
             return article_id
-        except Exception as e:
-            print(f"[DB Error] Failed to insert article: {e}")
-            return None
+    except Exception as e:
+        print(f"[DB Error] Failed to insert article: {e}")
+        return None
 
 
 def get_articles(
@@ -903,3 +1154,243 @@ def get_user_writing(writing_id: int, user_id: str) -> Optional[Dict[str, Any]]:
 
 # Initialize database on import
 init_db()
+
+
+# ============================================================================
+# AGE GROUP CLASSIFICATION HELPER
+# ============================================================================
+
+# Kids news sources that produce age-appropriate content
+# Maps both domain names and display names to age groups
+KIDS_SOURCES = {
+    # Display names
+    "BBC Newsround": "7-10",
+    "Dogo News": "7-10",
+    "Time for Kids": "7-10",
+    "National Geographic Kids": "7-10",
+    "Nat Geo Kids": "7-10",
+    "Newsela": "11-14",
+    "SCMP Young Post": "11-14",
+    # Domain names (for matching source domain)
+    "bbc.co.uk": "7-10",
+    "dogonews.com": "7-10",
+    "timeforkids.com": "7-10",
+    "kids.nationalgeographic.com": "7-10",
+    "newsela.com": "11-14",
+    "yp.scmp.com": "11-14",
+    # Educational sources
+    "sciencenewsforstudents.org": "7-10",
+    "snexplores.org": "7-10",
+}
+
+# Default age group for unknown sources (middle range)
+DEFAULT_AGE_GROUP = "11-14"
+
+
+def classify_age_group_from_source(source: str, full_text: str = "", word_count: int = 0) -> str:
+    """
+    Classify article age group based on source and content.
+
+    Priority:
+    1. Known kids news sources → specific age groups
+    2. Word count analysis → shorter = younger audience
+    3. Default to middle group (11-14)
+
+    Args:
+        source: Article source name
+        full_text: Full article text (for fallback classification)
+        word_count: Word count of article (for fallback classification)
+
+    Returns:
+        Age group: "7-10", "11-14", or "15-18"
+    """
+    # Check known kids sources first
+    for kids_source, age_group in KIDS_SOURCES.items():
+        if kids_source.lower() in source.lower():
+            return age_group
+
+    # Fallback: classify by word count if available
+    if word_count > 0 or full_text:
+        if not word_count:
+            word_count = len(full_text.split()) if full_text else 0
+
+        # Simple word count classification
+        if word_count < 300:
+            return "7-10"  # Shorter articles for younger kids
+        elif word_count < 700:
+            return "11-14"  # Medium length for middle school
+        else:
+            return "15-18"  # Longer articles for high school
+
+    # Default to middle group
+    return DEFAULT_AGE_GROUP
+
+
+def classify_age_group_readability(text: str) -> Tuple[Optional[str], Optional[float], Optional[float]]:
+    """
+    Classify age group using readability scores.
+    Requires textstat library for accurate results.
+
+    Args:
+        text: Article text to analyze
+
+    Returns:
+        (age_group, readability_score, grade_level) tuple
+    """
+    try:
+        from textstat import flesch_reading_ease, flesch_kincaid_grade
+
+        # Calculate readability scores
+        readability_score = flesch_reading_ease(text)
+        grade_level = flesch_kincaid_grade(text)
+
+        # Classify by Flesch Reading Ease (higher = easier)
+        if readability_score >= 80:
+            age_group = "7-10"  # Very easy to read
+        elif readability_score >= 60:
+            age_group = "11-14"  # Standard readability
+        else:
+            age_group = "15-18"  # More complex text
+
+        return age_group, readability_score, grade_level
+
+    except ImportError:
+        # textstat not available, use simple word count classification
+        word_count = len(text.split()) if text else 0
+        if word_count < 300:
+            return "7-10", None, None
+        elif word_count < 700:
+            return "11-14", None, None
+        else:
+            return "15-18", None, None
+    except Exception as e:
+        print(f"[Age Classification Error] {e}")
+        return DEFAULT_AGE_GROUP, None, None
+
+
+# ============================================================================
+# DUPLICATE CLEANUP UTILITIES
+# ============================================================================
+
+def find_and_remove_duplicates(dry_run: bool = True) -> Dict[str, Any]:
+    """
+    Find and optionally remove duplicate articles from the database.
+
+    Duplicates are identified by:
+    1. Normalized URL matching
+    2. Title + source matching
+
+    Args:
+        dry_run: If True, only report duplicates without removing them
+
+    Returns:
+        Dictionary with duplicate statistics and list of duplicates found
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Get all articles
+        cursor.execute(_convert_placeholders("""
+            SELECT id, url, title, source, full_text, collected_at
+            FROM articles
+            ORDER BY collected_at DESC
+        """))
+
+        all_articles = cursor.fetchall()
+        duplicates_found = []
+        duplicates_to_remove = []
+        seen_urls = {}  # normalized_url -> (article_id, title)
+        seen_title_source = {}  # (normalized_title, source) -> article_id
+
+        for article in all_articles:
+            article_dict = dict(article)
+            article_id = article_dict["id"]
+            url = article_dict.get("url", "")
+            title = article_dict.get("title", "")
+            source = article_dict.get("source", "")
+
+            # Check by normalized URL
+            normalized_url = normalize_url(url)
+            if normalized_url in seen_urls:
+                # Found duplicate by URL
+                original_id, original_title = seen_urls[normalized_url]
+                duplicate_info = {
+                    "id": article_id,
+                    "duplicate_of": original_id,
+                    "reason": "url",
+                    "url": url,
+                    "normalized_url": normalized_url,
+                    "title": title,
+                    "original_title": original_title,
+                }
+                duplicates_found.append(duplicate_info)
+                duplicates_to_remove.append(article_id)
+            else:
+                seen_urls[normalized_url] = (article_id, title)
+
+            # Check by title + source
+            normalized_title = " ".join(title.lower().split())
+            title_source_key = (normalized_title, source)
+            if title_source_key in seen_title_source and title_source_key[0]:  # Skip empty titles
+                # Found duplicate by title + source
+                original_id = seen_title_source[title_source_key]
+                if original_id != article_id:  # Not already marked as duplicate
+                    duplicate_info = {
+                        "id": article_id,
+                        "duplicate_of": original_id,
+                        "reason": "title_source",
+                        "url": url,
+                        "title": title,
+                        "source": source,
+                    }
+                    # Avoid adding if already in list
+                    if not any(d["id"] == article_id for d in duplicates_found):
+                        duplicates_found.append(duplicate_info)
+                        if article_id not in duplicates_to_remove:
+                            duplicates_to_remove.append(article_id)
+            else:
+                seen_title_source[title_source_key] = article_id
+
+        # Remove duplicates if not dry run
+        removed_count = 0
+        if not dry_run and duplicates_to_remove:
+            placeholders = ",".join("?" * len(duplicates_to_remove))
+            cursor.execute(_convert_placeholders(f"""
+                DELETE FROM articles WHERE id IN ({placeholders})
+            """), duplicates_to_remove)
+            removed_count = cursor.rowcount
+            conn.commit()
+
+        return {
+            "total_articles": len(all_articles),
+            "duplicates_found": len(duplicates_found),
+            "duplicates_to_remove": len(duplicates_to_remove),
+            "removed_count": removed_count,
+            "dry_run": dry_run,
+            "duplicates": duplicates_found[:100],  # Return first 100 for inspection
+        }
+
+
+def get_duplicate_summary() -> Dict[str, Any]:
+    """
+    Get a summary of duplicate articles without removing them.
+
+    Returns:
+        Dictionary with duplicate statistics grouped by source
+    """
+    result = find_and_remove_duplicates(dry_run=True)
+
+    # Group duplicates by source
+    duplicates_by_source = {}
+    for dup in result["duplicates"]:
+        source = dup.get("source", "unknown")
+        if source not in duplicates_by_source:
+            duplicates_by_source[source] = 0
+        duplicates_by_source[source] += 1
+
+    return {
+        "total_articles": result["total_articles"],
+        "total_duplicates": result["duplicates_found"],
+        "duplicates_by_source": duplicates_by_source,
+        "sample_duplicates": result["duplicates"][:20],  # First 20 for inspection
+    }

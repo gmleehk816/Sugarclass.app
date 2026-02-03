@@ -102,6 +102,7 @@ class SuggestionRequest(BaseModel):
     title: str
     article_text: str
     year_level: str | int  # Accept both "Year 7" and 7
+    prewrite_summary: str | None = None  # Optional writing plan from Plan tab
 
 class ImprovementRequest(BaseModel):
     text: str
@@ -191,7 +192,8 @@ def generate_suggestion(request: SuggestionRequest, authorization: Optional[str]
             request.user_text,
             request.title,
             request.article_text,
-            request.year_level
+            request.year_level,
+            request.prewrite_summary
         )
         if user and authorization:
             report_activity("writer", "suggestion", authorization, {"title": request.title})

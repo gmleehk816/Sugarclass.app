@@ -34,7 +34,10 @@ from backend.database import (
     insert_article,
     update_source_status,
     log_collection,
-    get_sources
+    get_sources,
+    classify_age_group_from_source,
+    classify_age_group_readability,
+    normalize_url,
 )
 
 # Import new sources
@@ -73,8 +76,12 @@ _USER_AGENT = "Mozilla/5.0 (compatible; NewsCollect/1.0)"
 
 
 def _generate_uuid(url: str) -> str:
-    """Generate a UUID from URL hash."""
-    return hashlib.md5(url.encode()).hexdigest()
+    """
+    Generate a UUID from normalized URL hash.
+    Using normalized URL ensures consistent UUIDs for same article regardless of URL variations.
+    """
+    normalized = normalize_url(url)
+    return hashlib.md5(normalized.encode()).hexdigest()
 
 
 def _extract_text_from_html(html: str) -> Tuple[Optional[str], str]:
@@ -366,7 +373,11 @@ def collect_from_source(domain: str, limit: int = 20) -> Dict[str, Any]:
                     entry.get("description", ""),
                     domain
                 )
-                
+
+                # Classify age group based on source and content
+                word_count = len(full_text.split()) if full_text else 0
+                age_group = classify_age_group_from_source(domain, full_text or "", word_count)
+
                 # Prepare article data
                 article_data = {
                     "uuid": _generate_uuid(url),
@@ -380,6 +391,7 @@ def collect_from_source(domain: str, limit: int = 20) -> Dict[str, Any]:
                     "published_at": entry.get("published", ""),
                     "collected_at": datetime.utcnow().isoformat(),
                     "extraction_method": method,
+                    "age_group": age_group,  # NEW: Add age group classification
                 }
                 
                 # Store in database
@@ -454,11 +466,15 @@ def collect_single_article(url: str) -> Optional[Dict[str, Any]]:
         
         # Infer category from title
         category = _infer_category(title, "", "manual")
-        
+
         # Get domain from URL
         parsed = urlparse(url)
         domain = parsed.hostname or "unknown"
-        
+
+        # Classify age group
+        word_count = len(full_text.split()) if full_text else 0
+        age_group = classify_age_group_from_source(domain, full_text or "", word_count)
+
         article_data = {
             "uuid": _generate_uuid(url),
             "title": title,
@@ -471,6 +487,7 @@ def collect_single_article(url: str) -> Optional[Dict[str, Any]]:
             "published_at": datetime.utcnow().isoformat(),
             "collected_at": datetime.utcnow().isoformat(),
             "extraction_method": method,
+            "age_group": age_group,  # NEW: Add age group classification
         }
         
         article_id = insert_article(article_data)
@@ -548,6 +565,10 @@ def collect_from_api(
         # Store articles in database
         for article in result.articles:
             try:
+                # Classify age group
+                word_count = len(article.full_text.split()) if article.full_text else 0
+                age_group = classify_age_group_from_source(article.source, article.full_text or "", word_count)
+
                 article_data = {
                     "uuid": _generate_uuid(article.url),
                     "title": article.title,
@@ -563,6 +584,7 @@ def collect_from_api(
                     "collected_at": datetime.utcnow().isoformat(),
                     "extraction_method": article.extraction_method or api_source,
                     "api_source": api_source,
+                    "age_group": age_group,  # NEW: Add age group classification
                 }
                 
                 article_id = insert_article(article_data)

@@ -138,7 +138,8 @@ export default function WriterPage() {
                 user_text: userText,
                 title: article.title,
                 article_text: article.full_text,
-                year_level: yearLevel
+                year_level: yearLevel,
+                prewrite_summary: prewriteSummary || undefined
             })
 
             if (response.success && response.suggestion) {
