@@ -308,7 +308,7 @@ def fetch_rss_feed(rss_url: str) -> List[Dict[str, Any]]:
         return []
 
 
-def collect_from_source(domain: str, limit: int = 20) -> Dict[str, Any]:
+def collect_from_source(domain: str, limit: int = 12) -> Dict[str, Any]:
     """
     Collect news from a single source.
     Returns collection statistics.
@@ -441,7 +441,7 @@ def collect_from_source(domain: str, limit: int = 20) -> Dict[str, Any]:
     }
 
 
-def collect_all(limit_per_source: int = 20) -> List[Dict[str, Any]]:
+def collect_all(limit_per_source: int = 12) -> List[Dict[str, Any]]:
     """Collect news from all configured sources."""
     sources = get_sources()
     results = []
@@ -515,7 +515,7 @@ def collect_from_api(
     query: Optional[str] = None,
     category: Optional[str] = None,
     language: str = "en",
-    limit: int = 20,
+    limit: int = 12,
     extract_full_text: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -634,7 +634,7 @@ def collect_from_all_apis(
     query: Optional[str] = None,
     category: Optional[str] = None,
     language: str = "en",
-    limit_per_source: int = 10,
+    limit_per_source: int = 12,
 ) -> List[Dict[str, Any]]:
     """
     Collect news from all available API sources.
@@ -679,7 +679,7 @@ def collect_from_all_apis(
 def search_all_apis(
     query: str,
     language: str = "en",
-    limit_per_source: int = 10,
+    limit_per_source: int = 12,
 ) -> Dict[str, Any]:
     """
     Search for news across all available API sources.

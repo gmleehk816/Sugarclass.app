@@ -352,11 +352,14 @@ export default function RichTextEditor({
                         <button className="p-2 rounded hover:bg-surface-dark transition-colors" title="Text Color">
                             <div className="w-4 h-4 rounded" style={{ backgroundColor: editor.getAttributes('textStyle').color || '#000000' }} />
                         </button>
-                        <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg p-2 hidden group-hover:flex flex-col gap-1 z-10">
+                        <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg p-2 hidden group-hover:flex flex-col gap-1 z-10 pointer-events-auto">
                             {textColors.map(color => (
                                 <button
                                     key={color.value}
-                                    onClick={() => editor.chain().focus().setColor(color.value).run()}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault()
+                                        editor.chain().focus().setColor(color.value).run()
+                                    }}
                                     className="w-6 h-6 rounded border border-border hover:scale-110 transition-transform"
                                     style={{ backgroundColor: color.value }}
                                     title={color.name}
@@ -372,11 +375,12 @@ export default function RichTextEditor({
                         <button className="p-2 rounded hover:bg-surface-dark transition-colors" title="Highlight">
                             <Highlighter className="w-4 h-4" />
                         </button>
-                        <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg p-2 hidden group-hover:flex flex-col gap-1 z-10">
+                        <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-lg p-2 hidden group-hover:flex flex-col gap-1 z-10 pointer-events-auto">
                             {highlightColors.map(color => (
                                 <button
                                     key={color.value}
-                                    onClick={() => {
+                                    onMouseDown={(e) => {
+                                        e.preventDefault()
                                         if (color.value === 'transparent') {
                                             editor.chain().focus().unsetHighlight().run()
                                         } else {
