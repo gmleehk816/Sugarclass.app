@@ -47,6 +47,7 @@ interface ParsedFeedback {
     improved: string
     categories: FeedbackCategory[]
     learningTip: string | null
+    plagiarismCheck: string | null
 }
 
 // Category definitions with icons and colors
@@ -250,7 +251,9 @@ export default function EditWritingPage() {
     // Parse enhanced mentor feedback with categories
     function parseMentorFeedback(feedback: string): ParsedFeedback {
         // Try to parse new enhanced format first
-        const improvedMatch = feedback.match(/IMPROVED:\s*([\s\S]*?)(?=\n\nFEEDBACK:|$)/i)
+        // Note: PLAGIARISM CHECK comes between IMPROVED and FEEDBACK
+        const improvedMatch = feedback.match(/IMPROVED:\s*([\s\S]*?)(?=\n\n(?:PLAGIARISM CHECK|FEEDBACK):|$)/i)
+        const plagiarismMatch = feedback.match(/PLAGIARISM CHECK:\s*([\s\S]*?)(?=\n\nFEEDBACK:|$)/i)
         const feedbackMatch = feedback.match(/FEEDBACK:\s*([\s\S]*?)(?=\n\nLEARNING TIP:|$)/i)
         const learningTipMatch = feedback.match(/LEARNING TIP:\s*([\s\S]*?)$/i)
 
@@ -264,7 +267,8 @@ export default function EditWritingPage() {
 
             // Parse each category
             for (const [key, config] of Object.entries(FEEDBACK_CATEGORIES)) {
-                const categoryRegex = new RegExp(`${key}:\\s*([\\s\\S]*?)(?=\\n\\n(?:${Object.keys(FEEDBACK_CATEGORIES).join('|')}):|$)`, 'i')
+                // Match everything from the category name until the next \nCATEGORY: pattern or end
+                const categoryRegex = new RegExp(`${key}:\\s*([\\s\\S]*?)(?=\\n\\n?(?:${Object.keys(FEEDBACK_CATEGORIES).join('|')}):|$)`, 'i')
                 const categoryMatch = feedbackText.match(categoryRegex)
 
                 if (categoryMatch) {
@@ -276,13 +280,22 @@ export default function EditWritingPage() {
                     // Parse each item to extract before, after, and explanation
                     const items: FeedbackItem[] = rawItems
                         .map(item => {
-                            // Match format: "before" → "after" (explanation)
-                            const match = item.match(/"([^"]+)"\s*→\s*"([^"]+)"\s*\(([^)]+)\)/)
-                            if (match) {
+                            // Match format: "before" → "after" (explanation) - with parentheses
+                            const matchWithExplanation = item.match(/"([^"]+)"\s*→\s*"([^"]+)"\s*\(([^)]+)\)/)
+                            if (matchWithExplanation) {
                                 return {
-                                    before: match[1],
-                                    after: match[2],
-                                    explanation: match[3].trim()
+                                    before: matchWithExplanation[1],
+                                    after: matchWithExplanation[2],
+                                    explanation: matchWithExplanation[3].trim()
+                                }
+                            }
+                            // Match format: "before" → "after" - without parentheses (spelling format)
+                            const matchWithoutExplanation = item.match(/"([^"]+)"\s*→\s*"([^"]+)"/)
+                            if (matchWithoutExplanation) {
+                                return {
+                                    before: matchWithoutExplanation[1],
+                                    after: matchWithoutExplanation[2],
+                                    explanation: ''
                                 }
                             }
                             // Fallback for items that don't match the expected format
@@ -333,8 +346,9 @@ export default function EditWritingPage() {
         }
 
         const learningTip = learningTipMatch?.[1]?.trim() || null
+        const plagiarismCheck = plagiarismMatch?.[1]?.trim() || null
 
-        return { improved, categories, learningTip }
+        return { improved, categories, learningTip, plagiarismCheck }
     }
 
     function handleAddToEditor() {
@@ -349,12 +363,23 @@ export default function EditWritingPage() {
             // Parse mentor feedback to extract just the improved version
             const { improved } = parseMentorFeedback(aiSuggestion)
 
+            console.log('Improved text extracted:', improved?.substring(0, 100))
+            console.log('Improved text length:', improved?.length || 0)
+
+            if (!improved || improved.length === 0) {
+                console.error('No improved text found!')
+                return
+            }
+
             if (selectedText && editorRef.current) {
                 // Replace only the selected portion using the editor's ref
-                editorRef.current.replaceSelection(improved, selectedText.from, selectedText.to)
+                const success = editorRef.current.replaceSelection(improved, selectedText.from, selectedText.to)
+                console.log('Replace selection result:', success)
             } else {
-                // Replace entire text
+                // Replace entire text - need to clear contentJson to force update
+                console.log('Replacing full text')
                 setUserText(improved)
+                setContentJson('')  // Clear JSON to force text update
             }
             setAiSuggestion(null)
             setSelectedText(null)
@@ -704,7 +729,7 @@ export default function EditWritingPage() {
                                         </motion.button>
 
                                         {aiSuggestion && (() => {
-                                            const { improved, categories, learningTip } = parseMentorFeedback(aiSuggestion)
+                                            const { improved, categories, learningTip, plagiarismCheck } = parseMentorFeedback(aiSuggestion)
                                             return (
                                                 <motion.div
                                                     initial={{ opacity: 0, y: 10 }}
@@ -715,6 +740,17 @@ export default function EditWritingPage() {
                                                         <Edit3 className="w-3 h-3" />
                                                         Mentor Feedback
                                                     </div>
+
+                                                    {/* Plagiarism Check */}
+                                                    {plagiarismCheck && (
+                                                        <div className="mb-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                                                            <div className="text-xs font-semibold text-amber-700 mb-1 flex items-center gap-1">
+                                                                <AlertCircle className="w-3 h-3" />
+                                                                Plagiarism Check
+                                                            </div>
+                                                            <p className="text-xs text-text-secondary whitespace-pre-wrap">{plagiarismCheck}</p>
+                                                        </div>
+                                                    )}
 
                                                     {/* Categorized feedback */}
                                                     {categories.length > 0 && (
@@ -731,7 +767,10 @@ export default function EditWritingPage() {
                                                                         <ul className="text-xs text-text-secondary space-y-1.5">
                                                                             {category.items.map((item, idx) => (
                                                                                 <li key={idx} className="space-y-0.5">
-                                                                                    {item.before ? (
+                                                                                    {/* Check if this is a "no errors" message */}
+                                                                                    {item.after.includes('No ') && item.after.includes('found') ? (
+                                                                                        <span className="text-green-600 italic">{item.after}</span>
+                                                                                    ) : item.before ? (
                                                                                         <div className="flex items-center gap-1.5 flex-wrap">
                                                                                             <span className="line-through text-red-400 font-mono">"{item.before}"</span>
                                                                                             <span className={category.color}>→</span>
@@ -798,9 +837,6 @@ export default function EditWritingPage() {
                                                 </motion.div>
                                             )
                                         })()}
-                                                </div>
-                                            </motion.div>
-                                        )}
                                     </div>
                                 )}
 

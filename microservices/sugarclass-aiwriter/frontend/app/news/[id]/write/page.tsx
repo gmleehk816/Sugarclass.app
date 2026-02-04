@@ -47,6 +47,7 @@ interface ParsedFeedback {
     improved: string
     categories: FeedbackCategory[]
     learningTip: string | null
+    plagiarismCheck: string | null
 }
 
 // Category definitions with icons and colors
@@ -77,6 +78,7 @@ export default function WriterPage() {
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
     const [selectedText, setSelectedText] = useState<SelectionInfo | null>(null)  // Track selected text with position from editor
     const [currentWritingId, setCurrentWritingId] = useState<number | undefined>(undefined)  // Track current writing being edited
+    const [showSaveNotification, setShowSaveNotification] = useState(false)  // Show save notification
     const editorRef = useRef<RichTextEditorRef | null>(null)
 
     useEffect(() => {
@@ -129,7 +131,11 @@ export default function WriterPage() {
                     setCurrentWritingId(response.writing_id)
                 }
                 setSaveStatus('saved')
-                setTimeout(() => setSaveStatus('idle'), 3000)
+                setShowSaveNotification(true)
+                setTimeout(() => {
+                    setSaveStatus('idle')
+                    setShowSaveNotification(false)
+                }, 8000)
             } else {
                 setSaveStatus('error')
                 setAiError(response.error || 'Failed to save')
@@ -231,14 +237,23 @@ export default function WriterPage() {
 
     // Parse enhanced mentor feedback with categories
     function parseMentorFeedback(feedback: string): ParsedFeedback {
+        console.log('Parsing feedback, first 200 chars:', feedback.substring(0, 200))
+
         // Try to parse new enhanced format first
-        const improvedMatch = feedback.match(/IMPROVED:\s*([\s\S]*?)(?=\n\nFEEDBACK:|$)/i)
+        // Note: PLAGIARISM CHECK comes between IMPROVED and FEEDBACK
+        const improvedMatch = feedback.match(/IMPROVED:\s*([\s\S]*?)(?=\n\n(?:PLAGIARISM CHECK|FEEDBACK):|$)/i)
+        const plagiarismMatch = feedback.match(/PLAGIARISM CHECK:\s*([\s\S]*?)(?=\n\nFEEDBACK:|$)/i)
         const feedbackMatch = feedback.match(/FEEDBACK:\s*([\s\S]*?)(?=\n\nLEARNING TIP:|$)/i)
         const learningTipMatch = feedback.match(/LEARNING TIP:\s*([\s\S]*?)$/i)
+
+        console.log('Improved match:', improvedMatch ? 'FOUND' : 'NOT FOUND')
+        console.log('Improved text length:', improvedMatch?.[1]?.length || 0)
 
         // Extract improved text - if no IMPROVED section, return empty string
         // This ensures we only use the actual improved text, not the feedback
         const improved = improvedMatch?.[1]?.trim() || ''
+
+        console.log('Final improved text length:', improved.length)
 
         // Parse feedback categories
         const categories: FeedbackCategory[] = []
@@ -247,7 +262,8 @@ export default function WriterPage() {
 
             // Parse each category
             for (const [key, config] of Object.entries(FEEDBACK_CATEGORIES)) {
-                const categoryRegex = new RegExp(`${key}:\\s*([\\s\\S]*?)(?=\\n\\n(?:${Object.keys(FEEDBACK_CATEGORIES).join('|')}):|$)`, 'i')
+                // Match everything from the category name until the next \nCATEGORY: pattern or end
+                const categoryRegex = new RegExp(`${key}:\\s*([\\s\\S]*?)(?=\\n\\n?(?:${Object.keys(FEEDBACK_CATEGORIES).join('|')}):|$)`, 'i')
                 const categoryMatch = feedbackText.match(categoryRegex)
 
                 if (categoryMatch) {
@@ -259,13 +275,22 @@ export default function WriterPage() {
                     // Parse each item to extract before, after, and explanation
                     const items: FeedbackItem[] = rawItems
                         .map(item => {
-                            // Match format: "before" → "after" (explanation)
-                            const match = item.match(/"([^"]+)"\s*→\s*"([^"]+)"\s*\(([^)]+)\)/)
-                            if (match) {
+                            // Match format: "before" → "after" (explanation) - with parentheses
+                            const matchWithExplanation = item.match(/"([^"]+)"\s*→\s*"([^"]+)"\s*\(([^)]+)\)/)
+                            if (matchWithExplanation) {
                                 return {
-                                    before: match[1],
-                                    after: match[2],
-                                    explanation: match[3].trim()
+                                    before: matchWithExplanation[1],
+                                    after: matchWithExplanation[2],
+                                    explanation: matchWithExplanation[3].trim()
+                                }
+                            }
+                            // Match format: "before" → "after" - without parentheses (spelling format)
+                            const matchWithoutExplanation = item.match(/"([^"]+)"\s*→\s*"([^"]+)"/)
+                            if (matchWithoutExplanation) {
+                                return {
+                                    before: matchWithoutExplanation[1],
+                                    after: matchWithoutExplanation[2],
+                                    explanation: ''
                                 }
                             }
                             // Fallback for items that don't match the expected format
@@ -316,8 +341,9 @@ export default function WriterPage() {
         }
 
         const learningTip = learningTipMatch?.[1]?.trim() || null
+        const plagiarismCheck = plagiarismMatch?.[1]?.trim() || null
 
-        return { improved, categories, learningTip }
+        return { improved, categories, learningTip, plagiarismCheck }
     }
 
     function handleAddToEditor() {
@@ -332,12 +358,23 @@ export default function WriterPage() {
             // Parse mentor feedback to extract just the improved version
             const { improved } = parseMentorFeedback(aiSuggestion)
 
+            console.log('Improved text extracted:', improved?.substring(0, 100))
+            console.log('Improved text length:', improved?.length || 0)
+
+            if (!improved || improved.length === 0) {
+                console.error('No improved text found!')
+                return
+            }
+
             if (selectedText && editorRef.current) {
                 // Replace only the selected portion using the editor's ref
-                editorRef.current.replaceSelection(improved, selectedText.from, selectedText.to)
+                const success = editorRef.current.replaceSelection(improved, selectedText.from, selectedText.to)
+                console.log('Replace selection result:', success)
             } else {
-                // Replace entire text
+                // Replace entire text - need to clear contentJson to force update
+                console.log('Replacing full text')
                 setUserText(improved)
+                setContentJson('')  // Clear JSON to force text update
             }
             setAiSuggestion(null)
             setSelectedText(null)
@@ -684,7 +721,7 @@ export default function WriterPage() {
                                         </motion.button>
 
                                         {aiSuggestion && (() => {
-                                            const { improved, categories, learningTip } = parseMentorFeedback(aiSuggestion)
+                                            const { improved, categories, learningTip, plagiarismCheck } = parseMentorFeedback(aiSuggestion)
                                             return (
                                                 <motion.div
                                                     initial={{ opacity: 0, y: 10 }}
@@ -695,6 +732,17 @@ export default function WriterPage() {
                                                         <Edit3 className="w-3 h-3" />
                                                         Mentor Feedback
                                                     </div>
+
+                                                    {/* Plagiarism Check */}
+                                                    {plagiarismCheck && (
+                                                        <div className="mb-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                                                            <div className="text-xs font-semibold text-amber-700 mb-1 flex items-center gap-1">
+                                                                <AlertCircle className="w-3 h-3" />
+                                                                Plagiarism Check
+                                                            </div>
+                                                            <p className="text-xs text-text-secondary whitespace-pre-wrap">{plagiarismCheck}</p>
+                                                        </div>
+                                                    )}
 
                                                     {/* Categorized feedback */}
                                                     {categories.length > 0 && (
@@ -711,7 +759,10 @@ export default function WriterPage() {
                                                                         <ul className="text-xs text-text-secondary space-y-1.5">
                                                                             {category.items.map((item, idx) => (
                                                                                 <li key={idx} className="space-y-0.5">
-                                                                                    {item.before ? (
+                                                                                    {/* Check if this is a "no errors" message */}
+                                                                                    {item.after.includes('No ') && item.after.includes('found') ? (
+                                                                                        <span className="text-green-600 italic">{item.after}</span>
+                                                                                    ) : item.before ? (
                                                                                         <div className="flex items-center gap-1.5 flex-wrap">
                                                                                             <span className="line-through text-red-400 font-mono">"{item.before}"</span>
                                                                                             <span className={category.color}>→</span>
@@ -805,6 +856,48 @@ export default function WriterPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Save Notification */}
+            <AnimatePresence>
+                {showSaveNotification && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 100, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 100, scale: 0.9 }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                        className="fixed bottom-6 right-6 z-50 bg-surface border-2 border-success/50 rounded-xl shadow-2xl p-4 max-w-sm"
+                    >
+                        <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 w-10 h-10 bg-success/20 rounded-full flex items-center justify-center">
+                                <CheckCircle2 className="w-6 h-6 text-success" />
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-semibold text-success mb-1">Writing Saved!</h4>
+                                <p className="text-sm text-text-secondary mb-3">Your writing has been saved successfully.</p>
+                                <div className="flex gap-2">
+                                    <Link href="/my-writings">
+                                        <button className="px-3 py-1.5 bg-success text-white rounded-lg text-sm font-semibold hover:bg-success/90 transition-colors">
+                                            View My Writings
+                                        </button>
+                                    </Link>
+                                    <button
+                                        onClick={() => setShowSaveNotification(false)}
+                                        className="px-3 py-1.5 bg-surface-dark text-text-secondary rounded-lg text-sm font-semibold hover:bg-surface transition-colors"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowSaveNotification(false)}
+                                className="flex-shrink-0 text-text-muted hover:text-text-primary transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }

@@ -158,15 +158,37 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(functi
     // Expose methods via ref
     useImperativeHandle(ref, () => ({
         replaceSelection: (text: string, from: number, to: number) => {
-            if (!editor) return
-            // Delete the selected range and insert the new text
-            editor.view.dispatch(
-                editor.view.state.tr
-                    .delete(from, to)
-                    .insertText(text, from)
-            )
-            // Trigger content update
-            onChange(editor.getText(), editor.getHTML(), JSON.stringify(editor.getJSON()))
+            if (!editor) return false
+
+            try {
+                const doc = editor.state.doc
+                const docLength = doc.content.size
+
+                // Validate positions are within document bounds
+                if (from < 0 || from > docLength || to < 0 || to > docLength) {
+                    console.warn(`Invalid selection positions: from=${from}, to=${to}, docLength=${docLength}`)
+                    return false
+                }
+
+                // Ensure from <= to
+                const start = Math.min(from, to)
+                const end = Math.max(from, to)
+
+                // Delete the selected range and insert the new text
+                const tr = editor.view.state.tr.delete(start, end).insertText(text, start)
+                editor.view.dispatch(tr)
+
+                // Focus the editor after replacement
+                editor.view.focus()
+
+                // Trigger content update
+                onChange(editor.getText(), editor.getHTML(), JSON.stringify(editor.getJSON()))
+
+                return true
+            } catch (error) {
+                console.error('Error replacing selection:', error)
+                return false
+            }
         }
     }), [editor, onChange])
 
@@ -220,21 +242,19 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(functi
             try {
                 const jsonDoc = JSON.parse(contentJson)
                 const currentJson = editor.getJSON()
-                // Only update if significantly different
+                // Only update if content is actually different
                 if (JSON.stringify(jsonDoc) !== JSON.stringify(currentJson)) {
                     editor.commands.setContent(jsonDoc, false)
                 }
             } catch {
                 // If JSON is invalid, fall back to text comparison
-                if (currentText === '' || Math.abs(currentText.length - content.length) > 10) {
+                if (content !== currentText) {
                     editor.commands.setContent(content || '', false)
                 }
             }
         } else if (content !== currentText) {
-            // Only update if significantly different to avoid cursor jumps
-            if (currentText === '' || Math.abs(currentText.length - content.length) > 10) {
-                editor.commands.setContent(content || '', false)
-            }
+            // Update if content is actually different
+            editor.commands.setContent(content || '', false)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [content, contentJson])
