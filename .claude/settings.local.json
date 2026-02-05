@@ -22,7 +22,8 @@
       "Bash(set:*)",
       "Bash(findstr:*)",
       "Bash(ls:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []

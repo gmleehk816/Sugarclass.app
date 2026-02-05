@@ -419,6 +419,8 @@ def init_db():
             ("sports", "Sports"),
             ("entertainment", "Entertainment"),
             ("world", "World News"),
+            ("environment", "Nature & Environment"),
+            ("arts", "Arts & Culture"),
         ]
         
         for name, display_name in default_categories:
@@ -437,10 +439,21 @@ def init_db():
             ("phys.org", "Phys.org", "https://phys.org/rss-feed/"),
             ("sciencenewsforstudents.org", "Science News Explores", "https://www.snexplores.org/feed"),
             # Kid-friendly news sources (age-appropriate content)
-            ("bbc.co.uk", "BBC Newsround", "https://feeds.bbci.co.uk/newsround/rss.xml"),
-            ("dogonews.com", "Dogo News", "https://www.dogonews.com/rss"),
+            ("newsround.bbc.co.uk", "BBC Newsround", "https://feeds.bbci.co.uk/newsround/rss.xml"),
+            # ("dogonews.com", "Dogo News", "https://www.dogonews.com/rss"),  # Removed: RSS feed not available (404)
             ("timeforkids.com", "Time for Kids", "https://www.timeforkids.com/g34/feed/"),
-            ("kids.nationalgeographic.com", "Nat Geo Kids", "https://kids.nationalgeographic.com/feed"),
+            # Environment news sources (verified working RSS feeds)
+            ("science.bbc.co.uk", "BBC Science & Environment", "http://feeds.bbci.co.uk/news/science_and_environment/rss.xml"),
+            ("environment.theguardian.com", "Guardian Environment", "https://www.theguardian.com/uk/environment/rss"),
+            ("earthclimate.sciencedaily.com", "Science Daily Environment", "https://www.sciencedaily.com/rss/earth_climate.xml"),
+            ("feeds.feedburner.com", "Climate Central", "http://feeds.feedburner.com/climatecentral/djOO"),
+            # Environment-only sources (dedicated climate/environment coverage)
+            ("nature.com", "Nature Climate Change", "https://www.nature.com/nclimate/rss/current"),
+            ("grist.org", "Grist Climate News", "https://grist.org/feed/"),
+            ("climatecrisis.theguardian.com", "Guardian Climate Crisis", "https://www.theguardian.com/environment/climate-crisis/rss"),
+            # Arts & Culture news sources
+            ("hyperallergic.com", "Hyperallergic", "https://hyperallergic.com/feed"),
+            ("artnews.com", "ARTnews", "https://www.artnews.com/feed"),
         ]
         
         for domain, name, rss_url in default_sources:
@@ -538,21 +551,14 @@ def check_duplicate_before_insert(
     Returns:
         Existing article dict if duplicate found, None otherwise
     """
-    from . import database as db_module  # Import at runtime to avoid circular import
-
-    should_close = False
-    if conn is None:
-        conn = db_module.get_db().__enter__()
-        should_close = True
-
-    try:
-        cursor = conn.cursor()
+    # Define the check logic as a nested function to avoid code duplication
+    def _check_with_connection(c):
+        cursor = c.cursor()
 
         # Normalize URL for comparison
         normalized_url = normalize_url(url)
 
         # Check 1: Exact URL match (normalized)
-        # First check by exact match
         cursor.execute(_convert_placeholders("""
             SELECT * FROM articles WHERE url = ?
         """), (url,))
@@ -562,7 +568,6 @@ def check_duplicate_before_insert(
             return dict(existing)
 
         # Check normalized URLs by getting all and comparing in Python
-        # (SQLite doesn't support regex replace, so we do this in Python)
         cursor.execute(_convert_placeholders("""
             SELECT id, url, title, source FROM articles WHERE source = ?
             LIMIT 100
@@ -576,14 +581,12 @@ def check_duplicate_before_insert(
             existing_normalized = normalize_url(existing_url)
 
             if existing_normalized == normalized_url:
-                # Found duplicate by normalized URL - fetch full article
                 cursor.execute(_convert_placeholders("""
                     SELECT * FROM articles WHERE id = ?
                 """), (row_dict["id"],))
                 return dict(cursor.fetchone())
 
         # Check 2: Title + Source match
-        # Normalize titles for comparison (remove extra whitespace, lower case)
         normalized_title = " ".join(title.lower().split())
 
         cursor.execute(_convert_placeholders("""
@@ -597,8 +600,7 @@ def check_duplicate_before_insert(
         if existing:
             return dict(existing)
 
-        # Check 3: Similar title match (using simple similarity)
-        # Check if title is very similar to any existing title from same source
+        # Check 3: Similar title match
         cursor.execute(_convert_placeholders("""
             SELECT id, url, title, source FROM articles
             WHERE source = ?
@@ -612,22 +614,22 @@ def check_duplicate_before_insert(
             row_dict = dict(row)
             existing_title = row_dict.get("title", "")
 
-            # Calculate similarity using simple character matching
             similarity = _calculate_title_similarity(normalized_title, existing_title.lower())
 
-            if similarity >= 0.85:  # 85% similarity threshold
-                # Found highly similar title - likely a duplicate
+            if similarity >= 0.85:
                 cursor.execute(_convert_placeholders("""
                     SELECT * FROM articles WHERE id = ?
                 """), (row_dict["id"],))
                 return dict(cursor.fetchone())
 
-        # No duplicate found
         return None
 
-    finally:
-        if should_close:
-            conn.__exit__(None, None, None)
+    # Use provided connection or create a new one
+    if conn is not None:
+        return _check_with_connection(conn)
+    else:
+        with get_db() as conn:
+            return _check_with_connection(conn)
 
 
 def _calculate_title_similarity(title1: str, title2: str) -> float:
@@ -1249,9 +1251,8 @@ KIDS_SOURCES = {
     "SCMP Young Post": "11-14",
     # Domain names (for matching source domain)
     "bbc.co.uk": "7-10",
-    "dogonews.com": "7-10",
+    # "dogonews.com": "7-10",  # Removed: RSS feed not available (404)
     "timeforkids.com": "7-10",
-    "kids.nationalgeographic.com": "7-10",
     "newsela.com": "11-14",
     "yp.scmp.com": "11-14",
     # Educational sources

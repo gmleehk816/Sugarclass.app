@@ -18,8 +18,32 @@ const categoryColors: Record<string, string> = {
     Health: 'bg-health text-white',
 }
 
+// Helper function to create a snippet from full text
+function createSnippet(fullText: string, maxLength: number = 150): string {
+    if (!fullText) return ''
+
+    // Remove extra whitespace and newlines
+    const cleanText = fullText
+        .replace(/\s+/g, ' ')
+        .replace(/\n+/g, ' ')
+        .trim()
+
+    if (cleanText.length <= maxLength) {
+        return cleanText
+    }
+
+    // Truncate at word boundary
+    const truncated = cleanText.substring(0, maxLength)
+    const lastSpace = truncated.lastIndexOf(' ')
+
+    return truncated.substring(0, lastSpace) + '...'
+}
+
 export default function ArticleCard({ article }: ArticleCardProps) {
     const readingTime = Math.ceil((article.word_count || 300) / 200) // Assuming 200 words per minute
+
+    // Use description, or create snippet from full text
+    const displayDescription = article.description || createSnippet(article.full_text || '', 150) || 'Click to read article...'
 
     return (
         <div>
@@ -53,7 +77,7 @@ export default function ArticleCard({ article }: ArticleCardProps) {
                             {article.title}
                         </h3>
                         <p className="text-sm text-text-secondary mb-4 line-clamp-3 leading-relaxed flex-1">
-                            {article.description || 'No description available.'}
+                            {displayDescription}
                         </p>
 
                         {/* Meta Information */}

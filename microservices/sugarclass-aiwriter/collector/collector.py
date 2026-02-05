@@ -265,22 +265,52 @@ def _extract_full_article(url: str) -> Tuple[Optional[str], Optional[str], Optio
 def _infer_category(title: str, description: str, source: str) -> str:
     """Infer category from title and description."""
     text = f"{title} {description}".lower()
-    
+
+    # Sources that should default to environment category
+    environment_sources = [
+        "science.bbc.co.uk",
+        "environment.theguardian.com",
+        "earthclimate.sciencedaily.com",
+        "feeds.feedburner.com",
+        "climatecentral.org",
+        # Environment-only sources (dedicated climate/environment coverage)
+        "nature.com",
+        "grist.org",
+        "climatecrisis.theguardian.com",
+    ]
+
+    # Arts sources that should default to arts category
+    arts_sources = [
+        "hyperallergic.com",
+        "artnews.com",
+        "artsandculture.google.com",
+        "smithsonianmag.com",
+    ]
+
     category_keywords = {
         "technology": ["tech", "technology", "digital", "software", "ai", "gadget", "computer", "app", "cyber", "internet"],
         "business": ["business", "market", "stock", "economy", "finance", "company", "trade", "startup", "economic"],
-        "science": ["science", "research", "study", "discovery", "scientist", "experiment", "space", "climate"],
+        "science": ["science", "research", "study", "discovery", "scientist", "experiment", "space"],
         "health": ["health", "medical", "doctor", "disease", "hospital", "medicine", "patient", "vaccine", "covid"],
         "sports": ["sport", "team", "game", "player", "coach", "championship", "league", "match", "score", "olympic"],
-        "entertainment": ["entertainment", "movie", "music", "celebrity", "film", "actor", "show", "tv", "hollywood"],
+        "entertainment": ["entertainment", "movie", "celebrity", "film", "actor", "show", "tv", "hollywood"],
         "politics": ["politics", "government", "election", "president", "congress", "senate", "vote", "policy", "political"],
         "world": ["world", "global", "international", "country", "nation", "war", "conflict", "diplomacy"],
+        "environment": ["climate", "environment", "wildlife", "conservation", "ecosystem", "pollution", "sustainability", "nature", "carbon", "renewable", "energy", "species", "forest", "ocean", "green"],
+        "arts": ["art", "museum", "exhibition", "gallery", "theater", "theatre", "culture", "artist", "painting", "sculpture", "design", "dance", "photography", "film", "music", "architecture"],
     }
-    
+
+    # First check for exact keyword matches
     for category, keywords in category_keywords.items():
         if any(keyword in text for keyword in keywords):
             return category
-    
+
+    # Default based on source if no keyword match
+    if any(env_source in source for env_source in environment_sources):
+        return "environment"
+    elif any(art_source in source for art_source in arts_sources):
+        return "arts"
+
     return "general"
 
 

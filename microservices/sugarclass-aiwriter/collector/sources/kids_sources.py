@@ -306,9 +306,9 @@ class SCMPYoungPostSource(BaseSource):
 # Registry of all kid-news sources
 KIDS_SOURCES = {
     "bbc_newsround": BBCNewsroundSource,
-    "dogo_news": DogoNewsSource,
+    # "dogo_news": DogoNewsSource,  # Removed: RSS feed not available (404)
     "time_for_kids": TimeForKidsSource,
-    "natgeo_kids": NatGeoKidsSource,
+    # "natgeo_kids": NatGeoKidsSource,  # Removed: RSS feed not available (404)
     "newsela": NewselaSource,
     "scmp_young_post": SCMPYoungPostSource,
 }
@@ -322,24 +322,24 @@ def get_kids_sources() -> Dict[str, BaseSource]:
 def get_sources_by_age_group(age_group: str) -> Dict[str, BaseSource]:
     """
     Get sources appropriate for age group.
-    
+
     Args:
         age_group: "7-10", "11-13", or "14-16"
-    
+
     Returns:
         Dictionary of source_name: source_instance
     """
     if age_group == "7-10":
         return {
             "bbc_newsround": BBCNewsroundSource(),
-            "dogo_news": DogoNewsSource(),
+            # "dogo_news": DogoNewsSource(),  # Removed: RSS feed not available (404)
             "time_for_kids": TimeForKidsSource(),
-            "natgeo_kids": NatGeoKidsSource(),
+            # "natgeo_kids": NatGeoKidsSource(),  # Removed: RSS feed not available (404)
         }
     elif age_group == "11-13":
         return {
             "bbc_newsround": BBCNewsroundSource(),
-            "dogo_news": DogoNewsSource(),
+            # "dogo_news": DogoNewsSource(),  # Removed: RSS feed not available (404)
             "time_for_kids": TimeForKidsSource(),
             "scmp_young_post": SCMPYoungPostSource(),
         }
