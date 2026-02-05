@@ -25,16 +25,11 @@ fundus>=0.3.0
 news-please>=1.5.0
 
 # === Quality Analysis ===
-# Readability scoring (Flesch-Kincaid, grade level)
-textstat>=0.7.3
-
 # AI quality review with Gemini
 google-generativeai>=0.3.0
 
-# === Spellchecker & Grammar ===
-# Advanced spell and grammar checking
-language-tool-python>=2.7.1
-pyspellchecker>=0.8.1
+# NOTE: Grammar, spelling, and punctuation checking now use LLM instead of external libraries
+# Removed: textstat, language-tool-python, pyspellchecker (no longer needed)
 
 # === API Sources (Optional) ===
 # NewsAPI: 100 requests/day free tier

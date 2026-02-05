@@ -23,7 +23,8 @@
       "Bash(findstr:*)",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(java:*)"
     ],
     "deny": [],
     "ask": []

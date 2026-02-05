@@ -13,21 +13,9 @@ import logging
 from typing import Optional, Tuple, List, Dict
 import re
 
-# Try to import textstat, make it optional if not available
-try:
-    from textstat import flesch_kincaid_grade, gunning_fog
-    TEXTSTAT_AVAILABLE = True
-except ImportError:
-    TEXTSTAT_AVAILABLE = False
-    # Will log later when logger is initialized
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Log textstat availability after logger is configured
-if not TEXTSTAT_AVAILABLE:
-    logger.warning("textstat not available - readability checks will be skipped")
 
 # Global session for connection pooling (reused across calls)
 _llm_session: Optional[requests.Session] = None
@@ -51,11 +39,13 @@ def _clean_expired_cache():
         logger.debug(f"Cleaned {len(expired_keys)} expired cache entries")
 
 
-def _get_cache_key(system_prompt: str, user_prompt: str, model: str, temperature: float, max_tokens: int) -> str:
+def _get_cache_key(system_prompt: str, user_prompt: str, model: str, temperature: float, max_tokens: int, is_selection: bool = False) -> str:
     """Generate a cache key from request parameters."""
     import hashlib
-    # Create a hash of the key parameters for the cache key
-    key_string = f"{model}:{temperature}:{max_tokens}:{system_prompt[:100]}:{user_prompt[:200]}"
+    # Include is_selection flag to explicitly distinguish between selection and full text improvements
+    # Use full MD5 hash of user_prompt (not just first 16 chars) to avoid collisions
+    # Include content length for additional distinction
+    key_string = f"{model}:{temperature}:{max_tokens}:{is_selection}:{len(user_prompt)}:{hashlib.md5(user_prompt.encode()).hexdigest()}"
     return hashlib.md5(key_string.encode()).hexdigest()
 
 
@@ -139,7 +129,7 @@ def _is_response_complete(content: str, min_length: int = 50) -> bool:
 
 def llm_chat(system_prompt: str, user_prompt: str, temperature: float = 0.3,
              max_tokens: int = 1000, use_case: str = None, retry_model: str = None,
-             validate_completeness: bool = True) -> Tuple[Optional[str], Optional[str]]:
+             validate_completeness: bool = True, is_selection: bool = False) -> Tuple[Optional[str], Optional[str]]:
     """
     Call LLM API and return (content, error).
 
@@ -151,6 +141,7 @@ def llm_chat(system_prompt: str, user_prompt: str, temperature: float = 0.3,
         use_case: Use case for model selection ('summary', 'draft', etc.)
         retry_model: Fallback model if primary fails
         validate_completeness: Whether to validate response completeness
+        is_selection: Whether this is for a selected text (vs full text) - affects caching
 
     Returns:
         (content, error) - content is None on error
@@ -162,27 +153,37 @@ def llm_chat(system_prompt: str, user_prompt: str, temperature: float = 0.3,
 
     session = _get_session()
 
-    # Clean expired cache entries periodically
-    _clean_expired_cache()
+    # CACHE DISABLED - causing issues with selection vs full text distinction
+    # # Clean expired cache entries periodically
+    # _clean_expired_cache()
+    #
+    # # Check cache for existing response
+    # cache_key = _get_cache_key(system_prompt, user_prompt, model, temperature, max_tokens, is_selection)
+    # if cache_key in _llm_cache:
+    #     cached_content, timestamp = _llm_cache[cache_key]
+    #     import time as _time
+    #     if _time.time() - timestamp < _CACHE_TTL:
+    #         logger.info(f"Cache hit for key {cache_key[:8]}...")
+    #         return cached_content, None
+    #     else:
+    #         # Expired, remove from cache
+    #         del _llm_cache[cache_key]
 
-    # Check cache for existing response
-    cache_key = _get_cache_key(system_prompt, user_prompt, model, temperature, max_tokens)
-    if cache_key in _llm_cache:
-        cached_content, timestamp = _llm_cache[cache_key]
-        import time as _time
-        if _time.time() - timestamp < _CACHE_TTL:
-            logger.info(f"Cache hit for key {cache_key[:8]}...")
-            return cached_content, None
-        else:
-            # Expired, remove from cache
-            del _llm_cache[cache_key]
+    # Calculate minimum expected length based on what we're asking the AI to produce
+    # Extract the actual text to improve from the user prompt for better length estimation
+    import re
+    text_match = re.search(r'STUDENT\'S TEXT TO IMPROVE:\s*(.+)', user_prompt, re.DOTALL)
+    if text_match:
+        input_text_length = len(text_match.group(1))
+        # Expected output should be similar to input length (we're fixing, not rewriting entirely)
+        expected_min_length = max(50, int(input_text_length * 0.7))  # Allow some reduction but not drastic
+    else:
+        # Fallback for other use cases
+        expected_min_length = max(50, len(user_prompt) // 10)
 
-    # Calculate minimum expected length based on prompts
-    expected_min_length = max(50, len(user_prompt) // 10)
-
-    # Track total time spent on retries (max 30 seconds)
+    # Track total time spent on retries (max 90 seconds for better reliability)
     _start_time = time.time()
-    _MAX_RETRY_TIME = 30  # Maximum total time for all retries
+    _MAX_RETRY_TIME = 90  # Maximum total time for all retries
 
     def _try_request(use_model: str, retry_count: int = 0, max_retries: int = 5) -> Tuple[Optional[str], Optional[str]]:
         """Make a single API request attempt."""
@@ -206,7 +207,7 @@ def llm_chat(system_prompt: str, user_prompt: str, temperature: float = 0.3,
                     "Authorization": f"Bearer {api_key}",
                 },
                 json=payload,
-                timeout=30,  # 30 seconds for faster failure and retry
+                timeout=60,  # 60 seconds for longer texts
             )
             elapsed = time.time() - start_time
             logger.info(f"LLM response: status={resp.status_code}, time={elapsed:.2f}s")
@@ -217,7 +218,7 @@ def llm_chat(system_prompt: str, user_prompt: str, temperature: float = 0.3,
                     elapsed_total = time.time() - _start_time
                     if elapsed_total >= _MAX_RETRY_TIME:
                         return None, f"Request timeout (exceeded {_MAX_RETRY_TIME}s total retry time)"
-                    wait_time = (2 ** retry_count) * 1  # 1s, 2s, 4s
+                    wait_time = (2 ** retry_count) * 0.5  # 0.5s, 1s, 2s, 4s, 8s (faster retries)
                     logger.warning(f"Rate limited, waiting {wait_time}s before retry (total elapsed: {elapsed_total:.1f}s)")
                     time.sleep(wait_time)
                     return _try_request(use_model, retry_count + 1, max_retries)
@@ -247,7 +248,7 @@ def llm_chat(system_prompt: str, user_prompt: str, temperature: float = 0.3,
             return content, None
 
         except requests.Timeout:
-            logger.error(f"Request timeout after 30s (attempt {retry_count + 1})")
+            logger.error(f"Request timeout after 60s (attempt {retry_count + 1})")
             if retry_count < max_retries:
                 elapsed_total = time.time() - _start_time
                 if elapsed_total >= _MAX_RETRY_TIME:
@@ -295,10 +296,11 @@ def llm_chat(system_prompt: str, user_prompt: str, temperature: float = 0.3,
         if not content:
             return None, "Empty response from LLM (tried fallback)"
 
-        # Cache successful response
-        import time as _time
-        _llm_cache[cache_key] = (str(content), _time.time())
-        logger.debug(f"Cached response for key {cache_key[:8]}...")
+        # CACHE DISABLED - causing issues with selection vs full text distinction
+        # # Cache successful response
+        # import time as _time
+        # _llm_cache[cache_key] = (str(content), _time.time())
+        # logger.debug(f"Cached response for key {cache_key[:8]}...")
 
         return str(content), None
 
@@ -464,370 +466,408 @@ def detect_plagiarism_code_based(user_text: str, article_text: str) -> dict:
     }
 
 
-def check_spelling_basic(user_text: str) -> dict:
+def _aggressive_informal_language_check(text: str, article_context: str = "", is_selection: bool = False) -> list:
     """
-    Spell checking using pyspellchecker library (optimized with batch operations).
+    Second-pass aggressive check for informal/slang language using LLM.
+    This catches patterns the first check might have missed.
 
     Args:
-        user_text: The student's written text
+        text: The student's written text
+        article_context: Source article for context awareness (optional)
+        is_selection: Whether this is for a selected text portion (affects caching)
 
     Returns:
-        Dictionary with spelling errors found with original word positions
+        List of style suggestions with informal words found
     """
+    # Use shorter text for this check (first 1000 chars)
+    text_to_check = text[:1000] if len(text) > 1000 else text
+    # Also limit article context to keep prompt manageable
+    article_context_truncated = article_context[:1500] if article_context else ""
+
+    context_note = ""
+    if article_context_truncated:
+        context_note = f"""
+
+SOURCE ARTICLE (for reference - don't flag words that appear in this article):
+{article_context_truncated}"""
+
+    system_prompt = """You are an informal language detector for news writing. Find ALL informal/slang words.
+
+Look for these PATTERNS:
+- Text abbreviations: missing letters (tho, cuz, pls, w/, ur, u)
+- Numbers replacing letters: gr8, b4, l8r, 2morow
+- Shortened contractions: gonna, wanna, gotta, kinda, sorta, shoulda
+- Conversational filler: wow, yeah, so, just, like, really, very
+- Text-speak: lol, lmao, omg, tf, btw
+- Casual phrases: "so yeah", "or something", "I mean"
+
+IMPORTANT:
+- SKIP words inside quotation marks (these are quotes, not student's writing)
+- SKIP technical terms that appear in the source article
+- Focus on the student's casual/conversational language
+
+Return JSON with informal words found:
+[{"issue": "Informal word 'obvs'", "suggestion": "Use 'obviously'"}]
+
+JSON ONLY, no markdown."""
+
+    user_prompt = f"""Find ALL informal words in this text:
+
+{text_to_check}{context_note}
+
+Return JSON array of informal words found. JSON ONLY."""
+
     try:
-        from spellchecker import SpellChecker
-        spell = SpellChecker()
-    except ImportError:
-        logger.warning("pyspellchecker not available - spelling check disabled")
-        return {'has_errors': False, 'errors': [], 'count': 0}
+        response, error = llm_chat(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.1,
+            max_tokens=800,
+            use_case='aggressive_style_check',
+            is_selection=is_selection
+        )
 
-    errors = []
-    words = user_text.split()
+        if error or not response:
+            logger.warning(f"Aggressive style check failed: {error}")
+            return []
 
-    # Pre-process words to check - collect clean words with their indices
-    words_to_check = []
-    indices_to_check = []
+        import json
+        import re
 
-    for i, word in enumerate(words):
-        # Strip punctuation from both ends for checking
-        clean_word = re.sub(r'^[^\w\'-]|[^\w\'-]$', '', word)
+        # Try to extract JSON array from response
+        json_match = re.search(r'\[[\s\S]*\]', response)
+        if json_match:
+            response = json_match.group()
 
-        # Skip very short words
-        if len(clean_word) < 3:
-            continue
+        result = json.loads(response)
+        return result if isinstance(result, list) else []
 
-        # Skip numbers
-        if clean_word.isdigit():
-            continue
+    except (json.JSONDecodeError, Exception) as e:
+        logger.warning(f"Failed to parse aggressive style check: {e}")
+        return []
 
-        # Skip if word starts with capital (likely a proper noun)
-        if clean_word[0].isupper():
-            continue
 
-        # Skip if word contains digits (like "asrc", "cuny2", etc.)
-        if any(c.isdigit() for c in clean_word.lower()):
-            continue
+def check_with_llm(user_text: str, year_level: int = 10, article_context: str = "", is_selection: bool = False) -> dict:
+    """
+    Unified grammar, spelling, and punctuation check using LLM.
+    This replaces all hardcoded regex-based checks with AI-powered analysis.
 
-        # Skip common acronyms and technical terms (all lowercase versions)
-        skip_words = {
-            'asrc', 'cuny', 'nyc', 'ai', 'ml', 'api', 'url', 'http', 'https',
-            'html', 'css', 'js', 'json', 'xml', 'sql', 'ios', 'android',
-            'gpu', 'cpu', 'ram', 'usb', 'wifi', 'bluetooth', 'app', 'apps'
+    Args:
+        user_text: The student's written text
+        year_level: Student's year level for context-appropriate feedback
+        article_context: Source article for context-aware checking (optional)
+        is_selection: Whether this is for a selected text portion (affects caching)
+
+    Returns:
+        Dictionary with categorized errors found
+    """
+    # Truncate very long text for LLM analysis (keep first 2000 chars)
+    text_to_analyze = user_text[:2000] if len(user_text) > 2000 else user_text
+    text_ellipsis = "..." if len(user_text) > 2000 else ""
+    # Truncate article context to keep prompt manageable
+    article_context_truncated = article_context[:1500] if article_context else ""
+
+    context_note = ""
+    if article_context_truncated:
+        context_note = f"""
+
+SOURCE ARTICLE (for context):
+{article_context_truncated}
+
+Use this to:
+- Skip technical terms that appear in the article
+- Skip words inside quotation marks (direct quotes)
+- Give smarter suggestions using article vocabulary"""
+
+    # System prompt focused on PATTERNS of informal language, not specific words
+    system_prompt = """You are a STRICT English teacher analyzing news writing. Identify ALL errors and informal language.
+
+DETECT THESE PATTERNS:
+
+**SPELLING/INFORMAL WORDS** - Look for:
+- Text-speak patterns: missing vowels (tho, cuz, pls), numbers for words (gr8, b4, l8r)
+- Abbreviations: w/, w/o, bc, ur, u, pls, thx
+- Contractions of going to/want to: gonna, wanna, gotta
+- Shortened words: kinda, sorta, shoulda, coulda, woulda, tryna, outta
+- Any word that looks like it was typed quickly without proper spelling
+
+**GRAMMAR** - Look for:
+- Subject-verb agreement: "they was", "she don't", "he don't"
+- Wrong verb tense: "I seen", "I done", "could of"
+- Double negatives: "don't know nothing", "won't never"
+- Sentence fragments or incomplete thoughts
+
+**PUNCTUATION** - Look for:
+- Missing period at end of sentences
+- Comma splices (joining sentences with only comma)
+- Missing capitalization (start of sentences, proper nouns)
+- Run-on sentences
+
+**STYLE/TONE** - Look for:
+- Conversational filler: wow, yeah, so, just, like, um, uh
+- Vague qualifiers: kind of, sort of, really, very, super, pretty, a lot
+- Text-speak abbreviations: lol, lmao, omg, btw, tf
+- Casual phrases: "so yeah", "I mean", "you know", "or something"
+- Any tone that sounds like texting/social media, not journalism
+
+CRITICAL: This is NEWS WRITING. Formal tone required. Flag anything casual.
+SKIP: Words inside quotes, technical terms from source article."""
+
+    user_prompt = f"""Analyze this text for errors. Return JSON ONLY.
+
+STUDENT'S TEXT:
+{text_to_analyze}{text_ellipsis}
+
+Year Level: {year_level}{context_note}
+
+JSON format:
+{{
+    "spelling": [{{"word": "incorrect", "correction": "correct", "position": 0}}],
+    "grammar": [{{"found": "incorrect", "correction": "correct", "explanation": "why", "position": 0}}],
+    "punctuation": [{{"found": "issue", "correction": "fix", "explanation": "why", "position": 0}}],
+    "style": [{{"issue": "informal word 'obvs'", "suggestion": "use 'obviously'"}}]
+}}
+
+Rules:
+- position = character index in original text
+- SKIP words inside quotation marks
+- SKIP technical terms from source article
+- Flag informal language in student's own writing
+- Flag filler words: wow, yeah, so, just, like, really, very
+- Flag vague phrases: "kind of", "sort of", "a lot"
+- If perfect text, return empty arrays
+- JSON ONLY, no markdown"""
+
+    try:
+        # Dynamic max_tokens based on text length for grammar check
+        # Longer texts need more tokens for detailed feedback
+        grammar_tokens = max(1500, len(user_text) // 2)
+
+        response, error = llm_chat(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.2,
+            max_tokens=grammar_tokens,
+            use_case='grammar_check',
+            is_selection=is_selection
+        )
+
+        if error or not response:
+            logger.warning(f"LLM grammar check failed: {error}")
+            return _get_empty_check_result()
+
+        # Parse JSON response
+        import json
+        import re
+
+        # Try to extract JSON from response
+        json_match = re.search(r'\{[\s\S]*\}', response)
+        if json_match:
+            response = json_match.group()
+
+        result = json.loads(response)
+
+        # Validate and structure the response
+        spelling_errors = result.get('spelling', [])[:10]
+        grammar_errors = result.get('grammar', [])[:5]
+        punctuation_errors = result.get('punctuation', [])[:5]
+        style_suggestions = result.get('style', [])[:3]
+
+        # Log what was found for debugging
+        total_errors = len(spelling_errors) + len(grammar_errors) + len(punctuation_errors) + len(style_suggestions)
+        logger.info(f"LLM grammar check found {total_errors} total issues (spelling: {len(spelling_errors)}, grammar: {len(grammar_errors)}, punctuation: {len(punctuation_errors)}, style: {len(style_suggestions)})")
+
+        # If LLM found few errors, run a second-pass aggressive check for informal language
+        # This catches slang/informal words the first check might have missed
+        if total_errors < 5 and len(user_text) > 30:
+            logger.info("Running second-pass aggressive informal language check")
+            style_from_fallback = _aggressive_informal_language_check(user_text, article_context, is_selection)
+            if style_from_fallback:
+                # Merge with existing style suggestions, avoiding duplicates
+                existing_informal = {s.get('issue', '') for s in style_suggestions}
+                for suggestion in style_from_fallback:
+                    if suggestion.get('issue', '') not in existing_informal:
+                        style_suggestions.append(suggestion)
+                logger.warning(f"Added {len(style_from_fallback)} informal words via aggressive check")
+
+        return {
+            'spelling': {
+                'has_errors': len(spelling_errors) > 0,
+                'errors': spelling_errors,
+                'count': len(spelling_errors)
+            },
+            'grammar': {
+                'has_errors': len(grammar_errors) > 0,
+                'errors': grammar_errors,
+                'count': len(grammar_errors)
+            },
+            'punctuation': {
+                'has_errors': len(punctuation_errors) > 0,
+                'errors': punctuation_errors,
+                'count': len(punctuation_errors)
+            },
+            'style': {
+                'has_suggestions': len(style_suggestions) > 0,
+                'suggestions': style_suggestions,
+                'count': len(style_suggestions)
+            },
+            '_using_fallback': False
         }
-        if clean_word.lower() in skip_words:
-            continue
 
-        words_to_check.append(clean_word)
-        indices_to_check.append((i, word))
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse LLM grammar check response: {e}")
+        return _get_empty_check_result()
+    except Exception as e:
+        logger.error(f"LLM grammar check error: {e}")
+        return _get_empty_check_result()
 
-    if not words_to_check:
-        return {'has_errors': False, 'errors': [], 'count': 0}
 
-    # Batch check all unknown words at once (much faster)
-    misspelled = spell.unknown(words_to_check)
-
-    # Build errors list with positions
-    for clean_word, (i, original_word) in zip(words_to_check, indices_to_check):
-        if clean_word.lower() in misspelled:
-            # Get the most likely correction
-            correction = spell.correction(clean_word)
-
-            # Only add if we found a valid correction AND it's different
-            if correction and correction.lower() != clean_word.lower():
-                # Sanity check: correction should be reasonable length
-                if abs(len(correction) - len(clean_word)) <= 3:
-                    errors.append({
-                        'word': clean_word,  # The cleaned word without punctuation
-                        'original': original_word,     # Original word with punctuation for display
-                        'correction': correction,
-                        'position': i
-                    })
-
+def _get_empty_check_result() -> dict:
+    """Return empty check result when LLM fails."""
     return {
-        'has_errors': len(errors) > 0,
-        'errors': errors[:10],  # Limit to 10 errors
-        'count': len(errors)
+        'spelling': {'has_errors': False, 'errors': [], 'count': 0},
+        'grammar': {'has_errors': False, 'errors': [], 'count': 0},
+        'punctuation': {'has_errors': False, 'errors': [], 'count': 0},
+        'style': {'has_suggestions': False, 'suggestions': [], 'count': 0},
+        '_using_fallback': True
     }
 
 
-def check_grammar_code_based(user_text: str) -> dict:
+def _clean_ai_response(content: str) -> str:
     """
-    Code-based grammar checking using pattern matching.
-    Detects common grammatical errors without AI.
+    Clean AI response by removing common prefixes, suffixes, and filler phrases.
+    Applied to all AI-generated content to ensure clean output.
+    """
+    if not content:
+        return content
+
+    content = content.strip()
+
+    # Remove common prefixes AI might add
+    unwanted_prefixes = [
+        "Improved:", "IMPROVED:", "Here's the improved version:", "Rewritten:",
+        "Rewritten text:", "Here is the rewritten text:", "The improved version is:",
+        "Improved version:", "Here's your rewritten text:", "Below is the improved text:",
+        "The improved text is:", "Corrected text:", "CORRECTED:",
+        "Here's a suggestion:", "Suggested paragraph:", "Suggestion:",
+        "Here's your writing plan:", "Writing plan:", "Summary:",
+        "Here is the summary:", "Plan:", "Outline:"
+    ]
+
+    for prefix in unwanted_prefixes:
+        if content.startswith(prefix):
+            content = content[len(prefix):].strip()
+
+    # Remove unwanted suffixes and AI filler
+    unwanted_suffixes = [
+        "I hope this helps!", "Let me know if you need any changes.",
+        "This version maintains the same meaning while fixing errors.",
+        "The improved version above fixes all the errors.",
+        "Hope this helps with your writing!",
+        "Would you like me to", "Let me know if you'd like",
+        "I can also help you", "I'd be happy to",
+        "Feel free to ask", "Let me know if you need",
+        "Let me know if you want me to", "I can provide more",
+        "Would you like any", "I'd be happy to provide"
+    ]
+
+    for suffix in unwanted_suffixes:
+        if content.endswith(suffix):
+            content = content[:-len(suffix)].strip()
+
+    # Remove lines starting with AI filler phrases (conversational content)
+    import re
+    filler_patterns = [
+        r'\n\n(Would you like|Let me know|I can help|I can also|Feel free|Hope this|I\'d be happy|I can provide|Let me know if).*?(?=\n\n|$)',
+        r'\n\n(Here\'s another?|(I hope|Feel free|Would you|Let me|I can|I\'d)).*?(?=\n\n|$)'
+    ]
+
+    for pattern in filler_patterns:
+        content = re.sub(pattern, '', content, flags=re.IGNORECASE).strip()
+
+    return content
+
+
+def _format_improved_text(text: str) -> str:
+    """
+    Clean up formatting of improved text output from AI.
+
+    Handles:
+    - Excessive whitespace
+    - Paragraph structure
+    - Punctuation spacing
+    - Sentence endings and capitalization
+    - Quote and parentheses spacing
+    - Double periods
 
     Args:
-        user_text: The student's written text
+        text: The text to format
 
     Returns:
-        Dictionary with grammar errors found
+        Formatted text
     """
-    errors = []
+    if not text:
+        return text
 
-    # Subject-verb agreement patterns
-    sv_agreement_errors = [
-        (r'\b(he|she|it)\s+(have)\b', r'\1 \2', '"he have" → "he has" (subject-verb agreement)'),
-        (r'\b(they|we|you)\s+(has)\b', r'\1 \2', '"they has" → "they have" (subject-verb agreement)'),
-        (r'\b(there)\s+(is)\s+(?:a|an|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+\w+', r'\1 are', '"there is multiple" → "there are" (subject-verb agreement)'),
-    ]
+    import re
 
-    # Article/determiner errors
-    article_errors = [
-        (r'\b(a)\s+([aeiou][a-z]+)\b', r'an \2', '"a [vowel]" → "an [vowel]"'),
-        (r'\b(an)\s+([bcdfghjklmnpqrstvwxyz][a-z]+)\b', r'a \2', '"an [consonant]" → "a [consonant]"'),
-    ]
+    # Remove excessive whitespace (more than 2 consecutive spaces)
+    text = re.sub(r' {3,}', '  ', text)
 
-    # Missing auxiliary verbs (will/can/shall/may/must + verb without be/have)
-    missing_auxiliary = [
-        (r'\b(will|can|shall|may|must)\s+([a-z]+ed)\b(?!\s+be)', r'\1 be \2', '"will constructed" → "will be constructed" (missing auxiliary verb)'),
-        (r'\b(will|can|shall|may|must)\s+([a-z]+ing)\b(?!\s+be)', r'\1 be \2', '"will creating" → "will be creating" (missing auxiliary verb)'),
-        (r'\b(will|can|shall|may|must)\s+([a-z]+s)\b(?!\s+be)', r'\1 be \2', '"will creates" → "will be creates" (missing auxiliary verb)'),
-    ]
+    # Fix paragraph structure - ensure double newlines between paragraphs
+    # but collapse more than 2 consecutive newlines
+    text = re.sub(r'\n{3,}', '\n\n', text)
 
-    # Missing "to" after certain verbs
-    missing_to = [
-        (r'\b(want|need|try|going|have)\s+(?!to\b)([a-z]+ing)\b', r'\1 to \2', '"want doing" → "want to do" (missing "to")'),
-        (r'\b(want|need)\s+(?!to\b)([a-z]+)\b', r'\1 to \2', '"want go" → "want to go" (missing "to")'),
-    ]
+    # Fix spacing after punctuation
+    text = re.sub(r'([.!?])\s{2,}', r'\1 ', text)  # Multiple spaces after sentence endings
+    text = re.sub(r'([,;:])\s{2,}', r'\1 ', text)  # Multiple spaces after commas, semicolons, colons
 
-    # Wrong tense forms
-    wrong_tense = [
-        (r'\b(I|we|they|you)\s+(has)\b', r'\1 have', '"they has" → "they have" (wrong tense)'),
-        (r'\b(he|she|it)\s+(have)\b', r'\1 has', '"he have" → "he has" (wrong tense)'),
-    ]
+    # Ensure space after sentence endings if missing
+    text = re.sub(r'([.!?])([A-Z])', r'\1 \2', text)
 
-    # Common word confusions
-    word_confusion = [
-        (r'\b(its)\s+(a|an)\b', r'it is', '"its a" → "it\'s a" (its vs it\'s)'),
-        (r'\b(your)\s+(welcome)\b', r'you\'re welcome', '"your welcome" → "you\'re welcome" (your vs you\'re)'),
-        (r'\b(their)\s+(is|are)\b', r'they\'re \2', '"their is" → "they\'re are" (their vs they\'re)'),
-    ]
+    # Fix space before punctuation
+    text = re.sub(r'\s+([.,!?;:)])', r'\1', text)
 
-    # Missing auxiliary verbs (do/does/don't/doesn't)
-    missing_do = [
-        (r'\b(it|he|she)\s+(dont)\b', r"\1 doesn't", '"it dont" → "it doesn\'t" (missing auxiliary)'),
-        (r'\b(they|we|you)\s+(dont)\b', r"\1 don't", '"they dont" → "they don\'t" (missing auxiliary)'),
-        (r'\b(it|he|she)\s+(doesnt)\b', r"\1 doesn't", '"it doesnt" → "it doesn\'t" (missing apostrophe)'),
-        (r'\b(they|we|you)\s+(doesnt)\b', r"\1 don't", '"they doesnt" → "they don\'t" (wrong auxiliary)'),
-    ]
+    # Fix missing space after opening quotes/parentheses
+    text = re.sub(r'([\(])"', r'\1 "', text)  # (Quote -> ( "Quote"
+    text = re.sub(r'([\(]"?)([A-Z])', r'\1 \2', text)  # (Word -> ( Word
 
-    # Common irregular verbs
-    irregular_verbs = [
-        (r'\b(maked)\b', 'made', '"maked" → "made" (irregular verb)'),
-        (r'\b(taked)\b', 'took', '"taked" → "took" (irregular verb)'),
-        (r'\b(gived)\b', 'gave', '"gived" → "gave" (irregular verb)'),
-        (r'\b(writed)\b', 'wrote', '"writed" → "wrote" (irregular verb)'),
-        (r'\b(keepped)\b', 'kept', '"keepped" → "kept" (irregular verb)'),
-    ]
+    # Remove double periods
+    text = re.sub(r'\.{2,}', '.', text)
 
-    # Missing past tense -ed
-    missing_ed = [
-        (r'\b(name)\s+(a|an|the)\b', 'named', '"name a" → "named a" (missing -ed)'),
-        (r'\b(use)\s+(a|an|the)\b', 'used', '"use a" → "used a" (missing -ed)'),
-        (r'\b(call)\s+(a|an|the)\b', 'called', '"call a" → "called a" (missing -ed)'),
-    ]
+    # Ensure sentences end with proper punctuation
+    # If a line ends without punctuation and next line starts with capital, add period
+    lines = text.split('\n')
+    for i in range(len(lines) - 1):
+        current = lines[i].strip()
+        next_line = lines[i + 1].strip()
+        if current and not current[-1] in '.!?' and next_line and next_line[0].isupper():
+            lines[i] = current + '.'
+    text = '\n'.join(lines)
 
-    # Pluralization errors
-    plural_errors = [
-        (r'\bmany\s+way\b', 'many ways', '"many way" → "many ways" (missing plural)'),
-        (r'\b(all\s+the)\s+([a-z]+)\s+(is|was)\b', r'all the \2s are', '"all the [word] is" → "all the [word]s are" (plural)'),
-        (r'\btwo\s+([a-z]+)\s+(is|was)\b', r'two \2s are', '"two [word] is" → "two [word]s are" (plural)'),
-    ]
+    # Fix spacing around quotes
+    text = re.sub(r'"\s+', '"', text)  # Remove space after opening quote
+    text = re.sub(r'\s+"', '"', text)  # Remove space before closing quote
 
-    # Double negatives
-    double_negative = r'\b(not|never|nothing|nowhere|neither|nobody)\s+(not|never|nothing|nowhere|nobody)\b'
+    # Collapse multiple spaces into single (except after periods)
+    text = re.sub(r'(?<!\.)\s{2,}', ' ', text)
 
-    # Run all checks
-    for pattern, correction_template, explanation in sv_agreement_errors + article_errors + missing_auxiliary + word_confusion + missing_to + wrong_tense + missing_do + irregular_verbs + missing_ed + plural_errors:
-        for match in re.finditer(pattern, user_text, re.IGNORECASE):
-            # Expand backreferences in correction template to get actual replacement text
-            actual_correction = correction_template
-            for i in range(1, len(match.groups()) + 1):
-                if match.group(i):
-                    # Replace \1, \2, etc. with actual captured groups
-                    actual_correction = actual_correction.replace('\\' + str(i), match.group(i))
+    # Strip leading/trailing whitespace
+    text = text.strip()
 
-            errors.append({
-                'type': 'Grammar',
-                'found': match.group(0),
-                'correction': actual_correction,
-                'explanation': explanation,
-                'position': match.start()
-            })
-
-    # Double negative check
-    for match in re.finditer(double_negative, user_text, re.IGNORECASE):
-        errors.append({
-            'type': 'Grammar',
-            'found': match.group(0),
-            'correction': 'remove one negative',
-            'explanation': 'Double negative - remove one negative word',
-            'position': match.start()
-        })
-
-    logger.info(f"Grammar check found {len(errors)} errors")
-    for error in errors[:3]:  # Log first 3 errors for debugging
-        logger.info(f"  - '{error['found']}' → '{error['correction']}' ({error['explanation']})")
-
-    return {
-        'has_errors': len(errors) > 0,
-        'errors': errors,
-        'count': len(errors)
-    }
+    return text
 
 
-def check_punctuation_code_based(user_text: str) -> dict:
-    """
-    Code-based punctuation checking.
-
-    Args:
-        user_text: The student's written text
-
-    Returns:
-        Dictionary with punctuation errors found
-    """
-    errors = []
-
-    # Check for missing capitalization after sentence endings
-    for match in re.finditer(r'[.!?]\s+([a-z])', user_text):
-        errors.append({
-            'type': 'Punctuation',
-            'found': match.group(0),
-            'correction': match.group(0)[0] + ' ' + match.group(1).upper(),
-            'explanation': 'Capitalize the first letter after a period',
-            'position': match.start()
-        })
-
-    # Check for missing periods at end
-    lines = user_text.split('\n')
-    for i, line in enumerate(lines):
-        line = line.strip()
-        if line and not line.endswith(('.', '!', '?', '"', "'")):
-            if len(line) > 20:  # Only if it looks like a sentence
-                errors.append({
-                    'type': 'Punctuation',
-                    'found': line[-20:] if len(line) > 20 else line,
-                    'correction': line + '.',
-                    'explanation': 'Add a period at the end of the sentence',
-                    'position': i
-                })
-
-    # Check for multiple spaces
-    for match in re.finditer(r'  +', user_text):
-        errors.append({
-            'type': 'Punctuation',
-            'found': match.group(0),
-            'correction': ' ',
-            'explanation': 'Use single space between words',
-            'position': match.start()
-        })
-
-    # Check for space before punctuation
-    for match in re.finditer(r'\s+([,.!?;:])', user_text):
-        errors.append({
-            'type': 'Punctuation',
-            'found': match.group(0),
-            'correction': match.group(1),
-            'explanation': 'Remove space before punctuation',
-            'position': match.start()
-        })
-
-    return {
-        'has_errors': len(errors) > 0,
-        'errors': errors[:10],  # Limit to first 10
-        'count': len(errors)
-    }
-
-
-def check_style_code_based(user_text: str, year_level: int = 10) -> dict:
-    """
-    Code-based style checking using readability metrics and patterns.
-
-    Args:
-        user_text: The student's written text
-        year_level: Student year level for appropriate complexity
-
-    Returns:
-        Dictionary with style feedback
-    """
-    suggestions = []
-    sentences = re.split(r'[.!?]+', user_text)
-    sentences = [s.strip() for s in sentences if s.strip()]
-
-    if not sentences:
-        return {'has_suggestions': False, 'suggestions': [], 'count': 0}
-
-    # Check sentence length variation
-    sentence_lengths = [len(s.split()) for s in sentences]
-    avg_length = sum(sentence_lengths) / len(sentence_lengths) if sentence_lengths else 0
-
-    if avg_length > 25:
-        suggestions.append({
-            'type': 'Style',
-            'issue': f'Sentences are too long (average {avg_length:.1f} words)',
-            'suggestion': 'Try breaking long sentences into shorter ones for clarity',
-        })
-
-    # Check for repetitive sentence starts
-    first_words = [s.split()[0].lower() for s in sentences if s.split()]
-    from collections import Counter
-    first_word_counts = Counter(first_words)
-    for word, count in first_word_counts.items():
-        if count >= 3 and len(sentences) >= 4:
-            suggestions.append({
-                'type': 'Style',
-                'issue': f'Starting {count} sentences with "{word}"',
-                'suggestion': f'Vary sentence openings - try using transition words like "However", "Additionally", "Moreover"',
-            })
-
-    # Check for readability
-    if TEXTSTAT_AVAILABLE:
-        try:
-            grade_level = flesch_kincaid_grade(user_text)
-            if grade_level > year_level + 3:
-                suggestions.append({
-                    'type': 'Style',
-                    'issue': f'Readability grade {grade_level:.1f} is above your level (Year {year_level})',
-                    'suggestion': 'Consider using simpler vocabulary and shorter sentences',
-                })
-        except Exception as e:
-            logger.debug(f"Readability check failed: {e}")
-            pass  # Readability check failed, skip
-    else:
-        pass  # textstat not available, skip readability check
-
-    # Check for weak words/phrases
-    weak_phrases = [
-        (r'\b(very|really|quite|rather)\s+', 'Avoid overusing intensifiers like "very" and "really"'),
-        (r'\b(got|get)\s+', 'Replace "got/get" with more specific verbs like "received", "obtained", "became"'),
-        (r'\b(stuff|things)\b', 'Use specific nouns instead of vague words like "stuff" and "things"'),
-        (r'\b(basically|actually|literally)\s+', 'Remove unnecessary filler words'),
-    ]
-
-    for pattern, suggestion in weak_phrases:
-        matches = list(re.finditer(pattern, user_text, re.IGNORECASE))
-        if len(matches) >= 2:  # Only suggest if used multiple times
-            suggestions.append({
-                'type': 'Style',
-                'issue': f'Overused phrase: {matches[0].group(0).strip()}',
-                'suggestion': suggestion,
-            })
-
-    return {
-        'has_suggestions': len(suggestions) > 0,
-        'suggestions': suggestions[:5],
-        'count': len(suggestions)
-    }
-
-
-def generate_improved_text_ai_only(text_to_improve: str, article_context: str, year_level: int) -> tuple:
+def generate_improved_text_ai_only(text_to_improve: str, article_context: str, year_level: int, is_selection: bool = False) -> tuple:
     """
     Use AI ONLY for rewriting the text, not for formatting feedback.
     All analysis is done by code.
 
     Args:
         text_to_improve: The text to improve
-        article_context: Source article for reference
+        article_context: Source article for reference (used to maintain factual accuracy)
         year_level: Student year level
+        is_selection: Whether this is for a selected text portion (affects caching)
 
     Returns:
         Tuple of (improved_text, error)
@@ -842,58 +882,69 @@ def generate_improved_text_ai_only(text_to_improve: str, article_context: str, y
     else:
         language_note = "Sophisticated language for ages 16-18."
 
-    # System prompt with explicit instructions to avoid truncation
-    system_prompt = f"""You are a writing assistant. Fix ALL spelling, grammar, punctuation, and clarity errors in the text.
+    # Truncate article context if too long (keep it reasonable for the prompt)
+    article_context_truncated = article_context[:4000] if article_context else ""
 
-Your task:
-1. Correct spelling mistakes (e.g., "teh" → "the", "dont" → "don't")
-2. Fix grammar errors (subject-verb agreement, tense, etc.)
-3. Fix punctuation (missing periods, commas, capitalization)
-4. Improve clarity while keeping the same meaning
+    # System prompt focused on aggressive professional rewriting
+    system_prompt = f"""You are a professional news editor. REWRITE the student's informal writing into a polished news article.
 
-IMPORTANT:
-- Keep the same general length and meaning - do NOT summarize or expand significantly
-- Keep the same number of sentences - fix errors within each sentence
-- Output ONLY the corrected text, no explanations or labels
-- {language_note}
+Your task - TRANSFORM the writing style:
+1. Remove ALL informal language (slang, conversational filler: "kinda", "obvs", "wow", "like 99% or something")
+2. Fix ALL grammar and punctuation errors
+3. Convert to professional journalistic tone: objective, factual, concise
+4. Use proper news structure: clear topic sentences, logical flow, active voice
+5. Remove conversational phrases: "which is kinda wild", "so yeah", "or maybe some fuel, not sure"
+6. Fix run-on sentences - break into proper sentences
+7. Use specific numbers instead of vague approximations when possible
 
-Text to correct ({word_count} words):"""
+TRANSFORMATION RULES:
+- "kinda wild" → "remarkable" or "notable"
+- "obvs big" → "significantly" or "notably"
+- "wow" → remove (just state facts)
+- "like 99%" → "approximately 99%" when exact, otherwise vague descriptions
+- "which is funny cuz" → remove (not relevant for news)
+- "so yeah" → remove
+- "or maybe, not sure" → remove uncertainty
+- "Go Brrr" → proper headline style
+- Keep facts, remove opinion/conversational tone
 
-    user_prompt = text_to_improve
+CRITICAL:
+- This MUST sound like a PROFESSIONAL news article from BBC, Reuters, or AP
+- NO conversational tone, NO slang, NO uncertainty
+- DO NOT add new facts, but DO rewrite EVERYTHING professionally
+- Make it sound like a journalist wrote it, not a student
+
+OUTPUT ONLY:
+- The professionally rewritten text, nothing else
+- No explanations, no labels"""
+
+    user_prompt = f"""SOURCE ARTICLE (for factual reference):
+{article_context_truncated}
+
+STUDENT'S TEXT TO IMPROVE:
+{text_to_improve}"""
 
     # Dynamic max_tokens based on input size to prevent truncation
-    # Use word_count * 3 for output (rewritten text could be same length or longer)
-    # Minimum 2000 tokens, no upper cap for safety
-    estimated_tokens = max(2000, word_count * 3)
+    # Use word_count * 4 for output (rewritten text could be same length or longer)
+    # Higher minimum and multiplier to prevent truncation
+    estimated_tokens = max(3000, word_count * 4)
 
-    content, error = llm_chat(system_prompt, user_prompt, temperature=0.2, max_tokens=estimated_tokens, use_case="draft")
+    content, error = llm_chat(system_prompt, user_prompt, temperature=0.2, max_tokens=estimated_tokens, use_case="draft", is_selection=is_selection)
 
     if error:
         return None, error
 
-    # Clean up the response - remove any labels AI might have added
+    # Clean up AI response (remove prefixes, suffixes, filler)
     if content:
-        content = content.strip()
+        content = _clean_ai_response(content)
+        # Format the improved text (fix spacing, punctuation, structure)
+        content = _format_improved_text(content)
 
-        # Remove common prefixes AI might add
-        for prefix in ["Improved:", "IMPROVED:", "Here's the improved version:", "Rewritten:",
-                        "Rewritten text:", "Here is the rewritten text:", "The improved version is:",
-                        "Improved version:", "Here's your rewritten text:", "Below is the improved text:"]:
-            if content.startswith(prefix):
-                content = content[len(prefix):].strip()
-
-        # Remove any suffixes like explanations
-        for suffix in ["I hope this helps!", "Let me know if you need any changes.",
-                        "This version maintains the same meaning while fixing errors.",
-                        "The improved version above fixes all the errors."]:
-            if content.endswith(suffix):
-                content = content[:-len(suffix)].strip()
-
-        # If content contains section markers, extract only the first part
-        for marker in ["PLAGIARISM CHECK:", "FEEDBACK:", "LEARNING TIP:", "GRAMMAR:",
-                       "PUNCTUATION:", "STYLE:", "SPELLING:", "CLARITY:"]:
-            if marker in content:
-                content = content.split(marker)[0].strip()
+        # Also split on section markers if they appear after the improved text
+        import re
+        section_pattern = r'\n\n(?:PLAGIARISM CHECK|FEEDBACK|LEARNING TIP|GRAMMAR|PUNCTUATION|STYLE|SPELLING|CLARITY)\s*:'
+        if re.search(section_pattern, content):
+            content = re.split(section_pattern, content)[0].strip()
 
     return content if content else None, None
 
@@ -1052,6 +1103,10 @@ Metasurface breakthrough solves photonics efficiency-control tradeoff
     if error:
         logger.error(f"Failed to generate prewrite: {error}")
         return f"Error generating summary: {error}"
+
+    # Clean up AI response
+    if content:
+        content = _clean_ai_response(content)
 
     logger.info(f"Generated prewrite summary: {len(content) if content else 0} characters")
 
@@ -1224,6 +1279,10 @@ Return ONLY the paragraph text - no introductions, no explanations, no markdown 
         logger.error(f"Failed to generate suggestion: {error}")
         return f"Error generating suggestion: {error}"
 
+    # Clean up AI response
+    if content:
+        content = _clean_ai_response(content)
+
     logger.info(f"Generated suggestion: {len(content) if content else 0} characters")
 
     return content or "No suggestion generated."
@@ -1252,6 +1311,8 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
     Returns:
         Improved version with detailed mentor feedback
     """
+    # Determine if this is a selection improvement (must be defined early)
+    is_selection = bool(selected_text)
     text_to_improve = selected_text if selected_text else paragraph
 
     # Early return for invalid input
@@ -1262,9 +1323,11 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
     if len(text_to_improve.strip()) < 30:
         # Just do basic checks and return
         year_level = normalize_year_level(year_level)
-        spell_result = check_spelling_basic(text_to_improve)
-        grammar_result = check_grammar_code_based(text_to_improve)
-        punctuation_result = check_punctuation_code_based(text_to_improve)
+        check_results = check_with_llm(text_to_improve, year_level, article_context, is_selection)
+
+        spell_result = check_results['spelling']
+        grammar_result = check_results['grammar']
+        punctuation_result = check_results['punctuation']
 
         response_parts = [f"IMPROVED:\n{text_to_improve}"]
         response_parts.append("\n\nPLAGIARISM CHECK:\n✅ Text too short for plagiarism check.")
@@ -1306,13 +1369,22 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
 
         return "".join(response_parts)
 
-    is_selection = bool(selected_text)
     text_length = len(text_to_improve)
     logger.info(f"Improving {'selected text' if is_selection else 'full text'}, length: {text_length}")
 
     year_level = normalize_year_level(year_level)
 
-    # ===== OPTIMIZED CODE-BASED CHECKS =====
+    # ===== LLM-BASED CHECKS =====
+    # Use LLM for grammar, spelling, and punctuation checking
+    check_results = check_with_llm(text_to_improve, year_level, article_context, is_selection)
+
+    spell_result = check_results['spelling']
+    grammar_result = check_results['grammar']
+    punctuation_result = check_results['punctuation']
+
+    # Style check - use LLM results (always included in check_with_llm response)
+    style_result = check_results.get('style', {'has_suggestions': False, 'suggestions': [], 'count': 0})
+
     # Skip plagiarism check for very short texts (< 80 chars) - not meaningful
     if text_length < 80:
         plagiarism_result = {
@@ -1324,23 +1396,8 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
     else:
         plagiarism_result = detect_plagiarism_code_based(text_to_improve, article_context)
 
-    # Always check spelling - it's fast
-    spell_result = check_spelling_basic(text_to_improve)
-
-    # Always check grammar - it's fast with regex
-    grammar_result = check_grammar_code_based(text_to_improve)
-
-    # Always check punctuation - it's fast with regex
-    punctuation_result = check_punctuation_code_based(text_to_improve)
-
-    # Skip style check for very short texts (< 100 chars)
-    if text_length < 100:
-        style_result = {'has_suggestions': False, 'suggestions': [], 'count': 0}
-    else:
-        style_result = check_style_code_based(text_to_improve, year_level)
-
     # ===== USE LLM TO REWRITE THE TEXT =====
-    improved_text, llm_error = generate_improved_text_ai_only(text_to_improve, article_context, year_level)
+    improved_text, llm_error = generate_improved_text_ai_only(text_to_improve, article_context, year_level, is_selection)
 
     # If LLM fails, fall back to original text
     if llm_error or not improved_text:
@@ -1398,10 +1455,29 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
         response_parts.append("• No punctuation errors found!")
 
     # Style - ALWAYS show this category
+    # Format: "informal phrase" → "formal replacement" (explanation)
     response_parts.append("\nSTYLE:")
     if style_result['has_suggestions']:
         for suggestion in style_result['suggestions'][:3]:
-            response_parts.append(f"• {suggestion['issue']}: {suggestion['suggestion']}")
+            # Parse suggestion to extract informal word and formal replacement
+            # Expected format from LLM/fallback: issue='Informal word "obvs"', suggestion='Use "obviously" instead'
+            issue = suggestion.get('issue', '')
+            suggest = suggestion.get('suggestion', '')
+
+            # Extract the informal word from issue (look for quoted text)
+            import re
+            informal_match = re.search(r'"([^"]+)"', issue)
+            formal_match = re.search(r'"([^"]+)"', suggest)
+
+            if informal_match and formal_match:
+                informal = informal_match.group(1)
+                formal = formal_match.group(1)
+                # Build explanation from remaining text
+                explanation = suggest.replace(f'"{formal}"', '').replace('Use ', '').replace(' instead', '').strip()
+                response_parts.append(f'• "{informal}" → "{formal}" ({explanation})')
+            else:
+                # Fallback to original format if parsing fails
+                response_parts.append(f"• {issue}: {suggest}")
     else:
         response_parts.append("• No style suggestions - good job!")
 
@@ -1410,6 +1486,20 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
     if spell_result['has_errors']:
         misspelled_words = ','.join([error['word'] for error in spell_result['errors']])
         response_parts.append(f"\n\nMISSPELLED_WORDS:\n{misspelled_words}")
+
+    # 4.5. INFORMAL_WORDS section for frontend highlighting (slang/informal words)
+    # Format: word1,word2,word3 (comma-separated list)
+    if style_result['has_suggestions']:
+        informal_words = []
+        for suggestion in style_result['suggestions'][:3]:
+            issue = suggestion.get('issue', '')
+            # Extract the informal word from issue (look for quoted text)
+            import re
+            informal_match = re.search(r'"([^"]+)"', issue)
+            if informal_match:
+                informal_words.append(informal_match.group(1))
+        if informal_words:
+            response_parts.append(f"\n\nINFORMAL_WORDS:\n{','.join(informal_words)}")
 
     # 5. LEARNING TIP - code-based
     learning_tips = [

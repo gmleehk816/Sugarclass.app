@@ -38,7 +38,7 @@ interface SelectionInfo {
 }
 
 export interface RichTextEditorRef {
-    replaceSelection: (text: string, from: number, to: number) => void
+    replaceSelection: (text: string, from: number, to: number) => boolean
 }
 
 interface RichTextEditorProps {

@@ -365,6 +365,8 @@ export default function EditWritingPage() {
 
             console.log('Improved text extracted:', improved?.substring(0, 100))
             console.log('Improved text length:', improved?.length || 0)
+            console.log('Selected text:', selectedText ? `"${selectedText.text}" (${selectedText.from}-${selectedText.to})` : 'none')
+            console.log('Editor ref available:', !!editorRef.current)
 
             if (!improved || improved.length === 0) {
                 console.error('No improved text found!')
@@ -372,10 +374,21 @@ export default function EditWritingPage() {
             }
 
             if (selectedText && editorRef.current) {
+                console.log('Attempting to replace selection...')
                 // Replace only the selected portion using the editor's ref
                 const success = editorRef.current.replaceSelection(improved, selectedText.from, selectedText.to)
                 console.log('Replace selection result:', success)
+                if (!success) {
+                    console.warn('Selection replacement failed, falling back to full text replacement')
+                    console.warn('This usually happens when the selection positions are no longer valid (text changed since selection)')
+                    // Fall back to full text replacement
+                    setUserText(improved)
+                    setContentJson('')
+                }
             } else {
+                if (selectedText && !editorRef.current) {
+                    console.warn('Selection exists but editor ref is not available - replacing full text')
+                }
                 // Replace entire text - need to clear contentJson to force update
                 console.log('Replacing full text')
                 setUserText(improved)
