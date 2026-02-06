@@ -1,0 +1,17 @@
+# FastAPI Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.10.3
+pydantic-settings==2.6.0
+
+# LLM / AI
+openai==1.57.0
+langchain-openai==0.2.10
+
+# Utilities
+python-dotenv==1.0.1
+requests==2.32.3
+markdown==3.7.0
+
+# Database (optional - for async operations)
+aiosqlite==0.20.0

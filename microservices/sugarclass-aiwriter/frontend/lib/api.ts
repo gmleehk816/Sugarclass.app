@@ -32,10 +32,38 @@ export interface SuggestionResponse {
     success: boolean;
 }
 
+// Structured improvement response types
+export interface FeedbackItem {
+    before?: string;
+    after: string;
+    explanation?: string;
+}
+
+export interface FeedbackCategory {
+    name: string;
+    has_issues: boolean;
+    items: FeedbackItem[];
+}
+
+export interface PlagiarismCheck {
+    has_plagiarism: boolean;
+    similarity_percent: number;
+    copied_phrases: string[];
+    details: string;
+}
+
 export interface ImprovementResponse {
-    improved?: string;
-    error?: string;
     success: boolean;
+    error?: string;
+    improved: string;
+    plagiarism: PlagiarismCheck;
+    spelling: FeedbackCategory;
+    grammar: FeedbackCategory;
+    punctuation: FeedbackCategory;
+    style: FeedbackCategory;
+    learning_tip: string;
+    misspelled_words: string[];
+    informal_words: string[];
 }
 
 export interface StatsResponse {

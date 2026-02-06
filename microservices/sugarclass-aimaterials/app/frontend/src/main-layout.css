@@ -1,0 +1,91 @@
+/* Custom styles for main layout and empty/utility states */
+
+.middle-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #f8fafc;
+}
+
+.middle-header {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.middle-header-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-counter {
+  font-size: 13px;
+  color: #6b7280;
+  min-width: 48px;
+  text-align: center;
+}
+
+.middle-content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #64748b;
+  gap: 8px;
+}
+
+.empty-state.small {
+  height: 180px;
+}
+
+.empty-icon {
+  font-size: 32px !important;
+  width: 32px !important;
+  height: 32px !important;
+  color: #a5b4fc !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.empty-desc {
+  font-size: 15px;
+  color: #64748b;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .middle-content {
+    padding: 10px;
+  }
+  .empty-title {
+    font-size: 17px;
+  }
+  .empty-desc {
+    font-size: 13px;
+  }
+}

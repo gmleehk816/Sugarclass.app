@@ -45,3 +45,13 @@ Thumbs.db
 
 # Docker
 .dockerignore
+
+# AI Materials - Archive and non-essential directories (all generated content)
+microservices/sugarclass-aimaterials/archive/
+microservices/sugarclass-aimaterials/app/static/
+microservices/sugarclass-aimaterials/app/generated_images/
+microservices/sugarclass-aimaterials/app/exercise_images/
+microservices/sugarclass-aimaterials/app/frontend/node_modules/
+microservices/sugarclass-aimaterials/app/frontend/dist/
+microservices/sugarclass-aimaterials/app/__pycache__/
+microservices/sugarclass-aimaterials/database/

@@ -5,7 +5,7 @@ import { ArrowLeft, Save, Wand2, Sparkles, Bot, Loader2, CheckCircle2, BookOpen,
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
-import { getArticle, Article, generatePrewrite, generateSuggestion, improveText, saveWriting } from '@/lib/api'
+import { getArticle, Article, generatePrewrite, generateSuggestion, improveText, saveWriting, ImprovementResponse } from '@/lib/api'
 import dynamic from 'next/dynamic'
 
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), {
@@ -30,33 +30,23 @@ interface SelectionInfo {
     to: number
 }
 
-interface FeedbackCategory {
+// UI feedback category with icon and color
+interface UIFeedbackCategory {
     name: string
     icon: React.ComponentType<{ className?: string }>
     color: string
-    items: FeedbackItem[]
-}
-
-interface FeedbackItem {
-    before: string
-    after: string
-    explanation: string
-}
-
-interface ParsedFeedback {
-    improved: string
-    categories: FeedbackCategory[]
-    learningTip: string | null
-    plagiarismCheck: string | null
+    bgColor: string
+    borderColor: string
+    has_issues: boolean
+    items: import('@/lib/api').FeedbackItem[]
 }
 
 // Category definitions with icons and colors
-const FEEDBACK_CATEGORIES = {
-    SPELLING: { name: 'Spelling', icon: SpellCheck, color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200' },
-    GRAMMAR: { name: 'Grammar', icon: GraduationCap, color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' },
-    PUNCTUATION: { name: 'Punctuation', icon: AlertCircle, color: 'text-amber-500', bgColor: 'bg-amber-50', borderColor: 'border-amber-200' },
-    CLARITY: { name: 'Clarity', icon: Glasses, color: 'text-green-500', bgColor: 'bg-green-50', borderColor: 'border-green-200' },
-    STYLE: { name: 'Style', icon: Palette, color: 'text-purple-500', bgColor: 'bg-purple-50', borderColor: 'border-purple-200' },
+const CATEGORY_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>, color: string, bgColor: string, borderColor: string }> = {
+    'Spelling': { icon: SpellCheck, color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200' },
+    'Grammar': { icon: GraduationCap, color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' },
+    'Punctuation': { icon: AlertCircle, color: 'text-amber-500', bgColor: 'bg-amber-50', borderColor: 'border-amber-200' },
+    'Style': { icon: Palette, color: 'text-purple-500', bgColor: 'bg-purple-50', borderColor: 'border-purple-200' },
 }
 
 export default function WriterPage() {
@@ -69,7 +59,7 @@ export default function WriterPage() {
     const [contentHtml, setContentHtml] = useState('')
     const [contentJson, setContentJson] = useState('')
     const [prewriteSummary, setPrewriteSummary] = useState<string | null>(null)
-    const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
+    const [aiSuggestion, setAiSuggestion] = useState<ImprovementResponse | string | null>(null)
     const [aiLoading, setAiLoading] = useState(false)
     const [aiError, setAiError] = useState<string | null>(null)
     const [yearLevel, setYearLevel] = useState('Year 7')
@@ -224,7 +214,7 @@ export default function WriterPage() {
             })
 
             if (response.success && response.improved) {
-                setAiSuggestion(response.improved)
+                setAiSuggestion(response)
             } else {
                 setAiError(response.error || 'Failed to improve text')
             }
@@ -235,128 +225,25 @@ export default function WriterPage() {
         }
     }
 
-    // Parse enhanced mentor feedback with categories
-    function parseMentorFeedback(feedback: string): ParsedFeedback {
-        console.log('Parsing feedback, first 200 chars:', feedback.substring(0, 200))
-
-        // Try to parse new enhanced format first
-        // Note: PLAGIARISM CHECK comes between IMPROVED and FEEDBACK
-        const improvedMatch = feedback.match(/IMPROVED:\s*([\s\S]*?)(?=\n\n(?:PLAGIARISM CHECK|FEEDBACK):|$)/i)
-        const plagiarismMatch = feedback.match(/PLAGIARISM CHECK:\s*([\s\S]*?)(?=\n\nFEEDBACK:|$)/i)
-        const feedbackMatch = feedback.match(/FEEDBACK:\s*([\s\S]*?)(?=\n\nLEARNING TIP:|$)/i)
-        const learningTipMatch = feedback.match(/LEARNING TIP:\s*([\s\S]*?)$/i)
-
-        console.log('Improved match:', improvedMatch ? 'FOUND' : 'NOT FOUND')
-        console.log('Improved text length:', improvedMatch?.[1]?.length || 0)
-
-        // Extract improved text - if no IMPROVED section, return empty string
-        // This ensures we only use the actual improved text, not the feedback
-        const improved = improvedMatch?.[1]?.trim() || ''
-
-        console.log('Final improved text length:', improved.length)
-
-        // Parse feedback categories
-        const categories: FeedbackCategory[] = []
-        if (feedbackMatch) {
-            const feedbackText = feedbackMatch[1]
-
-            // Parse each category
-            for (const [key, config] of Object.entries(FEEDBACK_CATEGORIES)) {
-                // Match everything from the category name until the next \nCATEGORY: pattern or end
-                const categoryRegex = new RegExp(`${key}:\\s*([\\s\\S]*?)(?=\\n\\n?(?:${Object.keys(FEEDBACK_CATEGORIES).join('|')}):|$)`, 'i')
-                const categoryMatch = feedbackText.match(categoryRegex)
-
-                if (categoryMatch) {
-                    const rawItems = categoryMatch[1]
-                        .split('•')
-                        .map(s => s.trim())
-                        .filter(s => s.length > 0)
-
-                    // Parse each item to extract before, after, and explanation
-                    const items: FeedbackItem[] = rawItems
-                        .map(item => {
-                            // Match format: "before" → "after" (explanation) - with parentheses
-                            const matchWithExplanation = item.match(/"([^"]+)"\s*→\s*"([^"]+)"\s*\(([^)]+)\)/)
-                            if (matchWithExplanation) {
-                                return {
-                                    before: matchWithExplanation[1],
-                                    after: matchWithExplanation[2],
-                                    explanation: matchWithExplanation[3].trim()
-                                }
-                            }
-                            // Match format: "before" → "after" - without parentheses (spelling format)
-                            const matchWithoutExplanation = item.match(/"([^"]+)"\s*→\s*"([^"]+)"/)
-                            if (matchWithoutExplanation) {
-                                return {
-                                    before: matchWithoutExplanation[1],
-                                    after: matchWithoutExplanation[2],
-                                    explanation: ''
-                                }
-                            }
-                            // Fallback for items that don't match the expected format
-                            return {
-                                before: '',
-                                after: item,
-                                explanation: ''
-                            }
-                        })
-                        .filter(item => item.after.length > 0)
-
-                    if (items.length > 0) {
-                        categories.push({
-                            name: config.name,
-                            icon: config.icon,
-                            color: config.color,
-                            items,
-                        })
-                    }
-                }
-            }
-        }
-
-        // Fallback: if no categories parsed, try old format
-        if (categories.length === 0) {
-            const oldChangesMatch = feedback.match(/WHAT CHANGED:\\s*([\\s\\S]*?)$/i)
-            if (oldChangesMatch) {
-                const rawItems = oldChangesMatch[1]
-                    .split('•')
-                    .map(s => s.trim())
-                    .filter(s => s.length > 0)
-
-                const items: FeedbackItem[] = rawItems.map(item => ({
-                    before: '',
-                    after: item,
-                    explanation: ''
-                }))
-
-                if (items.length > 0) {
-                    categories.push({
-                        name: 'Changes',
-                        icon: Lightbulb,
-                        color: 'text-primary',
-                        items,
-                    })
-                }
-            }
-        }
-
-        const learningTip = learningTipMatch?.[1]?.trim() || null
-        const plagiarismCheck = plagiarismMatch?.[1]?.trim() || null
-
-        return { improved, categories, learningTip, plagiarismCheck }
+    // Helper function to type-check aiSuggestion
+    function isImprovementResponse(value: typeof aiSuggestion): value is ImprovementResponse {
+        return value !== null && typeof value === 'object' && 'improved' in value
     }
 
     function handleAddToEditor() {
         if (aiSuggestion) {
-            setUserText(prev => prev + '\n\n' + aiSuggestion)
-            setAiSuggestion(null)
+            // Only handle string suggestions (from Suggest tab), not improvement responses
+            const textToAdd = typeof aiSuggestion === 'string' ? aiSuggestion : ''
+            if (textToAdd) {
+                setUserText(prev => prev + '\n\n' + textToAdd)
+                setAiSuggestion(null)
+            }
         }
     }
 
     function handleReplaceWithImproved() {
-        if (aiSuggestion) {
-            // Parse mentor feedback to extract just the improved version
-            const { improved } = parseMentorFeedback(aiSuggestion)
+        if (aiSuggestion && isImprovementResponse(aiSuggestion)) {
+            const improved = aiSuggestion.improved
 
             console.log('Improved text extracted:', improved?.substring(0, 100))
             console.log('Improved text length:', improved?.length || 0)
@@ -684,7 +571,7 @@ export default function WriterPage() {
                                             Suggest Next Paragraph
                                         </motion.button>
 
-                                        {aiSuggestion && (
+                                        {aiSuggestion && typeof aiSuggestion === 'string' && (
                                             <motion.div
                                                 initial={{ opacity: 0, y: 10 }}
                                                 animate={{ opacity: 1, y: 0 }}
@@ -734,113 +621,138 @@ export default function WriterPage() {
                                         </motion.button>
 
                                         {aiSuggestion && (() => {
-                                            const { improved, categories, learningTip, plagiarismCheck } = parseMentorFeedback(aiSuggestion)
-                                            return (
-                                                <motion.div
-                                                    initial={{ opacity: 0, y: 10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    className="bg-success/5 rounded-lg p-3 border border-success/20"
-                                                >
-                                                    <div className="text-xs text-success font-semibold mb-3 flex items-center gap-1">
-                                                        <Edit3 className="w-3 h-3" />
-                                                        Mentor Feedback
-                                                    </div>
+                                            // Check if aiSuggestion is structured improvement response
+                                            if (typeof aiSuggestion === 'object' && 'improved' in aiSuggestion) {
+                                                const response = aiSuggestion
+                                                const { improved, learning_tip, plagiarism, spelling, grammar, punctuation, style } = response
 
-                                                    {/* Plagiarism Check */}
-                                                    {plagiarismCheck && (
-                                                        <div className="mb-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
-                                                            <div className="text-xs font-semibold text-amber-700 mb-1 flex items-center gap-1">
-                                                                <AlertCircle className="w-3 h-3" />
-                                                                Plagiarism Check
+                                                // Build UI categories from structured response
+                                                const categories: UIFeedbackCategory[] = []
+                                                for (const [key, category] of Object.entries({ spelling, grammar, punctuation, style })) {
+                                                    const config = CATEGORY_CONFIG[category.name]
+                                                    if (config) {
+                                                        categories.push({
+                                                            name: category.name,
+                                                            icon: config.icon,
+                                                            color: config.color,
+                                                            bgColor: config.bgColor,
+                                                            borderColor: config.borderColor,
+                                                            has_issues: category.has_issues,
+                                                            items: category.items
+                                                        })
+                                                    }
+                                                }
+
+                                                return (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        className="bg-success/5 rounded-lg p-3 border border-success/20"
+                                                    >
+                                                        <div className="text-xs text-success font-semibold mb-3 flex items-center gap-1">
+                                                            <Edit3 className="w-3 h-3" />
+                                                            Mentor Feedback
+                                                        </div>
+
+                                                        {/* Plagiarism Check */}
+                                                        {plagiarism.details && (
+                                                            <div className={`mb-3 p-2 rounded-lg border ${plagiarism.has_plagiarism ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                                                                <div className={`text-xs font-semibold mb-1 flex items-center gap-1 ${plagiarism.has_plagiarism ? 'text-amber-700' : 'text-green-700'}`}>
+                                                                    <AlertCircle className="w-3 h-3" />
+                                                                    Plagiarism Check
+                                                                </div>
+                                                                <p className="text-xs text-text-secondary whitespace-pre-wrap">{plagiarism.details}</p>
                                                             </div>
-                                                            <p className="text-xs text-text-secondary whitespace-pre-wrap">{plagiarismCheck}</p>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Categorized feedback */}
-                                                    {categories.length > 0 && (
-                                                        <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
-                                                            {categories.map((category, catIdx) => {
-                                                                const Icon = category.icon
-                                                                const config = Object.values(FEEDBACK_CATEGORIES).find(c => c.name === category.name)
-                                                                return (
-                                                                    <div key={catIdx} className={`p-2 rounded-lg border ${config?.bgColor || 'bg-gray-50'} ${config?.borderColor || 'border-gray-200'}`}>
-                                                                        <div className={`text-xs font-semibold ${category.color} mb-1.5 flex items-center gap-1`}>
-                                                                            <Icon className="w-3 h-3" />
-                                                                            {category.name}
-                                                                        </div>
-                                                                        <ul className="text-xs text-text-secondary space-y-1.5">
-                                                                            {category.items.map((item, idx) => (
-                                                                                <li key={idx} className="space-y-0.5">
-                                                                                    {/* Check if this is a "no errors" message */}
-                                                                                    {item.after.includes('No ') && item.after.includes('found') ? (
-                                                                                        <span className="text-green-600 italic">{item.after}</span>
-                                                                                    ) : item.before ? (
-                                                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                                                            <span className="line-through text-red-400 font-mono">"{item.before}"</span>
-                                                                                            <span className={category.color}>→</span>
-                                                                                            <span className="font-semibold text-green-600 font-mono">"{item.after}"</span>
-                                                                                        </div>
-                                                                                    ) : (
-                                                                                        <span className="font-semibold text-green-600">"{item.after}"</span>
-                                                                                    )}
-                                                                                    {item.explanation && (
-                                                                                        <div className="text-text-muted ml-1 pl-2 border-l-2 border-gray-300 italic">
-                                                                                            {item.explanation}
-                                                                                        </div>
-                                                                                    )}
-                                                                                </li>
-                                                                            ))}
-                                                                        </ul>
-                                                                    </div>
-                                                                )
-                                                            })}
-                                                        </div>
-                                                    )}
-
-                                                    {/* Learning Tip */}
-                                                    {learningTip && (
-                                                        <div className="mb-3 p-2 bg-primary/10 rounded-lg border border-primary/20">
-                                                            <div className="text-xs font-semibold text-primary mb-1 flex items-center gap-1">
-                                                                <Lightbulb className="w-3 h-3" />
-                                                                Learning Tip
-                                                            </div>
-                                                            <p className="text-xs text-text-secondary">{learningTip}</p>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Improved version */}
-                                                    {improved ? (
-                                                        <div className="text-sm text-text-primary leading-relaxed mb-3 max-h-40 overflow-y-auto p-2 bg-white rounded-lg border border-border">
-                                                            {improved}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="text-sm text-text-muted italic mb-3 p-2 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                                                            No improved version available - review the feedback above to make changes yourself
-                                                        </div>
-                                                    )}
-
-                                                    <div className="flex gap-2">
-                                                        {improved && (
-                                                            <button
-                                                                onClick={handleReplaceWithImproved}
-                                                                className="flex-1 px-3 py-2 bg-success text-white rounded-lg text-sm font-semibold hover:bg-success/90 transition-colors"
-                                                            >
-                                                                Use Improved Version
-                                                            </button>
                                                         )}
-                                                        <button
-                                                            onClick={() => {
-                                                                setAiSuggestion(null)
-                                                                setSelectedText(null)
-                                                            }}
-                                                            className={`px-3 py-2 ${improved ? 'bg-surface-dark border border-border text-text-primary' : 'flex-1 bg-warning/20 border border-warning/30 text-warning'} rounded-lg text-sm font-semibold hover:bg-surface transition-colors`}
-                                                        >
-                                                            {improved ? 'Dismiss' : 'Close Feedback'}
-                                                        </button>
-                                                    </div>
-                                                </motion.div>
-                                            )
+
+                                                        {/* Categorized feedback */}
+                                                        {categories.filter(c => c.items.length > 0 || !c.has_issues).length > 0 && (
+                                                            <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                                                                {categories.filter(c => c.items.length > 0 || !c.has_issues).map((category, catIdx) => {
+                                                                    const Icon = category.icon
+                                                                    return (
+                                                                        <div key={catIdx} className={`p-2 rounded-lg border ${category.bgColor} ${category.borderColor}`}>
+                                                                            <div className={`text-xs font-semibold ${category.color} mb-1.5 flex items-center gap-1`}>
+                                                                                <Icon className="w-3 h-3" />
+                                                                                {category.name}
+                                                                            </div>
+                                                                            <ul className="text-xs text-text-secondary space-y-1.5">
+                                                                                {category.items.length > 0 ? category.items.map((item, idx) => (
+                                                                                    <li key={idx} className="space-y-0.5">
+                                                                                        {/* Check if this is a "no errors" message */}
+                                                                                        {item.after.includes('No ') && item.after.includes('found') ? (
+                                                                                            <span className="text-green-600 italic">{item.after}</span>
+                                                                                        ) : item.before ? (
+                                                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                                <span className="line-through text-red-400 font-mono">"{item.before}"</span>
+                                                                                                <span className={category.color}>→</span>
+                                                                                                <span className="font-semibold text-green-600 font-mono">"{item.after}"</span>
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <span className="font-semibold text-green-600">"{item.after}"</span>
+                                                                                        )}
+                                                                                        {item.explanation && (
+                                                                                            <div className="text-text-muted ml-1 pl-2 border-l-2 border-gray-300 italic">
+                                                                                                {item.explanation}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </li>
+                                                                                )) : (
+                                                                                    <li className="text-green-600 italic">No {category.name.toLowerCase()} errors found!</li>
+                                                                                )}
+                                                                            </ul>
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Learning Tip */}
+                                                        {learning_tip && (
+                                                            <div className="mb-3 p-2 bg-primary/10 rounded-lg border border-primary/20">
+                                                                <div className="text-xs font-semibold text-primary mb-1 flex items-center gap-1">
+                                                                    <Lightbulb className="w-3 h-3" />
+                                                                    Learning Tip
+                                                                </div>
+                                                                <p className="text-xs text-text-secondary">{learning_tip}</p>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Improved version */}
+                                                        {improved ? (
+                                                            <div className="text-sm text-text-primary leading-relaxed mb-3 max-h-40 overflow-y-auto p-2 bg-white rounded-lg border border-border">
+                                                                {improved}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-sm text-text-muted italic mb-3 p-2 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                                                                No improved version available - review the feedback above to make changes yourself
+                                                            </div>
+                                                        )}
+
+                                                        <div className="flex gap-2">
+                                                            {improved && (
+                                                                <button
+                                                                    onClick={handleReplaceWithImproved}
+                                                                    className="flex-1 px-3 py-2 bg-success text-white rounded-lg text-sm font-semibold hover:bg-success/90 transition-colors"
+                                                                >
+                                                                    Use Improved Version
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => {
+                                                                    setAiSuggestion(null)
+                                                                    setSelectedText(null)
+                                                                }}
+                                                                className={`px-3 py-2 ${improved ? 'bg-surface-dark border border-border text-text-primary' : 'flex-1 bg-warning/20 border border-warning/30 text-warning'} rounded-lg text-sm font-semibold hover:bg-surface transition-colors`}
+                                                            >
+                                                                {improved ? 'Dismiss' : 'Close Feedback'}
+                                                            </button>
+                                                        </div>
+                                                    </motion.div>
+                                                )
+                                            }
+                                            // Fallback for string suggestions (from Suggest tab)
+                                            return null
                                         })()}
                                     </div>
                                 )}

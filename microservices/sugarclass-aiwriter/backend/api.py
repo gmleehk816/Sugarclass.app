@@ -126,6 +126,40 @@ class ImprovementRequest(BaseModel):
     selected_text: str | None = None  # Optional selected text to focus on
 
 
+# Structured improvement response models
+class FeedbackItem(BaseModel):
+    before: str | None = None
+    after: str
+    explanation: str | None = None
+
+
+class FeedbackCategory(BaseModel):
+    name: str  # "Spelling", "Grammar", "Punctuation", "Style"
+    has_issues: bool
+    items: List[FeedbackItem]
+
+
+class PlagiarismCheck(BaseModel):
+    has_plagiarism: bool
+    similarity_percent: float
+    copied_phrases: List[str]
+    details: str
+
+
+class ImprovementResponse(BaseModel):
+    success: bool
+    error: str | None = None
+    improved: str  # The AI-improved text
+    plagiarism: PlagiarismCheck
+    spelling: FeedbackCategory
+    grammar: FeedbackCategory
+    punctuation: FeedbackCategory
+    style: FeedbackCategory
+    learning_tip: str
+    misspelled_words: List[str]  # For frontend highlighting
+    informal_words: List[str]  # For frontend highlighting
+
+
 @app.get("/")
 def read_root():
     return {
@@ -220,24 +254,37 @@ def generate_suggestion(request: SuggestionRequest, authorization: Optional[str]
     except Exception as e:
         return {"error": str(e), "success": False}
 
-@app.post("/ai/improve")
+@app.post("/ai/improve", response_model=ImprovementResponse)
 def improve_text(request: ImprovementRequest, authorization: Optional[str] = Header(None), user: Optional[dict] = Depends(get_current_user)):
-    """Improve user's writing with mentor feedback"""
+    """Improve user's writing with mentor feedback - returns structured JSON response"""
     try:
         print(f"[Improve] Request: text_length={len(request.text)}, selected_length={len(request.selected_text) if request.selected_text else 0}, year_level={request.year_level}")
-        improved = improve_paragraph(
+        result = improve_paragraph(
             request.text,
             request.article_text,
             request.year_level,
             request.selected_text or ""
         )
-        print(f"[Improve] Response: improved_length={len(improved)}")
+        print(f"[Improve] Response: improved_length={len(result.get('improved', ''))}")
         if user and authorization:
             report_activity("writer", "improvement", authorization, {"has_selection": bool(request.selected_text)})
-        return {"improved": improved, "success": True}
+        # Return structured response (dict from improve_paragraph)
+        return ImprovementResponse(success=True, **result)
     except Exception as e:
         print(f"[Improve] Error: {e}")
-        return {"error": str(e), "success": False}
+        return ImprovementResponse(
+            success=False,
+            error=str(e),
+            improved="",
+            plagiarism=PlagiarismCheck(has_plagiarism=False, similarity_percent=0.0, copied_phrases=[], details=""),
+            spelling=FeedbackCategory(name="Spelling", has_issues=False, items=[]),
+            grammar=FeedbackCategory(name="Grammar", has_issues=False, items=[]),
+            punctuation=FeedbackCategory(name="Punctuation", has_issues=False, items=[]),
+            style=FeedbackCategory(name="Style", has_issues=False, items=[]),
+            learning_tip="",
+            misspelled_words=[],
+            informal_words=[]
+        )
 
 class WritingSaveRequest(BaseModel):
     article_id: int

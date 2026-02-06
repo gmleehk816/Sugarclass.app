@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>frontend</title>
+    <!-- MathJax Configuration -->
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [['\\(', '\\)']],
+          displayMath: [['\\[', '\\]']],
+          processEscapes: true,
+          processEnvironments: true,
+          // Process math in specific classes without delimiters
+          tags: 'ams'
+        },
+        options: {
+          skipHtmlTags: ['noscript', 'style', 'textarea', 'pre', 'code'],
+          ignoreHtmlClass: 'tex2jax_ignore',
+          processHtmlClass: 'tex2jax_process'
+        },
+        startup: {
+          ready: () => {
+            MathJax.startup.defaultReady();
+            // Process math expressions in .math-inline and .math-display classes
+            MathJax.typesetPromise().catch(err => console.error('MathJax error:', err));
+          }
+        }
+      };
+    </script>
+    <style>
+      /* Pale grey highlight for math expressions */
+      .math-inline {
+        background-color: #f1f3f5 !important;
+        padding: 2px 6px !important;
+        border-radius: 3px !important;
+        font-size: 1.05em !important;
+        display: inline-block !important;
+      }
+      .math-display {
+        background-color: #f8f9fa !important;
+        padding: 15px 20px !important;
+        margin: 20px 0 !important;
+        border-radius: 6px !important;
+        text-align: center !important;
+        font-size: 1.1em !important;
+      }
+      /* Hide raw LaTeX while MathJax processes */
+      .math-inline:not(.MathJax), .math-display:not(.MathJax) {
+        font-family: 'Times New Roman', serif;
+      }
+    </style>
+    <script id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+      // Expose a promise that resolves when MathJax startup completes
+      (function pollMathJax() {
+        if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+          window.__MATHJAX_READY = window.MathJax.startup.promise;
+        } else {
+          setTimeout(pollMathJax, 50);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

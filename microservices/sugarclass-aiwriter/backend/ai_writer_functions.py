@@ -1288,16 +1288,16 @@ Return ONLY the paragraph text - no introductions, no explanations, no markdown 
     return content or "No suggestion generated."
 
 
-def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10, selected_text: str = "") -> str:
+def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10, selected_text: str = "") -> dict:
     """
     Improve a student's writing with CODE-BASED analysis.
 
     Uses CODE-BASED checks for:
     - Plagiarism detection (similarity matching)
-    - Spelling checking (dictionary)
-    - Grammar checking (pattern matching)
-    - Punctuation checking (rules)
-    - Style checking (readability metrics)
+    - Spelling checking (LLM)
+    - Grammar checking (LLM)
+    - Punctuation checking (LLM)
+    - Style checking (LLM)
 
     Uses AI ONLY for:
     - Rewriting the text (keeping same length)
@@ -1309,15 +1309,34 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
         selected_text: Optional specific text selection to focus on
 
     Returns:
-        Improved version with detailed mentor feedback
+        Structured dict with improved text and categorized feedback
     """
     # Determine if this is a selection improvement (must be defined early)
     is_selection = bool(selected_text)
     text_to_improve = selected_text if selected_text else paragraph
 
+    # Helper to build empty category
+    def _empty_category(name: str) -> dict:
+        return {"name": name, "has_issues": False, "items": []}
+
     # Early return for invalid input
     if not text_to_improve or len(text_to_improve.strip()) < 10:
-        return "Please provide some text to improve."
+        return {
+            "improved": "Please provide some text to improve.",
+            "plagiarism": {
+                "has_plagiarism": False,
+                "similarity_percent": 0.0,
+                "copied_phrases": [],
+                "details": "Text too short to check."
+            },
+            "spelling": _empty_category("Spelling"),
+            "grammar": _empty_category("Grammar"),
+            "punctuation": _empty_category("Punctuation"),
+            "style": _empty_category("Style"),
+            "learning_tip": "Please write at least 10 characters.",
+            "misspelled_words": [],
+            "informal_words": []
+        }
 
     # Early return for very short text - skip AI entirely
     if len(text_to_improve.strip()) < 30:
@@ -1329,45 +1348,59 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
         grammar_result = check_results['grammar']
         punctuation_result = check_results['punctuation']
 
-        response_parts = [f"IMPROVED:\n{text_to_improve}"]
-        response_parts.append("\n\nPLAGIARISM CHECK:\n✅ Text too short for plagiarism check.")
-        response_parts.append("\n\nFEEDBACK:")
-
-        # Spelling - ALWAYS show
-        response_parts.append("\nSPELLING:")
+        # Build spelling items
+        spelling_items = []
         if spell_result['has_errors']:
             for error in spell_result['errors'][:3]:
-                response_parts.append(f"• \"{error['word']}\" → \"{error['correction']}\"")
-        else:
-            response_parts.append("• No spelling errors found!")
+                spelling_items.append({"before": error['word'], "after": error['correction'], "explanation": None})
 
-        # Grammar - ALWAYS show
-        response_parts.append("\nGRAMMAR:")
+        # Build grammar items
+        grammar_items = []
         if grammar_result['has_errors']:
             for error in grammar_result['errors'][:2]:
-                response_parts.append(f"• \"{error['found']}\" → \"{error['correction']}\"")
-        else:
-            response_parts.append("• No grammar errors found!")
+                grammar_items.append({"before": error['found'], "after": error['correction'], "explanation": error.get('explanation', '')})
 
-        # Punctuation - ALWAYS show
-        response_parts.append("\nPUNCTUATION:")
+        # Build punctuation items
+        punctuation_items = []
         if punctuation_result['has_errors']:
             for error in punctuation_result['errors'][:2]:
-                response_parts.append(f"• {error['explanation']}")
-        else:
-            response_parts.append("• No punctuation errors found!")
+                punctuation_items.append({"before": None, "after": "", "explanation": error['explanation']})
 
-        # Style - ALWAYS show
-        response_parts.append("\nSTYLE:")
-        response_parts.append("• Write more text for style suggestions!")
+        # Style items
+        style_items = [{"before": None, "after": "Write more text for style suggestions!", "explanation": None}]
 
-        if spell_result['has_errors']:
-            misspelled = ','.join([error['word'] for error in spell_result['errors']])
-            response_parts.append(f"\n\nMISSPELLED_WORDS:\n{misspelled}")
-
-        response_parts.append("\n\nLEARNING TIP:\nWrite more text to get detailed AI-powered improvements and feedback.")
-
-        return "".join(response_parts)
+        return {
+            "improved": text_to_improve,
+            "plagiarism": {
+                "has_plagiarism": False,
+                "similarity_percent": 0.0,
+                "copied_phrases": [],
+                "details": "Text too short for plagiarism check."
+            },
+            "spelling": {
+                "name": "Spelling",
+                "has_issues": spell_result['has_errors'],
+                "items": spelling_items
+            },
+            "grammar": {
+                "name": "Grammar",
+                "has_issues": grammar_result['has_errors'],
+                "items": grammar_items
+            },
+            "punctuation": {
+                "name": "Punctuation",
+                "has_issues": punctuation_result['has_errors'],
+                "items": punctuation_items
+            },
+            "style": {
+                "name": "Style",
+                "has_issues": True,  # Always has the "write more" suggestion
+                "items": style_items
+            },
+            "learning_tip": "Write more text to get detailed AI-powered improvements and feedback.",
+            "misspelled_words": [error['word'] for error in spell_result['errors']] if spell_result['has_errors'] else [],
+            "informal_words": []
+        }
 
     text_length = len(text_to_improve)
     logger.info(f"Improving {'selected text' if is_selection else 'full text'}, length: {text_length}")
@@ -1406,102 +1439,61 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
     else:
         logger.info(f"Successfully generated improved text using LLM")
 
-    # ===== BUILD RESPONSE IN CODE (NOT AI!) =====
-    response_parts = []
-
-    # 1. IMPROVED section
-    response_parts.append(f"IMPROVED:\n{improved_text}")
-
-    # 2. PLAGIARISM CHECK section
+    # ===== BUILD STRUCTURED RESPONSE =====
+    # Build plagiarism details text for display
     if plagiarism_result['has_plagiarism']:
-        plagiarism_text = f"⚠️ Found {plagiarism_result['similarity_percent']}% similarity to source. "
+        plagiarism_details = f"⚠️ Found {plagiarism_result['similarity_percent']}% similarity to source. "
         if plagiarism_result['copied_phrases']:
-            plagiarism_text += f"{len(plagiarism_result['copied_phrases'])} potentially copied phrase(s):\n"
-            for phrase in plagiarism_result['copied_phrases'][:3]:
-                plagiarism_text += f"  • \"{phrase[:80]}{'...' if len(phrase) > 80 else ''}\"\n"
-        plagiarism_text += "Please rewrite these in your own words."
+            plagiarism_details += f"{len(plagiarism_result['copied_phrases'])} potentially copied phrase(s). "
+        plagiarism_details += "Please rewrite these in your own words."
     else:
-        plagiarism_text = f"✅ Good job! Your writing appears original ({plagiarism_result['similarity_percent']}% similarity)."
+        plagiarism_details = f"✅ Good job! Your writing appears original ({plagiarism_result['similarity_percent']}% similarity)."
 
-    response_parts.append(f"\n\nPLAGIARISM CHECK:\n{plagiarism_text}")
-
-    # 3. FEEDBACK section - build from code results
-    response_parts.append("\n\nFEEDBACK:")
-
-    # Spelling - ALWAYS show this category
-    response_parts.append("\nSPELLING:")
+    # Build spelling items
+    spelling_items = []
     if spell_result['has_errors']:
         for error in spell_result['errors'][:5]:
-            response_parts.append(f"• \"{error['word']}\" → \"{error['correction']}\"")
-    else:
-        response_parts.append("• No spelling errors found!")
+            spelling_items.append({"before": error['word'], "after": error['correction'], "explanation": None})
 
-    # Grammar - ALWAYS show this category
-    response_parts.append("\nGRAMMAR:")
+    # Build grammar items
+    grammar_items = []
     if grammar_result['has_errors']:
         logger.info(f"Adding {len(grammar_result['errors'])} grammar errors to response")
         for error in grammar_result['errors'][:5]:
-            response_parts.append(f"• \"{error['found']}\" → \"{error['correction']}\" ({error['explanation']})")
+            grammar_items.append({"before": error['found'], "after": error['correction'], "explanation": error.get('explanation', '')})
     else:
         logger.info("No grammar errors found to add to response")
-        response_parts.append("• No grammar errors found!")
 
-    # Punctuation - ALWAYS show this category
-    response_parts.append("\nPUNCTUATION:")
+    # Build punctuation items
+    punctuation_items = []
     if punctuation_result['has_errors']:
         for error in punctuation_result['errors'][:5]:
-            response_parts.append(f"• {error['explanation']}")
-    else:
-        response_parts.append("• No punctuation errors found!")
+            punctuation_items.append({"before": None, "after": "", "explanation": error['explanation']})
 
-    # Style - ALWAYS show this category
-    # Format: "informal phrase" → "formal replacement" (explanation)
-    response_parts.append("\nSTYLE:")
+    # Build style items and extract informal words
+    style_items = []
+    informal_words = []
     if style_result['has_suggestions']:
         for suggestion in style_result['suggestions'][:3]:
-            # Parse suggestion to extract informal word and formal replacement
-            # Expected format from LLM/fallback: issue='Informal word "obvs"', suggestion='Use "obviously" instead'
             issue = suggestion.get('issue', '')
             suggest = suggestion.get('suggestion', '')
 
             # Extract the informal word from issue (look for quoted text)
-            import re
             informal_match = re.search(r'"([^"]+)"', issue)
             formal_match = re.search(r'"([^"]+)"', suggest)
 
             if informal_match and formal_match:
                 informal = informal_match.group(1)
                 formal = formal_match.group(1)
+                informal_words.append(informal)
                 # Build explanation from remaining text
                 explanation = suggest.replace(f'"{formal}"', '').replace('Use ', '').replace(' instead', '').strip()
-                response_parts.append(f'• "{informal}" → "{formal}" ({explanation})')
+                style_items.append({"before": informal, "after": formal, "explanation": explanation})
             else:
-                # Fallback to original format if parsing fails
-                response_parts.append(f"• {issue}: {suggest}")
-    else:
-        response_parts.append("• No style suggestions - good job!")
+                # Fallback: use issue as before, suggestion as after
+                style_items.append({"before": issue, "after": suggest, "explanation": None})
 
-    # 4. MISSPELLED_WORDS section for frontend highlighting (simple format)
-    # Format: word1,word2,word3 (comma-separated list)
-    if spell_result['has_errors']:
-        misspelled_words = ','.join([error['word'] for error in spell_result['errors']])
-        response_parts.append(f"\n\nMISSPELLED_WORDS:\n{misspelled_words}")
-
-    # 4.5. INFORMAL_WORDS section for frontend highlighting (slang/informal words)
-    # Format: word1,word2,word3 (comma-separated list)
-    if style_result['has_suggestions']:
-        informal_words = []
-        for suggestion in style_result['suggestions'][:3]:
-            issue = suggestion.get('issue', '')
-            # Extract the informal word from issue (look for quoted text)
-            import re
-            informal_match = re.search(r'"([^"]+)"', issue)
-            if informal_match:
-                informal_words.append(informal_match.group(1))
-        if informal_words:
-            response_parts.append(f"\n\nINFORMAL_WORDS:\n{','.join(informal_words)}")
-
-    # 5. LEARNING TIP - code-based
+    # Select learning tip based on errors found
     learning_tips = [
         "Read your writing aloud to catch awkward phrasing.",
         "Use transition words like 'however', 'therefore', 'meanwhile' to connect ideas.",
@@ -1510,7 +1502,6 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
         "Always proofread for missing punctuation and capitalization."
     ]
 
-    # Select a relevant tip based on what errors were found
     if grammar_result['has_errors']:
         tip = learning_tips[0]
     elif punctuation_result['has_errors']:
@@ -1520,10 +1511,43 @@ def improve_paragraph(paragraph: str, article_context: str = "", year_level = 10
     else:
         tip = learning_tips[2]
 
-    response_parts.append(f"\n\nLEARNING TIP:\n{tip}")
+    # Build misspelled words list
+    misspelled_words = [error['word'] for error in spell_result['errors']] if spell_result['has_errors'] else []
 
-    result = "".join(response_parts)
-    logger.info(f"Improvement complete, returned {len(result)} characters")
+    result = {
+        "improved": improved_text,
+        "plagiarism": {
+            "has_plagiarism": plagiarism_result['has_plagiarism'],
+            "similarity_percent": plagiarism_result['similarity_percent'],
+            "copied_phrases": plagiarism_result['copied_phrases'],
+            "details": plagiarism_details
+        },
+        "spelling": {
+            "name": "Spelling",
+            "has_issues": spell_result['has_errors'],
+            "items": spelling_items
+        },
+        "grammar": {
+            "name": "Grammar",
+            "has_issues": grammar_result['has_errors'],
+            "items": grammar_items
+        },
+        "punctuation": {
+            "name": "Punctuation",
+            "has_issues": punctuation_result['has_errors'],
+            "items": punctuation_items
+        },
+        "style": {
+            "name": "Style",
+            "has_issues": style_result['has_suggestions'],
+            "items": style_items
+        },
+        "learning_tip": tip,
+        "misspelled_words": misspelled_words,
+        "informal_words": informal_words
+    }
+
+    logger.info(f"Improvement complete, returned structured data")
     return result
 
 

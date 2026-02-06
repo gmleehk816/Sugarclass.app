@@ -14,7 +14,8 @@ import {
     ChevronLeft,
     ChevronRight,
     Menu,
-    X
+    X,
+    Library
 } from "lucide-react";
 import styles from "./Sidebar.module.css";
 
@@ -29,6 +30,7 @@ const Sidebar = () => {
         { name: "AI Teacher", icon: BookOpen, path: "/services/tutor" },
         { name: "Writing Hub", icon: PenTool, path: "/services/writer" },
         { name: "AI Examiner", icon: FileSearch, path: "/services/examiner" },
+        { name: "AI Materials", icon: Library, path: "/services/materials" },
         { name: "Settings", icon: Settings, path: "/settings" },
     ];
 

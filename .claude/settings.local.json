@@ -24,7 +24,16 @@
       "Bash(ls:*)",
       "Bash(find:*)",
       "Bash(sqlite3:*)",
-      "Bash(java:*)"
+      "Bash(java:*)",
+      "Bash(powershell:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(test:*)",
+      "Bash(pip freeze:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

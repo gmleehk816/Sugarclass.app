@@ -374,6 +374,57 @@ services:
       timeout: 10s
       retries: 3
 
+  # ===========================================================================
+  # AI MATERIALS MICROSERVICE
+  # ===========================================================================
+
+  # AI Materials Backend (FastAPI)
+  aimaterials-backend:
+    build:
+      context: ./microservices/sugarclass-aimaterials
+      dockerfile: Dockerfile
+    container_name: aimaterials-backend
+    restart: unless-stopped
+    env_file:
+      - ./microservices/sugarclass-aimaterials/.env
+    environment:
+      - DB_PATH=/app/database/rag_content.db
+      - SUGARCLASS_API_URL=http://backend:8000/api/v1
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./microservices/sugarclass-aitutor/database:/app/database:ro
+      - ./microservices/sugarclass-aimaterials/app/static:/app/app/static:ro
+      - ./microservices/sugarclass-aimaterials/archive:/app/archive:ro
+    networks:
+      - sugarclass-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8004/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Materials Frontend (React/Vite)
+  aimaterials-frontend:
+    build:
+      context: ./microservices/sugarclass-aimaterials/app/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8004
+        VITE_BASE_PATH: /services/aimaterials
+    container_name: aimaterials-frontend
+    ports:
+      - "3404:3000"
+    depends_on:
+      - aimaterials-backend
+    networks:
+      - sugarclass-network
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 # =============================================================================
 # NETWORKS
 # =============================================================================
