@@ -39,7 +39,9 @@ function App() {
     if (!subjectId) return;
     try {
       const res = await api.get(`/api/db/subjects/${subjectId}/topics`);
-      const list = res.data.map(t => ({
+      // Ensure res.data is an array before processing
+      const topicsData = Array.isArray(res.data) ? res.data : [];
+      const list = topicsData.map(t => ({
         id: String(t.id),               // displayed id as string
         full_id: t.id,                  // original id
         name: t.name,
@@ -58,6 +60,7 @@ function App() {
       }
     } catch (err) {
       console.error('Error loading topics', err);
+      setTopics([]); // Ensure topics is always an array
     }
   };
 
@@ -77,7 +80,9 @@ function App() {
       const url = `/api/db/topics/${topicId}/subtopics${processedOnly ? '?processed_only=true' : ''}`;
       const subRes = await api.get(url);
 
-      const allSubtopics = subRes.data.map(s => ({
+      // Ensure subRes.data is an array before processing
+      const subtopicsData = Array.isArray(subRes.data) ? subRes.data : [];
+      const allSubtopics = subtopicsData.map(s => ({
         id: String(s.id),
         full_id: s.id,
         name: s.name,
@@ -102,6 +107,8 @@ function App() {
       else if (contentSubs.length > 0) setSelectedSubtopicId(contentSubs[0].full_id);
     } catch (err) {
       console.error('Error fetching subtopics', err);
+      setSubtopics([]);
+      setExercises([]);
     }
 
     // fetch exercises (generated) and questions (past papers)
@@ -114,7 +121,7 @@ function App() {
 
     try {
       const q = await api.get(`/api/topics/${topic.id}/questions`);
-      setQuestions(q.data);
+      setQuestions(Array.isArray(q.data) ? q.data : []);
     } catch (err) {
       /* ignore */
     }
@@ -153,7 +160,9 @@ function App() {
       const topicId = String(chapter.id);
       const res = await api.get(`/api/db/topics/${topicId}/subtopics`);
 
-      const subtopicsList = res.data.map(s => ({
+      // Ensure res.data is an array before processing
+      const subtopicsData = Array.isArray(res.data) ? res.data : [];
+      const subtopicsList = subtopicsData.map(s => ({
         id: String(s.id),
         full_id: s.id,
         name: s.name,
@@ -180,6 +189,7 @@ function App() {
 
     } catch (err) {
       console.error('Error loading subtopics for chapter', err);
+      setSubtopics([]);
     }
 
     // fetch exercises (generated) and questions (past papers) for chapter
@@ -192,7 +202,7 @@ function App() {
 
     try {
       const q = await api.get(`/api/topics/${chapter.id}/questions`);
-      if (Array.isArray(q.data)) setQuestions(q.data);
+      setQuestions(Array.isArray(q.data) ? q.data : []);
     } catch (err) {
       console.error('Error fetching questions for chapter', err);
     }

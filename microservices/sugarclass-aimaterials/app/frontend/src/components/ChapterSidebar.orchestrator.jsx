@@ -11,15 +11,18 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
     const fetchSubjects = async () => {
       try {
         const res = await api.get('/api/db/subjects');
-        setSubjects(res.data);
+        // Ensure res.data is an array before setting
+        const subjectsData = Array.isArray(res.data) ? res.data : [];
+        setSubjects(subjectsData);
 
-        if (res.data.length > 0) {
-          const first = res.data[0];
+        if (subjectsData.length > 0) {
+          const first = subjectsData[0];
           setSelectedSubject(first.id);
           if (onSubjectChange) onSubjectChange(first.id);
         }
       } catch (err) {
         console.error('Error loading subjects', err);
+        setSubjects([]); // Ensure subjects is always an array
       } finally {
         setLoading(false);
       }
