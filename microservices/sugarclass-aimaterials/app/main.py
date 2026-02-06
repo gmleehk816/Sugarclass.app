@@ -24,7 +24,8 @@ from .config_fastapi import settings
 
 BASE_DIR = Path(__file__).parent
 PROJECT_ROOT = BASE_DIR.parent
-DB_PATH = PROJECT_ROOT / "database" / "rag_content.db"
+# Use DB_PATH from environment variable if set, otherwise use default
+DB_PATH = Path(os.getenv("DB_PATH", PROJECT_ROOT / "database" / "rag_content.db"))
 
 # Static directories
 STATIC_DIR = BASE_DIR / "static"
