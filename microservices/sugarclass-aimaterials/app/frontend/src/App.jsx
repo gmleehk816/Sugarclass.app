@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { api } from './api';
 
 // Orchestrator-styled components
 import ChapterSidebar from './components/ChapterSidebar.orchestrator';
@@ -38,7 +38,7 @@ function App() {
   const loadTopicsForSubject = async (subjectId) => {
     if (!subjectId) return;
     try {
-      const res = await axios.get(`/api/db/subjects/${subjectId}/topics`);
+      const res = await api.get(`/api/db/subjects/${subjectId}/topics`);
       const list = res.data.map(t => ({
         id: String(t.id),               // displayed id as string
         full_id: t.id,                  // original id
@@ -75,7 +75,7 @@ function App() {
       const isMath = selectedSubject === 'mathematics_0607' || topicId.startsWith('mathematics_0607_');
       const processedOnly = isMath && contentMode === 'processed' && (topic.processed_count > 0);
       const url = `/api/db/topics/${topicId}/subtopics${processedOnly ? '?processed_only=true' : ''}`;
-      const subRes = await axios.get(url);
+      const subRes = await api.get(url);
 
       const allSubtopics = subRes.data.map(s => ({
         id: String(s.id),
@@ -106,14 +106,14 @@ function App() {
 
     // fetch exercises (generated) and questions (past papers)
     try {
-      const ex = await axios.get(`/api/topics/${topic.id}/exercises`);
+      const ex = await api.get(`/api/topics/${topic.id}/exercises`);
       if (Array.isArray(ex.data) && ex.data.length) setExercises(ex.data);
     } catch (err) {
       /* ignore */
     }
 
     try {
-      const q = await axios.get(`/api/topics/${topic.id}/questions`);
+      const q = await api.get(`/api/topics/${topic.id}/questions`);
       setQuestions(q.data);
     } catch (err) {
       /* ignore */
@@ -151,7 +151,7 @@ function App() {
 
     try {
       const topicId = String(chapter.id);
-      const res = await axios.get(`/api/db/topics/${topicId}/subtopics`);
+      const res = await api.get(`/api/db/topics/${topicId}/subtopics`);
 
       const subtopicsList = res.data.map(s => ({
         id: String(s.id),
@@ -184,14 +184,14 @@ function App() {
 
     // fetch exercises (generated) and questions (past papers) for chapter
     try {
-      const ex = await axios.get(`/api/topics/${chapter.id}/exercises`);
+      const ex = await api.get(`/api/topics/${chapter.id}/exercises`);
       if (Array.isArray(ex.data) && ex.data.length) setExercises(ex.data);
     } catch (err) {
       console.error('Error fetching exercises for chapter', err);
     }
 
     try {
-      const q = await axios.get(`/api/topics/${chapter.id}/questions`);
+      const q = await api.get(`/api/topics/${chapter.id}/questions`);
       if (Array.isArray(q.data)) setQuestions(q.data);
     } catch (err) {
       console.error('Error fetching questions for chapter', err);

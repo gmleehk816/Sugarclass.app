@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 
 function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChange, onSubjectChange }) {
   const [subjects, setSubjects] = useState([]);
@@ -10,7 +10,7 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
   useEffect(() => {
     const fetchSubjects = async () => {
       try {
-        const res = await axios.get('/api/db/subjects');
+        const res = await api.get('/api/db/subjects');
         setSubjects(res.data);
 
         if (res.data.length > 0) {
@@ -31,7 +31,7 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
     const fetchChapters = async (subjectId) => {
       if (!subjectId) return;
       try {
-        const res = await axios.get(`/api/db/subjects/${subjectId}/topics`);
+        const res = await api.get(`/api/db/subjects/${subjectId}/topics`);
         const topicList = res.data || [];
 
         const chapters = topicList.map((t, index) => ({
