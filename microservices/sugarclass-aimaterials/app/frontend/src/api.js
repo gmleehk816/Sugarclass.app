@@ -52,12 +52,21 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => {
     console.log(`%c[API Response] ${response.config.url} - ${response.status}`, 'color: #3b82f6;');
+    // Log response data for debugging
+    if (response.config.url?.includes('/subjects')) {
+      console.log('[Response Data]', response.data);
+      console.log('[Response Data Type]', typeof response.data);
+      console.log('[Is Array]', Array.isArray(response.data));
+    }
     return response;
   },
   (error) => {
     const url = error.config?.url || 'unknown';
     const status = error.response?.status || 'network error';
     console.error(`%c[API Error] ${url} - ${status}`, 'color: #ef4444;', error.message);
+    if (error.response?.data) {
+      console.log('[Error Response Data]', error.response.data);
+    }
     return Promise.reject(error);
   }
 );

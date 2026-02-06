@@ -11,6 +11,11 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
     const fetchSubjects = async () => {
       try {
         const res = await api.get('/api/db/subjects');
+        // Debug logging
+        console.log('Raw res.data:', res.data);
+        console.log('Type of res.data:', typeof res.data);
+        console.log('Is Array?', Array.isArray(res.data));
+
         // Ensure res.data is an array before setting
         const subjectsData = Array.isArray(res.data) ? res.data : [];
         console.log('ChapterSidebar: Fetched subjects:', subjectsData);

@@ -37,7 +37,11 @@
       "Bash(docker-compose:*)",
       "Bash(netstat:*)",
       "Bash(ss:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(git -C \"c:\\\\Users\\\\gmhome\\\\SynologyDrive\\\\coding\\\\Sugarclass.app\" status)",
+      "Bash(git -C \"c:\\\\Users\\\\gmhome\\\\SynologyDrive\\\\coding\\\\Sugarclass.app\" add microservices/sugarclass-aimaterials/app/frontend/src/api.js microservices/sugarclass-aimaterials/app/frontend/src/components/ChapterSidebar.orchestrator.jsx microservices/sugarclass-aimaterials/app/frontend/src/App.jsx update-vps-remote.sh)",
+      "Bash(git -C \"c:\\\\Users\\\\gmhome\\\\SynologyDrive\\\\coding\\\\Sugarclass.app\" diff microservices/sugarclass-aimaterials/app/frontend/src/App.jsx)",
+      "Bash(git -C \"c:\\\\Users\\\\gmhome\\\\SynologyDrive\\\\coding\\\\Sugarclass.app\" diff update-vps-remote.sh)"
     ],
     "deny": [],
     "ask": []
