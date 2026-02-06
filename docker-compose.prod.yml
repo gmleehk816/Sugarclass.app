@@ -408,9 +408,6 @@ services:
       - ./microservices/sugarclass-aimaterials/.env
     environment:
       - DB_PATH=/app/database/rag_content.db
-      - SUGARCLASS_API_URL=https://sugarclass.app/api/v1
-      - DEBUG=False
-      - CORS_ORIGINS=["https://sugarclass.app","https://www.sugarclass.app"]
     volumes:
       - ./microservices/sugarclass-aitutor/database:/app/database:ro
     networks:
