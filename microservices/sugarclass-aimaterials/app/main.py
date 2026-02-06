@@ -47,7 +47,11 @@ MATERIALS_OUTPUT_DIR = PROJECT_ROOT / "output" / "materials_output"
 
 def get_db_connection() -> sqlite3.Connection:
     """Get a database connection with row factory."""
-    conn = sqlite3.connect(str(DB_PATH))
+    db_path = str(DB_PATH)
+    # Check if database file exists
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found at: {db_path}")
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -72,6 +76,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ============================================================================
+# Startup Event
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Log database path on startup."""
+    import logging
+    logger = logging.getLogger("uvicorn")
+    logger.info(f"AI Materials DB_PATH: {DB_PATH}")
+    logger.info(f"Database file exists: {os.path.exists(DB_PATH)}")
+    if os.path.exists(DB_PATH):
+        logger.info(f"Database size: {os.path.getsize(DB_PATH)} bytes")
 
 # ============================================================================
 # Static Files
