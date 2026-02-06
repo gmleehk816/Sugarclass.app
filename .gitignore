@@ -46,6 +46,9 @@ Thumbs.db
 # Docker
 .dockerignore
 
+# Nginx production configs (managed via CI/CD)
+gateway/nginx/sugarclass.app.conf
+
 # AI Materials - Archive and non-essential directories (all generated content)
 microservices/sugarclass-aimaterials/archive/
 microservices/sugarclass-aimaterials/app/static/
