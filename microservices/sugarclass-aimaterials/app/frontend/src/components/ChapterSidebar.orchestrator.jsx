@@ -13,6 +13,7 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
         const res = await api.get('/api/db/subjects');
         // Ensure res.data is an array before setting
         const subjectsData = Array.isArray(res.data) ? res.data : [];
+        console.log('ChapterSidebar: Fetched subjects:', subjectsData);
         setSubjects(subjectsData);
 
         if (subjectsData.length > 0) {
