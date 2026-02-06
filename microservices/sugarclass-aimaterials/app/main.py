@@ -196,6 +196,35 @@ def normalize_options(options: Any, correct_answer: Optional[str] = None) -> Lis
     # Fallback: return empty array
     return []
 
+def extract_body_content(html: Optional[str]) -> Optional[str]:
+    """
+    Extract body content from full HTML documents.
+
+    If the HTML contains <body> tags, extract only the body content.
+    Otherwise, return the HTML as-is.
+
+    This is needed when inserting HTML into a div using dangerouslySetInnerHTML,
+    as browsers don't render nested <html> tags correctly.
+    """
+    if not html:
+        return None
+
+    html = html.strip()
+
+    # Check if it's a full HTML document
+    if '<body' in html.lower():
+        try:
+            import re
+            # Extract content between <body> and </body>
+            body_match = re.search(r'<body[^>]*>(.*?)</body>', html, re.DOTALL | re.IGNORECASE)
+            if body_match:
+                body_content = body_match.group(1).strip()
+                return body_content
+        except Exception:
+            pass
+
+    return html
+
 # ============================================================================
 # API Routes - Content
 # ============================================================================
@@ -425,7 +454,7 @@ async def get_db_content(subtopic_id: str, mode: str = Query("processed", descri
             # Convert to HTML if needed
             html = None
             if processed_row:
-                html = processed_row['html_content']
+                html = extract_body_content(processed_row['html_content'])
 
             if not html and row_dict.get('markdown_content'):
                 html = markdown.markdown(
@@ -653,7 +682,7 @@ async def get_content_with_rewrite(subtopic_id: str):
             },
             "rewrite": {
                 "has_rewrite": processed_data is not None,
-                "html": processed_data.get('html_content') if processed_data else None,
+                "html": extract_body_content(processed_data.get('html_content')) if processed_data else None,
                 "created_at": processed_data.get('processed_at') if processed_data else None,
                 "processor_version": processed_data.get('processor_version') if processed_data else None
             }

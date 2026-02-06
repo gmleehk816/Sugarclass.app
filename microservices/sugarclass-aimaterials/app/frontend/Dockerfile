@@ -4,8 +4,8 @@
 FROM node:20-alpine AS builder
 
 # Build arguments for configuration
-ARG VITE_API_URL=http://localhost:8004
-ARG VITE_BASE_PATH=/aimaterials
+ARG VITE_API_URL=/services/aimaterials/api
+ARG VITE_BASE_PATH=/services/aimaterials
 
 # Set working directory
 WORKDIR /app

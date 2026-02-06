@@ -34,7 +34,10 @@
       "Bash(docker-compose build:*)",
       "Bash(docker-compose down:*)",
       "Bash(python3:*)",
-      "Bash(docker-compose:*)"
+      "Bash(docker-compose:*)",
+      "Bash(netstat:*)",
+      "Bash(ss:*)",
+      "Bash(tasklist:*)"
     ],
     "deny": [],
     "ask": []
