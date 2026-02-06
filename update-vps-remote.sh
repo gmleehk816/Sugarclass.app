@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-# Sugarclass.app - Quick Update Script
+# Sugarclass.app - Optimized Update Script
 # =============================================================================
 # Handles smart rebuilds for all 5 microservices:
 #   - aiwriter (AI Writer)
@@ -9,10 +9,35 @@
 #   - aiexaminer (AI Examiner)
 #   - aimaterials (AI Materials)
 #   - sugarclass (Main Dashboard)
+#
+# Usage:
+#   ./update-vps-remote.sh              # Smart rebuild (only changed services)
+#   ./update-vps-remote.sh --full       # Full rebuild (no cache)
+#   ./update-vps-remote.sh --no-cache   # Rebuild changed services without cache
 # =============================================================================
 
 # Define project directory
 PROJECT_DIR="/var/www/Sugarclass.app"
+
+# Parse arguments
+FULL_REBUILD=false
+NO_CACHE=false
+for arg in "$@"; do
+    case $arg in
+        --full)
+            FULL_REBUILD=true
+            ;;
+        --no-cache)
+            NO_CACHE=true
+            ;;
+        --help)
+            echo "Usage: $0 [--full] [--no-cache]"
+            echo "  --full      Rebuild all services from scratch"
+            echo "  --no-cache  Build changed services without cache"
+            exit 0
+            ;;
+    esac
+done
 
 echo "🚀 Starting Update Process..."
 
@@ -27,54 +52,128 @@ git pull origin main
 echo "🔍 Detecting changed microservices..."
 CHANGED_FILES=$(git diff HEAD@{1} --name-only)
 
-# Track which services changed (including -backend and -frontend)
-declare -A SERVICES_CHANGED
-SERVICES_CHANGED[aiwriter]=false
-SERVICES_CHANGED[tutor]=false
-SERVICES_CHANGED[aiexaminer]=false
-SERVICES_CHANGED[aimaterials]=false
-SERVICES_CHANGED[sugarclass]=false
+# Track which services and components changed
+declare -A BACKEND_CHANGED
+declare -A FRONTEND_CHANGED
+SERVICES=("aiwriter" "tutor" "aiexaminer" "aimaterials" "sugarclass")
 
-# Check each microservice
-for service in aiwriter tutor aiexaminer aimaterials sugarclass; do
-    if echo "$CHANGED_FILES" | grep -q "microservices/sugarclass-$service"; then
-        SERVICES_CHANGED[$service]=true
-        echo "  ✓ $service changed"
-    fi
+for service in "${SERVICES[@]}"; do
+    BACKEND_CHANGED[$service]=false
+    FRONTEND_CHANGED[$service]=false
 done
 
-# 4. Force rebuild changed microservices (no cache)
+# Detect changes for each microservice
+detect_changes() {
+    local service=$1
+    local path_prefix="microservices/sugarclass-$service"
+
+    # Backend changes (Python files, requirements, Dockerfile.backend)
+    if echo "$CHANGED_FILES" | grep -qE "^$path_prefix.*(backend|Dockerfile\.backend|requirements\.txt)"; then
+        BACKEND_CHANGED[$service]=true
+        echo "  ✓ $service-backend changed"
+    fi
+
+    # Frontend changes
+    if echo "$CHANGED_FILES" | grep -qE "^$path_prefix.*(frontend|Dockerfile(?!\.backend))"; then
+        FRONTEND_CHANGED[$service]=true
+        echo "  ✓ $service-frontend changed"
+    fi
+}
+
+# Check main sugarclass app separately
+if echo "$CHANGED_FILES" | grep -qE "^(backend|frontend)/"; then
+    if echo "$CHANGED_FILES" | grep -qE "^backend/"; then
+        BACKEND_CHANGED[sugarclass]=true
+        echo "  ✓ sugarclass-backend changed"
+    fi
+    if echo "$CHANGED_FILES" | grep -qE "^frontend/"; then
+        FRONTEND_CHANGED[sugarclass]=true
+        echo "  ✓ sugarclass-frontend changed"
+    fi
+fi
+
+# Check microservices
+for service in aiwriter tutor aiexaminer aimaterials; do
+    detect_changes $service
+done
+
+# 4. Build changed services
+BUILD_ARGS=""
+if [ "$FULL_REBUILD" = true ] || [ "$NO_CACHE" = true ]; then
+    BUILD_ARGS="--no-cache"
+fi
+
 echo ""
-echo "🏗️  Rebuilding changed microservices (no cache)..."
-for service in "${!SERVICES_CHANGED[@]}"; do
-    if [ "${SERVICES_CHANGED[$service]}" = true ]; then
+echo "🏗️  Building changed services..."
+echo ""
+
+# Track services to build
+SERVICES_TO_BUILD=()
+
+for service in "${SERVICES[@]}"; do
+    if [ "$FULL_REBUILD" = true ]; then
+        # Build all services
         case $service in
             aiwriter)
-                SERVICES="aiwriter-backend aiwriter-frontend"
+                SERVICES_TO_BUILD+=("aiwriter-backend" "aiwriter-frontend")
                 ;;
             tutor)
-                SERVICES="tutor-backend tutor-frontend"
+                SERVICES_TO_BUILD+=("tutor-backend" "tutor-frontend")
                 ;;
             aiexaminer)
-                SERVICES="aiexaminer-backend aiexaminer-frontend"
+                SERVICES_TO_BUILD+=("aiexaminer-backend" "aiexaminer-frontend")
                 ;;
             aimaterials)
-                SERVICES="aimaterials-backend aimaterials-frontend"
+                SERVICES_TO_BUILD+=("aimaterials-backend" "aimaterials-frontend")
                 ;;
             sugarclass)
-                SERVICES="backend frontend"
+                SERVICES_TO_BUILD+=("backend" "frontend")
                 ;;
         esac
-        echo "  → Rebuilding $service..."
-        docker compose -f docker-compose.prod.yml build --no-cache $SERVICES
-        docker compose -f docker-compose.prod.yml up -d $SERVICES
+    else
+        # Build only changed components
+        if [ "${BACKEND_CHANGED[$service]}" = true ] || [ "${FRONTEND_CHANGED[$service]}" = true ]; then
+            case $service in
+                aiwriter)
+                    [ "${BACKEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("aiwriter-backend")
+                    [ "${FRONTEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("aiwriter-frontend")
+                    ;;
+                tutor)
+                    [ "${BACKEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("tutor-backend")
+                    [ "${FRONTEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("tutor-frontend")
+                    ;;
+                aiexaminer)
+                    [ "${BACKEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("aiexaminer-backend")
+                    [ "${FRONTEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("aiexaminer-frontend")
+                    ;;
+                aimaterials)
+                    [ "${BACKEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("aimaterials-backend")
+                    [ "${FRONTEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("aimaterials-frontend")
+                    ;;
+                sugarclass)
+                    [ "${BACKEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("backend")
+                    [ "${FRONTEND_CHANGED[$service]}" = true ] && SERVICES_TO_BUILD+=("frontend")
+                    ;;
+            esac
+        fi
     fi
 done
 
-# 5. Rebuild and restart all services with normal build
-echo ""
-echo "🔄 Rebuilding and restarting all services (with cache)..."
-docker compose -f docker-compose.prod.yml up -d --build
+# Build services
+if [ ${#SERVICES_TO_BUILD[@]} -gt 0 ]; then
+    echo "Building: ${SERVICES_TO_BUILD[*]}"
+    docker compose -f docker-compose.prod.yml build $BUILD_ARGS "${SERVICES_TO_BUILD[@]}"
+    docker compose -f docker-compose.prod.yml up -d "${SERVICES_TO_BUILD[@]}"
+else
+    echo "ℹ️  No services changed. Skipping build."
+fi
+
+# 5. Only restart gateway nginx if needed (gateway config changes)
+if echo "$CHANGED_FILES" | grep -qE "gateway/nginx/"; then
+    echo ""
+    echo "🔄 Restarting gateway nginx (config changed)..."
+    docker compose -f docker-compose.prod.yml restart nginx
+fi
 
 # 6. Cleanup old images
 echo ""
@@ -85,4 +184,4 @@ echo ""
 echo "✅ Update Complete! Sugarclass.app is running the latest version."
 echo ""
 echo "📊 Service Status:"
-docker compose -f docker-compose.prod.yml ps --format "table {{.Service}}\t{{.State}}\t{{.Status}}" | grep -E "NAME|frontend|backend"
+docker compose -f docker-compose.prod.yml ps --format "table {{.Service}}\t{{.State}}\t{{.Status}}" | grep -E "NAME|frontend|backend|nginx"
