@@ -34,7 +34,7 @@ EXERCISE_IMAGES_DIR = BASE_DIR / "exercise_images"
 
 # Create directories if they don't exist
 for directory in [GENERATED_IMAGES_DIR, STATIC_GENERATED_IMAGES_DIR, EXERCISE_IMAGES_DIR]:
-    directory.mkdir(exist_ok=True)
+    directory.mkdir(parents=True, exist_ok=True)
 
 # Materials directories (optional, may not exist in production)
 MATERIALS_DIR = PROJECT_ROOT / "materials"
