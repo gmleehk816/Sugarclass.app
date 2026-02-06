@@ -4,56 +4,61 @@ import axios from 'axios';
 const BASE_PATH = '/services/aimaterials';
 
 // Determine if we're in development or production
-// Check if we're on localhost or in production domain
+// We're in production if accessing via domain (not localhost/local IP)
+const hostname = window.location.hostname;
 const isProduction = !(
-  window.location.hostname === 'localhost' ||
-  window.location.hostname === '127.0.0.1' ||
-  window.location.hostname.startsWith('192.168.') ||
-  window.location.port // has a port (common in dev)
+  hostname === 'localhost' ||
+  hostname === '127.0.0.1' ||
+  hostname.startsWith('192.168.') ||
+  hostname.startsWith('10.') ||
+  hostname.startsWith('172.16.') ||
+  hostname.endsWith('.local') ||
+  hostname.endsWith('.localhost')
 );
 
+// DEBUG: Log environment detection immediately
+console.log('=== API CLIENT INITIALIZATION ===');
+console.log('hostname:', hostname);
+console.log('isProduction:', isProduction);
+console.log('willPrependBasePath:', isProduction);
+console.log('==================================');
+
 // Create axios instance
-// In production: use BASE_PATH so nginx can route to backend
-// In development: no baseURL needed, vite proxy handles routing
 const api = axios.create({
   baseURL: isProduction ? BASE_PATH : ''
 });
 
-// Request interceptor - only needed in production
+// Request interceptor - CRITICAL for production
 api.interceptors.request.use((config) => {
-  // In production, prepend BASE_PATH to API requests
-  // In development, let requests pass through to vite proxy
+  const originalUrl = config.url;
+
+  // In production, ALWAYS prepend BASE_PATH to /api/ requests
+  // This is required because nginx expects /services/aimaterials/api/*
   if (isProduction && config.url?.startsWith('/api/')) {
     config.url = `${BASE_PATH}${config.url}`;
   }
-  // Log API calls for debugging
-  console.log(`[API Call] ${config.method?.toUpperCase()} ${config.url}`);
+
+  // Log for debugging
+  console.log(`[API Request] ${originalUrl} → ${config.url}`);
+
   return config;
 }, (error) => {
-  console.error('[API Error]', error);
+  console.error('[API Request Error]', error);
   return Promise.reject(error);
 });
 
 // Response interceptor for debugging
 api.interceptors.response.use(
   (response) => {
-    console.log(`[API Response] ${response.config.url} - Status: ${response.status}`);
+    console.log(`[API Response] ${response.config.url} - ${response.status}`);
     return response;
   },
   (error) => {
-    console.error(`[API Error] ${error.config?.url} - Status: ${error.response?.status}`, error.message);
+    const url = error.config?.url || 'unknown';
+    const status = error.response?.status || 'network error';
+    console.error(`[API Error] ${url} - ${status}`, error.message);
     return Promise.reject(error);
   }
 );
 
-// Log configuration for debugging
-console.log('=== AI Materials API Configuration ===');
-console.log('Environment:', isProduction ? 'production' : 'development');
-console.log('Hostname:', window.location.hostname);
-console.log('Port:', window.location.port || 'none');
-console.log('Pathname:', window.location.pathname);
-console.log('BASE_PATH:', BASE_PATH);
-console.log('baseURL:', isProduction ? BASE_PATH : '(none - using vite proxy)');
-console.log('==========================================');
-
-export { api };
+export { api, isProduction, BASE_PATH };
