@@ -19,9 +19,13 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build arguments for Vite
+# Build arguments for Vite - use ARG directly in build command
+# Vite will pick up these prefixed variables during build
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_BASE_PATH=${VITE_BASE_PATH}
+
+# Print to verify (for debugging)
+RUN echo "VITE_API_URL=$VITE_API_URL" && echo "VITE_BASE_PATH=$VITE_BASE_PATH"
 
 # Build the application
 RUN npm run build
