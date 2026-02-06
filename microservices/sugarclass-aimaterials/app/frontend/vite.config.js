@@ -11,27 +11,27 @@ export default defineConfig({
     allowedHosts: ['yuri-oversorrowful-seminervously.ngrok-free.app'],
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:8004',
         changeOrigin: true,
       },
       '/static': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:8004',
         changeOrigin: true,
       },
       '/images': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:8004',
         changeOrigin: true,
       },
       '/generated_images': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:8004',
         changeOrigin: true,
       },
       '/qa_images': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:8004',
         changeOrigin: true,
       },
       '/exercise_images': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:8004',
         changeOrigin: true,
       }
     }
