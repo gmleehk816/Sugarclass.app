@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 
 function MiddleArea({
   viewMode,
@@ -32,7 +32,7 @@ function MiddleArea({
     setLoading(true);
     try {
       const mode = contentMode === 'raw' ? 'raw' : 'processed';
-      const res = await axios.get(`/api/db/content/${selectedSubtopicId}?mode=${mode}`);
+      const res = await api.get(`/api/db/content/${selectedSubtopicId}?mode=${mode}`);
       setContent(res.data);
     } catch (err) {
       console.error('Error loading content', err);
