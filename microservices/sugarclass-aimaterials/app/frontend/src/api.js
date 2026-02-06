@@ -2,7 +2,8 @@ import axios from 'axios';
 
 // Always use /services/aimaterials as base URL
 // This works in both development and production
-const BASE_URL = '/services/aimaterials';
+// Note: baseURL MUST end with / for axios to work correctly with paths starting with /
+const BASE_URL = '/services/aimaterials/';
 
 // Create axios instance with base URL for correct routing
 export const api = axios.create({
