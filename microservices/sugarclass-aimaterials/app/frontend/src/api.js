@@ -1,18 +1,23 @@
 import axios from 'axios';
 
-// Always use /services/aimaterials as base URL
-// This works in both development and production
+// Base path for production routing (nginx routes /services/aimaterials/api/* to backend)
 const BASE_PATH = '/services/aimaterials';
 
+// Determine if we're in development or production
+const isDev = import.meta.env.DEV;
+
 // Create axios instance
+// In production: use BASE_PATH so nginx can route to backend
+// In development: no baseURL needed, vite proxy handles routing
 const api = axios.create({
-  baseURL: BASE_PATH
+  baseURL: isDev ? '' : BASE_PATH
 });
 
-// Request interceptor to prepend base path to all API requests
+// Request interceptor - only needed in production
 api.interceptors.request.use((config) => {
-  // If URL starts with /api/, prepend the base path
-  if (config.url?.startsWith('/api/')) {
+  // In production, prepend BASE_PATH to API requests
+  // In development, let requests pass through to vite proxy
+  if (!isDev && config.url?.startsWith('/api/')) {
     config.url = `${BASE_PATH}${config.url}`;
   }
   return config;
@@ -20,9 +25,11 @@ api.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
-// Log base URL for debugging (always log to help debug production)
-console.log('API BASE_PATH:', BASE_PATH);
-console.log('Window location:', window.location.href);
-console.log('Import meta env.VITE_BASE_PATH:', import.meta.env.VITE_BASE_PATH);
+// Log configuration for debugging
+console.log('API Configuration:');
+console.log('  Environment:', isDev ? 'development' : 'production');
+console.log('  BASE_PATH:', BASE_PATH);
+console.log('  baseURL:', isDev ? '(none - using vite proxy)' : BASE_PATH);
+console.log('  Window location:', window.location.href);
 
 export { api };
