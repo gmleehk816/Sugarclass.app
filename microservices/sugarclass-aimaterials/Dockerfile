@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app/ ./app/
+COPY scripts/ ./scripts/
 COPY start.py .
 
 # Create necessary directories (including runtime directories for generated content)
