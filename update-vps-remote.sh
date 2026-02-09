@@ -62,27 +62,39 @@ for service in "${SERVICES[@]}"; do
     FRONTEND_CHANGED[$service]=false
 done
 
+# Declare global flag for compose changes
+COMPOSE_CHANGED=false
+if echo "$CHANGED_FILES" | grep -qE "docker-compose.*\.yml"; then
+    COMPOSE_CHANGED=true
+    echo "  ! docker-compose config changed"
+fi
+
 # Detect changes for each microservice
 detect_changes() {
     local service=$1
-    local path_prefix="microservices/sugarclass-$service"
+    local path_prefix="microservices/sugarclass-$service/"
 
-    # Backend changes (Python files, requirements, Dockerfile.backend)
-    if echo "$CHANGED_FILES" | grep -qE "^$path_prefix.*(backend|Dockerfile\.backend|requirements\.txt)"; then
+    # Backend changes:
+    # 1. Any file in service root (except frontend/)
+    # 2. Specifically Dockerfile, Dockerfile.backend, requirements.txt, .env
+    # 3. Any file in app/ or backend/ (if they exist)
+    if echo "$CHANGED_FILES" | grep -qE "^$path_prefix(app/|backend/|scripts/|Dockerfile|\.env|requirements\.txt|start\.py)"; then
         BACKEND_CHANGED[$service]=true
         echo "  ✓ $service-backend changed"
     fi
 
-    # Frontend changes
-    if echo "$CHANGED_FILES" | grep -qE "^$path_prefix.*(frontend|Dockerfile(?!\.backend))"; then
+    # Frontend changes:
+    # 1. Any file in frontend/ subdirectory
+    # 2. Dockerfile if inside frontend/
+    if echo "$CHANGED_FILES" | grep -qE "^$path_prefix(frontend/)"; then
         FRONTEND_CHANGED[$service]=true
         echo "  ✓ $service-frontend changed"
     fi
 }
 
 # Check main sugarclass app separately
-if echo "$CHANGED_FILES" | grep -qE "^(backend|frontend)/"; then
-    if echo "$CHANGED_FILES" | grep -qE "^backend/"; then
+if echo "$CHANGED_FILES" | grep -qE "^(backend/|frontend/|Dockerfile)"; then
+    if echo "$CHANGED_FILES" | grep -qE "^(backend/|Dockerfile)"; then
         BACKEND_CHANGED[sugarclass]=true
         echo "  ✓ sugarclass-backend changed"
     fi
@@ -111,7 +123,7 @@ echo ""
 SERVICES_TO_BUILD=()
 
 for service in "${SERVICES[@]}"; do
-    if [ "$FULL_REBUILD" = true ]; then
+    if [ "$FULL_REBUILD" = true ] || [ "$COMPOSE_CHANGED" = true ]; then
         # Build all services
         case $service in
             aiwriter)
