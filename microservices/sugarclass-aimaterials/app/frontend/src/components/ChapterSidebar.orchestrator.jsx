@@ -133,6 +133,13 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
           >
             Q&A
           </button>
+          <button
+            className={`mode-tab ${viewMode === 'admin' ? 'active' : ''}`}
+            onClick={() => handleMode('admin')}
+            style={{ borderTop: '1px solid var(--border)', marginTop: '8px', opacity: 0.7 }}
+          >
+            Admin
+          </button>
         </div>
 
         {/* Chapters List */}

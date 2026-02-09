@@ -241,7 +241,46 @@ def generate_quality_report(markdown_path: Path) -> dict:
     print("STEP 1: Generating Structure with LLM")
     print("="*60)
     
-    # Check if quality report already exists
+    # Strategy A: Check for high-fidelity .structure.json (Preferred)
+    structure_json_path = markdown_path.parent / f"{markdown_path.stem.split('__')[0]}.structure.json"
+    if not structure_json_path.exists():
+        # Try without any suffixes
+        structure_json_path = markdown_path.parent / f"{markdown_path.stem}.structure.json"
+    
+    if structure_json_path.exists():
+        print(f"Found high-fidelity structure: {structure_json_path.name}")
+        with open(structure_json_path, 'r', encoding='utf-8') as f:
+            raw_struct = json.load(f)
+        
+        # Convert to internal quality_report format
+        quality_report = {
+            "source_file": str(markdown_path.name),
+            "subject": raw_struct.get("title", "Unknown"),
+            "chapters": [],
+            "total_chapters": raw_struct.get("total_chapters", 0),
+            "total_subtopics": raw_struct.get("total_subtopics", 0),
+            "is_high_fidelity": True
+        }
+        
+        for ch in raw_struct.get("chapters", []):
+            chapter = {
+                "number": ch.get("chapter"),
+                "title": ch.get("title"),
+                "line_number": ch.get("line_number"),
+                "subtopics": []
+            }
+            for st in ch.get("subtopics", []):
+                chapter["subtopics"].append({
+                    "number": st.get("subtopic"),
+                    "title": st.get("title"),
+                    "line_number": st.get("line_number")
+                })
+            quality_report["chapters"].append(chapter)
+            
+        print(f"✅ Using high-fidelity structure: {len(quality_report['chapters'])} chapters")
+        return quality_report
+
+    # Strategy B: Check if quality report already exists
     report_path = markdown_path.parent / f"{markdown_path.stem}_quality_report.json"
     if report_path.exists():
         print(f"Found existing quality report: {report_path.name}")
@@ -335,6 +374,18 @@ MARKDOWN CONTENT:
 # ============================================================
 # STEP 2: Extract Content by Title with Fuzzy Matching
 # ============================================================
+
+def extract_content_by_line_numbers(lines: list, start_line: int, end_line: int) -> str:
+    """Extract content between two line numbers (1-indexed)."""
+    # Convert to 0-indexed and slice
+    start_idx = max(0, start_line - 1)
+    end_idx = min(len(lines), end_line - 1)
+    
+    if start_idx >= end_idx:
+        return ""
+        
+    return "\n".join(lines[start_idx:end_idx]).strip()
+
 
 def find_chapter_boundary(md_content: str, title: str, start_from: int = 0) -> int:
     """Find the position of a chapter title (as a markdown header) for boundary detection."""
@@ -505,6 +556,7 @@ def ingest_content(quality_report: dict, markdown_path: Path, subject_name: str 
     print("="*60)
     
     md_content = markdown_path.read_text(encoding='utf-8', errors='ignore')
+    md_lines = md_content.splitlines()
     
     conn = get_conn()
     
@@ -619,7 +671,40 @@ def ingest_content(quality_report: dict, markdown_path: Path, subject_name: str 
             next_title = all_subtopics[global_idx + 1] if global_idx >= 0 and global_idx + 1 < len(all_subtopics) else None
             
             # Extract content
-            content, matched_title = extract_content_by_title(md_content, st_title, next_title, section_num=st_num)
+            content = ""
+            matched_title = None
+            
+            # Use line numbers if available (High Fidelity)
+            if st.get('line_number'):
+                start_l = st['line_number']
+                
+                # Determine end line
+                # 1. Next subtopic in current chapter
+                # 2. First subtopic of next chapter
+                # 3. Next chapter start line
+                # 4. End of file
+                
+                end_l = None
+                # Check next subtopic in same chapter
+                st_idx_in_ch = ch.get('subtopics', []).index(st)
+                if st_idx_in_ch + 1 < len(ch.get('subtopics', [])):
+                    end_l = ch['subtopics'][st_idx_in_ch + 1].get('line_number')
+                
+                # Check next chapter
+                if not end_l and ch_idx + 1 < len(quality_report['chapters']):
+                    next_ch = quality_report['chapters'][ch_idx + 1]
+                    if next_ch.get('line_number'):
+                        end_l = next_ch['line_number']
+                
+                if end_l:
+                    content = extract_content_by_line_numbers(md_lines, start_l, end_l)
+                else:
+                    # Last subtopic in book
+                    content = "\n".join(md_lines[start_l-1:]).strip()
+            
+            # Fallback to title-based extraction if line extraction failed or not available
+            if not content:
+                content, matched_title = extract_content_by_title(md_content, st_title, next_title, section_num=st_num)
             
             if content and len(content) > 100:
                 conn.execute(

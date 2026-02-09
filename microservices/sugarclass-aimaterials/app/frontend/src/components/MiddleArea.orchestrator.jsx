@@ -148,7 +148,7 @@ function MiddleArea({
           <div className="exercise-card animate-fade-in">
             <div className="exercise-number">Q{currentExerciseIndex + 1}</div>
             <div className="exercise-question">
-              {currentExercise.question || currentExercise.text || currentExercise.name}
+              {currentExercise.question_text || currentExercise.question || currentExercise.text || currentExercise.name}
             </div>
 
             {options.length > 0 && (

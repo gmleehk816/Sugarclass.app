@@ -21,8 +21,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY start.py .
 
-# Create necessary directories
-RUN mkdir -p /app/database /app/static /app/archive
+# Create necessary directories (including runtime directories for generated content)
+RUN mkdir -p /app/database /app/static /app/archive \
+    /app/app/static/generated_images \
+    /app/app/generated_images \
+    /app/app/exercise_images
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

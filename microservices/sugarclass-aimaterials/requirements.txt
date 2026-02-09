@@ -3,6 +3,7 @@ fastapi==0.115.0
 uvicorn[standard]==0.32.0
 pydantic==2.10.3
 pydantic-settings==2.6.0
+python-multipart==0.0.12
 
 # LLM / AI
 openai==1.57.0
@@ -15,3 +16,4 @@ markdown==3.7.0
 
 # Database (optional - for async operations)
 aiosqlite==0.20.0
+Pillow==11.0.0

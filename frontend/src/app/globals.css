@@ -6,16 +6,20 @@
     --foreground: #1a1a1b;
     --card-bg: rgba(255, 255, 255, 0.85);
     --card-border: rgba(0, 0, 0, 0.04);
-    
-    --primary: #1e293b; /* Slate 800 */
-    --primary-light: #334155; /* Slate 700 */
+
+    --primary: #1e293b;
+    /* Slate 800 */
+    --primary-light: #334155;
+    /* Slate 700 */
     --primary-muted: rgba(30, 41, 59, 0.05);
-    
-    --accent: #927559; /* Bronze Refined */
+
+    --accent: #927559;
+    /* Bronze Refined */
     --accent-light: #a48c73;
     --accent-muted: rgba(146, 117, 89, 0.1);
-    
-    --success: #3d5a45; /* Forest Sage */
+
+    --success: #3d5a45;
+    /* Forest Sage */
     --warning: #b45309;
     --error: #991b1b;
 
@@ -53,7 +57,7 @@ html {
 body {
     font-family: 'Outfit', sans-serif;
     background-color: var(--background);
-    background-image: 
+    background-image:
         radial-gradient(at 0% 0%, rgba(146, 117, 89, 0.04) 0, transparent 40%),
         radial-gradient(at 100% 100%, rgba(30, 41, 59, 0.04) 0, transparent 40%);
     color: var(--foreground);
@@ -125,9 +129,10 @@ button {
     .dashboard-layout {
         flex-direction: column;
     }
-    
+
     .main-content {
-        padding: 24px 20px 100px 20px; /* Add bottom padding for mobile navbar */
+        padding: 24px 20px 100px 20px;
+        /* Add bottom padding for mobile navbar */
     }
 }
 
@@ -165,23 +170,59 @@ h2 {
 
 /* Animations */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(15px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes slideInLeft {
-    from { opacity: 0; transform: translateX(-30px); }
-    to { opacity: 1; transform: translateX(0); }
+    from {
+        opacity: 0;
+        transform: translateX(-30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 @keyframes pulse-soft {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.02);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
 .animate-fade-in {
     animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
 }
 
 /* Core Utility: Premium Card */

@@ -393,9 +393,12 @@ services:
     ports:
       - "8004:8004"
     volumes:
-      - ./microservices/sugarclass-aitutor/database:/app/database:ro
+      - ./microservices/sugarclass-aitutor/database:/app/database
+      - ./microservices/sugarclass-aimaterials/app:/app/app
       - ./microservices/sugarclass-aimaterials/app/static:/app/app/static:ro
       - ./microservices/sugarclass-aimaterials/archive:/app/archive:ro
+      - ./microservices/sugarclass-aimaterials/scripts:/app/scripts:ro
+      - E:/PROGRAMMING/IB:/books
     networks:
       - sugarclass-network
     healthcheck:

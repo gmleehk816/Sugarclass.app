@@ -15,7 +15,8 @@ import {
     ChevronRight,
     Menu,
     X,
-    Library
+    Library,
+    ShieldCheck
 } from "lucide-react";
 import styles from "./Sidebar.module.css";
 
@@ -32,6 +33,7 @@ const Sidebar = () => {
         { name: "AI Examiner", icon: FileSearch, path: "/services/examiner" },
         { name: "AI Materials", icon: Library, path: "/services/materials" },
         { name: "Settings", icon: Settings, path: "/settings" },
+        { name: "Admin", icon: ShieldCheck, path: "/admin" },
     ];
 
     const handleLogout = () => {

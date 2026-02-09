@@ -70,11 +70,14 @@ function ExerciseArea({ exercise, index, total }) {
       )}
 
       {/* Multiple Choice Options */}
-      {isGeneratedExercise && Object.keys(options).length > 0 && (
+      {isGeneratedExercise && options && (Array.isArray(options) ? options.length > 0 : Object.keys(options).length > 0) && (
         <Box sx={{ display: 'grid', gridTemplateColumns: { md: '1fr 1fr', xs: '1fr' }, gap: 2, mb: 4 }}>
-          {Object.entries(options).map(([letter, text]) => {
+          {/* Handle both array format [{text, is_correct}] and object format {A: text, B: text} */}
+          {(Array.isArray(options) 
+            ? options.map((opt, idx) => ({ letter: String.fromCharCode(65 + idx), text: opt.text || opt, isCorrectOption: opt.is_correct }))
+            : Object.entries(options).map(([letter, text]) => ({ letter, text, isCorrectOption: letter === correctAnswer }))
+          ).map(({ letter, text, isCorrectOption }) => {
             const isSelected = selectedAnswer === letter;
-            const isCorrectOption = letter === correctAnswer;
             
             let borderColor = 'divider';
             let bgcolor = 'white';

@@ -10,13 +10,15 @@ import markdown
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .config_fastapi import settings
+from .admin import router as admin_router
 
 # ============================================================================
 # Configuration & Paths
@@ -33,9 +35,13 @@ GENERATED_IMAGES_DIR = BASE_DIR / "generated_images"
 STATIC_GENERATED_IMAGES_DIR = STATIC_DIR / "generated_images"
 EXERCISE_IMAGES_DIR = BASE_DIR / "exercise_images"
 
-# Create directories if they don't exist
+# Create directories if they don't exist (skip if read-only filesystem)
 for directory in [GENERATED_IMAGES_DIR, STATIC_GENERATED_IMAGES_DIR, EXERCISE_IMAGES_DIR]:
-    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # Directory creation may fail in read-only containers; directories should be pre-created in Dockerfile
+        pass
 
 # Materials directories (optional, may not exist in production)
 MATERIALS_DIR = PROJECT_ROOT / "materials"
@@ -69,13 +75,27 @@ app = FastAPI(
 # CORS Middleware
 # ============================================================================
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    import logging
+    logger = logging.getLogger("uvicorn")
+    logger.error(f"Validation error: {exc.errors()}")
+    logger.error(f"Request body: {await request.body()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors()},
+    )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Admin Router
+app.include_router(admin_router)
 
 # ============================================================================
 # Startup Event
@@ -310,7 +330,7 @@ async def get_db_subjects():
     conn = get_db_connection()
     try:
         rows = conn.execute("""
-            SELECT s.id, s.name, 'N/A' as code,
+            SELECT s.id, s.name, s.syllabus_id, 'N/A' as code,
                    COUNT(DISTINCT t.id) as topic_count,
                    COUNT(DISTINCT st.id) as subtopic_count,
                    COUNT(DISTINCT cr.id) as processed_count
