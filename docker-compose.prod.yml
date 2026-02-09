@@ -409,7 +409,7 @@ services:
     environment:
       - DB_PATH=/app/database/rag_content.db
     volumes:
-      - ./microservices/sugarclass-aitutor/database:/app/database:ro
+      - ./microservices/sugarclass-aitutor/database:/app/database
     networks:
       - sugarclass-network
     command: >
