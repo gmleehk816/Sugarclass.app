@@ -96,7 +96,11 @@ const AIMaterialsAdmin = () => {
                 body: formData
             });
 
-            // Auto-populate form fields from extracted metadata
+            // Extract suggested metadata from upload response
+            const extractedSubject = uploadRes.suggested_subject || subjectName;
+            const extractedSyllabus = uploadRes.suggested_syllabus || syllabus;
+
+            // Auto-populate form fields for visual feedback
             if (uploadRes.suggested_subject) {
                 setSubjectName(uploadRes.suggested_subject);
             }
@@ -106,13 +110,14 @@ const AIMaterialsAdmin = () => {
 
             setStatusMessage('Upload successful. Starting ingestion...');
 
+            // Use the extracted values directly (not state, which updates async)
             const ingestRes = await serviceFetch('aimaterials', '/api/admin/ingest', {
                 method: 'POST',
                 body: JSON.stringify({
                     batch_id: uploadRes.batch_id,
                     filename: uploadRes.main_markdown || mdFile.name,
-                    subject_name: subjectName,
-                    syllabus: syllabus
+                    subject_name: extractedSubject,
+                    syllabus: extractedSyllabus
                 })
             });
 
@@ -457,28 +462,40 @@ const AIMaterialsAdmin = () => {
 
                                 {info.logs && info.logs.length > 0 && (
                                     <div style={{
-                                        marginTop: '8px',
-                                        padding: '8px',
-                                        background: '#0f172a',
-                                        borderRadius: '8px',
-                                        maxHeight: '120px',
+                                        marginTop: '12px',
+                                        padding: '12px',
+                                        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                                        borderRadius: '10px',
+                                        minHeight: '200px',
+                                        maxHeight: '300px',
                                         overflowY: 'auto',
                                         display: 'flex',
                                         flexDirection: 'column',
-                                        gap: '2px'
+                                        gap: '4px',
+                                        boxShadow: info.status === 'running' ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
+                                        border: info.status === 'running' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid #334155'
                                     }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', opacity: 0.6 }}>
-                                            <Terminal size={10} color="#94a3b8" />
-                                            <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 600 }}>LIVE LOGS</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', borderBottom: '1px solid #334155', paddingBottom: '8px' }}>
+                                            <Terminal size={14} color={info.status === 'running' ? '#3b82f6' : '#94a3b8'} />
+                                            <span style={{ fontSize: '0.75rem', color: info.status === 'running' ? '#3b82f6' : '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>LIVE LOGS</span>
+                                            {info.status === 'running' && (
+                                                <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', animation: 'pulse 1.5s infinite' }}></span>
+                                                    Processing
+                                                </span>
+                                            )}
                                         </div>
-                                        {info.logs.slice(-5).map((log: string, i: number) => (
+                                        {info.logs.slice(-15).map((log: string, i: number) => (
                                             <div key={i} style={{
-                                                fontSize: '0.65rem',
-                                                fontFamily: 'monospace',
-                                                color: '#e2e8f0',
-                                                opacity: i === info.logs.length - 1 ? 1 : 0.7
+                                                fontSize: '0.7rem',
+                                                fontFamily: 'ui-monospace, monospace',
+                                                color: i === info.logs.slice(-15).length - 1 ? '#22d3ee' : '#e2e8f0',
+                                                opacity: i === info.logs.slice(-15).length - 1 ? 1 : 0.75,
+                                                lineHeight: 1.5,
+                                                paddingLeft: '8px',
+                                                borderLeft: i === info.logs.slice(-15).length - 1 ? '2px solid #22d3ee' : '2px solid transparent'
                                             }}>
-                                                {`> ${log}`}
+                                                {log}
                                             </div>
                                         ))}
                                         <div ref={(el) => { if (el) el.scrollIntoView({ behavior: 'smooth' }); }} />
