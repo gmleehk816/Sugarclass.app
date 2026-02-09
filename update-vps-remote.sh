@@ -164,6 +164,11 @@ if [ ${#SERVICES_TO_BUILD[@]} -gt 0 ]; then
     echo "Building: ${SERVICES_TO_BUILD[*]}"
     docker compose -f docker-compose.prod.yml build $BUILD_ARGS "${SERVICES_TO_BUILD[@]}"
     docker compose -f docker-compose.prod.yml up -d "${SERVICES_TO_BUILD[@]}"
+    
+    # Restart gateway to refresh upstream DNS (prevents 502 errors from stale IPs)
+    echo ""
+    echo "🔄 Restarting gateway to refresh upstream connections..."
+    docker restart sugarclass-gateway
 else
     echo "ℹ️  No services changed. Skipping build."
 fi
