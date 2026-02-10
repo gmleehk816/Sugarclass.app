@@ -158,7 +158,7 @@ def run_ingestion_task(task_id: str, file_path: str, subject_name: str, syllabus
         script_path = SCRIPTS_DIR / "auto_process_textbook.py"
         
         process = subprocess.Popen(
-            ["python", str(script_path), "ingest", file_path, subject_name, syllabus],
+            ["python", str(script_path), file_path, "--subject-name", subject_name, "--syllabus", syllabus],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

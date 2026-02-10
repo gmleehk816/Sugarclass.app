@@ -21,7 +21,12 @@ import {
     Plus,
     GripVertical,
     Save,
-    X as XIcon
+    X as XIcon,
+    Folder,
+    FolderOpen,
+    ChevronRight,
+    ChevronDown,
+    FileText
 } from "lucide-react";
 
 const inputStyle = {
@@ -32,6 +37,142 @@ const inputStyle = {
     fontSize: '0.95rem',
     fontFamily: 'inherit'
 };
+
+// ===========================================================================
+// DATATREE — Full educational hierarchy from datatree.md
+// Structure: Level → Subject → Board-specific variants (with exam codes)
+// ===========================================================================
+const DATATREE: Record<string, Record<string, string[]>> = {
+    "A-Level": {
+        "Accounting": ["AQA Accounting (7127)", "Cie Accounting (9706)", "Edexcel Accounting (9AC0)"],
+        "Biology": ["AQA Biology (7402)", "Cie Biology (9700)", "Edexcel Biology (9BI0)"],
+        "Business": ["AQA Business (7132)", "Cie Business (9609)", "Edexcel Business (9BS0)"],
+        "Chemistry": ["AQA Chemistry (7405)", "Cie Chemistry (9701)", "Edexcel Chemistry (9CH0)"],
+        "Computer Science": ["AQA Computer Science (7517)", "Cie Computer Science (9618)"],
+        "Design Technology": ["AQA Design Technology (7552)", "Edexcel Design Technology Product Design (9DT0)"],
+        "Economics": ["AQA Economics (7136)", "Cie Economics (9708)", "Edexcel Economics (9EC0)"],
+        "Engineering": ["AQA Engineering (8852)"],
+        "English Language": ["AQA English Language (7702)", "Cie English Language (9093)", "Edexcel English Language (9EN0)"],
+        "English Literature": ["AQA English Literature (7712)", "Cie Literature English (9695)", "Edexcel English Literature (9ET0)"],
+        "Food Science Nutrition": ["AQA Food Science Nutrition (7272)"],
+        "French": ["AQA French (7652)"],
+        "Further Mathematics": ["AQA Further Mathematics (7367)", "Cie Further Mathematics (9231)", "Edexcel Further Mathematics (9FM0)"],
+        "Geography": ["AQA Geography (7037)", "Cie Geography (9696)", "Edexcel Geography (9GE0)"],
+        "Global perspectives": ["Cie Global Perspectives Research (9239)"],
+        "History": ["AQA History (7041)", "AQA History (7042)", "Cie History (9389)", "Cie History (9489)", "Edexcel History (9HI0)"],
+        "Information Technology": ["Edexcel Information Technology (9IT0)"],
+        "Mathematics": ["AQA Mathematics (7357)", "Cie Mathematics (9709)", "Edexcel Mathematics (9MA0)"],
+        "Physical Education": ["AQA Physical Education (7357)", "AQA Physical Education (7582)", "Edexcel Physical Education (9PE0)"],
+        "Physics": ["AQA Physics (7408)", "Cie Physics (9702)", "Edexcel Physics (9PH0)"],
+        "Psychology": ["AQA Psychology (7182)", "Cie Psychology (9990)", "Edexcel Psychology (9PS0)"],
+        "Sociology": ["AQA Sociology (7192)", "Cie Sociology (9699)", "Edexcel Sociology (9SC0)"],
+    },
+    "HKDSE": {
+        "Biology": [], "Business, Accounting and Financial Studies": [], "Chemistry": [],
+        "Chinese History": [], "Chinese Language": [], "Chinese Literature": [],
+        "Citizenship and Social Development": [], "Design and Applied Technology": [],
+        "Economics": [], "English Language": [], "Ethics and Religious Studies": [],
+        "Geography": [], "Health Management and Social Care": [], "History": [],
+        "Information and Communication Technology": [], "Literature in English": [],
+        "Mathematics": [], "Music": [], "Physical Education": [], "Physics": [],
+        "Technology and Living": [], "Tourism and Hospitality Studies": [], "Visual Arts": [],
+    },
+    "IB": {
+        "Biology": [], "Business Management": [], "Chemistry": [], "Computer Science": [],
+        "Design Technology": [], "Economics": [], "English A Language Literature": [],
+        "Environmental Systems Societies": [], "Film": [], "Geography": [],
+        "Global Politics": [], "History": [], "Mathematics AA": [], "Music": [],
+        "Physics": [], "Psychology": [], "Spanish B": [], "Theory of Knowledge": [],
+        "Visual Arts": [],
+    },
+    "IGCSE": {
+        "Accounting": ["Cie Accounting (0452)", "Edexcel Accounting", "Edexcel Accounting (4AC1)"],
+        "Additional Mathematics": ["Cie Additional Mathematics (0606)", "Edexcel Further Mathematics", "Edexcel Mathematics (4MA0)"],
+        "Biology": ["Cie Biology (0610)", "Edexcel Biology (4BI1)"],
+        "Business": ["Cie Business (0450)", "Edexcel Business (4BS1)"],
+        "Business Studies": ["Cie Business (0450)", "Edexcel Business (4BS1)"],
+        "Chemistry": ["Cie Chemistry (0620)", "Edexcel Chemistry (4CH1)"],
+        "Chinese First Language": ["Cie Chinese First Language (0509)", "Edexcel Chinese (4CN0)"],
+        "Chinese Mandarin Foreign Language": ["Cie Chinese Mandarin Foreign Language (0547)", "Edexcel Chinese (4CN0)"],
+        "Chinese Second Language": ["Cie Chinese Second Language (0523)", "Edexcel Chinese (4CN0)"],
+        "Combined Science": ["Cie Combined Science (0653)", "Edexcel Science (Double Award) (4SC0)"],
+        "Computer Science": ["Cie Computer Science (0478)", "Edexcel Computer Science (4CP0)"],
+        "Design Technology": ["Cie Design Technology (0445)"],
+        "Economics": ["Cie Economics (0455)", "Edexcel Economic", "Edexcel Economics"],
+        "English Literature": ["Cie Literature English (0475)", "Edexcel English literature (4ET1)"],
+        "English Second Language": ["Cie English Second Language (0510)", "Edexcel English as a Second Language (4ES0)"],
+        "Enterprise": ["Cie Enterprise (0454)"],
+        "Environmental Management": ["Cie Environmental Management (0680)"],
+        "First Language English": ["Cie First Language English (0500)", "Edexcel English Language (4EA0)"],
+        "Food and Nutrition": ["Cie Food and Nutrition (0648)"],
+        "Geography": ["Cie Geography (0460)", "Edexcel Geography (4GE1)"],
+        "Global Perspectives": ["Cie Global Perspectives (0457)"],
+        "History": ["Cie History (0470)", "Edexcel History (4HI1)"],
+        "Human Biology": ["Edexcel Human Biology"],
+        "ICT": ["Cie ICT (0417)", "Edexcel ICT (4IT1)"],
+        "International Mathematics": ["Cie Mathematics - International (0607)", "Edexcel Mathematics (4MA0)"],
+        "Mathematics": ["Cie Mathematics (0580)", "Edexcel Mathematics (4MA1)"],
+        "Physical Education": ["Cie Physical Education (0413)"],
+        "Physical Science": ["Cie Physical Science (0652)"],
+        "Physics": ["Cie Physics (0625)", "Edexcel Physics (4PH1)"],
+        "Psychology": ["Cie Psychology (0990)"],
+        "Sociology": ["Cie Sociology (0495)"],
+    },
+    "primary": {},
+    "secondary": {},
+};
+
+// ===========================================================================
+// Helper: Match DB subjects to tree nodes
+// ===========================================================================
+type DbSubject = {
+    id: string;
+    name: string;
+    syllabus_id: string;
+    topic_count: number;
+    subtopic_count: number;
+    content_count: number;
+};
+
+function matchSubjectsToTree(dbSubjects: DbSubject[]) {
+    const matched = new Set<string>();
+    const subjectMap: Record<string, DbSubject> = {};
+
+    // Build a lookup: normalize subject name → DbSubject
+    for (const sub of dbSubjects) {
+        subjectMap[sub.name.toLowerCase().trim()] = sub;
+    }
+
+    // Try to match each tree leaf to a DB subject
+    const treeWithData: Record<string, Record<string, { boards: { name: string; dbSubject?: DbSubject }[]; dbSubject?: DbSubject }>> = {};
+
+    for (const [level, subjects] of Object.entries(DATATREE)) {
+        treeWithData[level] = {};
+        for (const [subjectName, boards] of Object.entries(subjects)) {
+            const boardEntries = boards.map(boardName => {
+                const key = boardName.toLowerCase().trim();
+                const db = subjectMap[key];
+                if (db) matched.add(db.id);
+                return { name: boardName, dbSubject: db };
+            });
+
+            // Also try matching the subject-level name (for IB/HKDSE which have no boards)
+            const subjectKey = subjectName.toLowerCase().trim();
+            const subjectDb = subjectMap[subjectKey];
+            if (subjectDb) matched.add(subjectDb.id);
+
+            treeWithData[level][subjectName] = {
+                boards: boardEntries,
+                dbSubject: subjectDb,
+            };
+        }
+    }
+
+    // Collect unmatched DB subjects
+    const unmatched = dbSubjects.filter(s => !matched.has(s.id));
+
+    return { treeWithData, unmatched };
+}
 
 // Exercise Modal Component
 const ExerciseModal = ({ exercise, onClose, onSave }: { exercise: any, onClose: () => void, onSave: (data: any) => Promise<void> }) => {
@@ -355,12 +496,18 @@ const QuestionCard = ({ exercise, onEdit, onDelete, onRegenerate }: any) => {
 
 const AIMaterialsAdmin = () => {
     const [files, setFiles] = useState<File[]>([]);
-    const [subjectName, setSubjectName] = useState('IB DP Chemistry');
-    const [syllabus, setSyllabus] = useState('IB Diploma');
+    const [subjectName, setSubjectName] = useState('');
+    const [syllabus, setSyllabus] = useState('');
     const [uploading, setUploading] = useState(false);
     const [tasks, setTasks] = useState<Record<string, any>>({});
     const [statusMessage, setStatusMessage] = useState('');
     const [subtopicId, setSubtopicId] = useState('');
+
+    // Tree picker state for upload form
+    const [selectedLevel, setSelectedLevel] = useState('');
+    const [selectedSubject, setSelectedSubject] = useState('');
+    const [selectedBoard, setSelectedBoard] = useState('');
+    const [manualEntry, setManualEntry] = useState(false);
     const [loadingTasks, setLoadingTasks] = useState(false);
     const [activeTab, setActiveTab] = useState<'uploader' | 'database' | 'exercises'>('uploader');
     const [subjects, setSubjects] = useState<any[]>([]);
@@ -667,26 +814,151 @@ const AIMaterialsAdmin = () => {
                                 <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Ingest New Textbook</h2>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-                                <div style={inputGroupStyle}>
-                                    <label style={labelStyle}>Subject Name</label>
-                                    <input
-                                        style={inputStyle}
-                                        type="text"
-                                        value={subjectName}
-                                        onChange={(e) => setSubjectName(e.target.value)}
-                                    />
+                            {!manualEntry ? (
+                                <div style={{ marginBottom: '24px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '12px' }}>
+                                        {/* Level dropdown */}
+                                        <div style={inputGroupStyle}>
+                                            <label style={labelStyle}>Level</label>
+                                            <select
+                                                style={{ ...inputStyle, cursor: 'pointer', background: 'white' }}
+                                                value={selectedLevel}
+                                                onChange={(e) => {
+                                                    setSelectedLevel(e.target.value);
+                                                    setSelectedSubject('');
+                                                    setSelectedBoard('');
+                                                    if (e.target.value) {
+                                                        setSyllabus(e.target.value);
+                                                        setSubjectName('');
+                                                    }
+                                                }}
+                                            >
+                                                <option value="">Select level...</option>
+                                                {Object.keys(DATATREE).map(level => (
+                                                    <option key={level} value={level}>{level}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Subject dropdown */}
+                                        <div style={inputGroupStyle}>
+                                            <label style={labelStyle}>Subject</label>
+                                            <select
+                                                style={{ ...inputStyle, cursor: selectedLevel ? 'pointer' : 'not-allowed', background: selectedLevel ? 'white' : '#f8fafc' }}
+                                                value={selectedSubject}
+                                                disabled={!selectedLevel}
+                                                onChange={(e) => {
+                                                    setSelectedSubject(e.target.value);
+                                                    setSelectedBoard('');
+                                                    if (e.target.value) {
+                                                        const boards = selectedLevel ? DATATREE[selectedLevel]?.[e.target.value] : [];
+                                                        if (!boards || boards.length === 0) {
+                                                            // No board variants (IB, HKDSE) — use subject name directly
+                                                            setSubjectName(e.target.value);
+                                                        } else {
+                                                            setSubjectName('');
+                                                        }
+                                                    }
+                                                }}
+                                            >
+                                                <option value="">Select subject...</option>
+                                                {selectedLevel && DATATREE[selectedLevel] && Object.keys(DATATREE[selectedLevel]).sort().map(subject => (
+                                                    <option key={subject} value={subject}>{subject}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Board variant dropdown — only show if boards exist */}
+                                        <div style={inputGroupStyle}>
+                                            <label style={labelStyle}>Board / Exam</label>
+                                            <select
+                                                style={{
+                                                    ...inputStyle,
+                                                    cursor: (selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length > 0) ? 'pointer' : 'not-allowed',
+                                                    background: (selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length > 0) ? 'white' : '#f8fafc'
+                                                }}
+                                                value={selectedBoard}
+                                                disabled={!selectedSubject || !selectedLevel || !(DATATREE[selectedLevel]?.[selectedSubject]?.length > 0)}
+                                                onChange={(e) => {
+                                                    setSelectedBoard(e.target.value);
+                                                    if (e.target.value) {
+                                                        setSubjectName(e.target.value);
+                                                    }
+                                                }}
+                                            >
+                                                <option value="">
+                                                    {selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length === 0
+                                                        ? 'N/A (no variants)'
+                                                        : 'Select board...'}
+                                                </option>
+                                                {selectedLevel && selectedSubject && DATATREE[selectedLevel]?.[selectedSubject]?.map(board => (
+                                                    <option key={board} value={board}>{board}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Breadcrumb showing selected path */}
+                                    {(selectedLevel || subjectName) && (
+                                        <div style={{
+                                            padding: '8px 14px',
+                                            background: '#f0f9ff',
+                                            borderRadius: '8px',
+                                            fontSize: '0.85rem',
+                                            color: '#0369a1',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            marginBottom: '4px'
+                                        }}>
+                                            <FileText size={14} />
+                                            <span>
+                                                {selectedLevel}
+                                                {selectedSubject && <> › {selectedSubject}</>}
+                                                {selectedBoard && <> › {selectedBoard}</>}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={() => setManualEntry(true)}
+                                        style={{ background: 'none', border: 'none', fontSize: '0.8rem', color: '#94a3b8', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline' }}
+                                    >
+                                        or enter manually
+                                    </button>
                                 </div>
-                                <div style={inputGroupStyle}>
-                                    <label style={labelStyle}>Syllabus</label>
-                                    <input
-                                        style={inputStyle}
-                                        type="text"
-                                        value={syllabus}
-                                        onChange={(e) => setSyllabus(e.target.value)}
-                                    />
+                            ) : (
+                                <div style={{ marginBottom: '24px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '8px' }}>
+                                        <div style={inputGroupStyle}>
+                                            <label style={labelStyle}>Subject Name</label>
+                                            <input
+                                                style={inputStyle}
+                                                type="text"
+                                                value={subjectName}
+                                                onChange={(e) => setSubjectName(e.target.value)}
+                                                placeholder="e.g. AQA Chemistry (7405)"
+                                            />
+                                        </div>
+                                        <div style={inputGroupStyle}>
+                                            <label style={labelStyle}>Syllabus</label>
+                                            <input
+                                                style={inputStyle}
+                                                type="text"
+                                                value={syllabus}
+                                                onChange={(e) => setSyllabus(e.target.value)}
+                                                placeholder="e.g. A-Level"
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setManualEntry(false)}
+                                        style={{ background: 'none', border: 'none', fontSize: '0.8rem', color: '#94a3b8', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline' }}
+                                    >
+                                        ← back to tree selector
+                                    </button>
                                 </div>
-                            </div>
+                            )}
 
                             <div style={{ marginBottom: '24px' }}>
                                 <label style={labelStyle}>Textbook Markdown (.md)</label>
@@ -756,95 +1028,13 @@ const AIMaterialsAdmin = () => {
                         )}
                     </>
                 ) : activeTab === 'database' ? (
-                    /* Database Management Section */
-                    <div style={cardStyle}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{ background: '#dbeafe', padding: '8px', borderRadius: '8px' }}>
-                                    <Database size={20} color="#2563eb" />
-                                </div>
-                                <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Database Management</h2>
-                            </div>
-                            <button
-                                onClick={fetchSubjects}
-                                style={{ padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer' }}
-                                disabled={loadingSubjects}
-                            >
-                                <RefreshCw size={16} color="#64748b" className={loadingSubjects ? "animate-spin" : ""} />
-                            </button>
-                        </div>
-
-                        {/* HIGH IMPORTANCE WARNING */}
-                        <div style={{
-                            background: '#fff7ed',
-                            border: '1px solid #ffedd5',
-                            borderRadius: '12px',
-                            padding: '16px',
-                            marginBottom: '24px',
-                            display: 'flex',
-                            gap: '12px',
-                            alignItems: 'start'
-                        }}>
-                            <AlertTriangle size={20} color="#ea580c" style={{ marginTop: '2px', flexShrink: 0 }} />
-                            <div>
-                                <h4 style={{ color: '#9a3412', fontWeight: 700, fontSize: '0.9rem', marginBottom: '4px' }}>Unified Database Warning</h4>
-                                <p style={{ color: '#c2410c', fontSize: '0.85rem', lineHeight: '1.4' }}>
-                                    This database is unified between <strong>AI Materials</strong> and <strong>AI Tutor</strong>.
-                                    Deleting subjects here will remove them from the AI Tutor as well.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                                <thead>
-                                    <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
-                                        <th style={{ padding: '12px 8px', fontSize: '0.85rem', color: '#64748b' }}>SUBJECT NAME</th>
-                                        <th style={{ padding: '12px 8px', fontSize: '0.85rem', color: '#64748b' }}>TOPICS</th>
-                                        <th style={{ padding: '12px 8px', fontSize: '0.85rem', color: '#64748b' }}>SUBTOPICS</th>
-                                        <th style={{ padding: '12px 8px', fontSize: '0.85rem', color: '#64748b', textAlign: 'right' }}>ACTIONS</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {subjects.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={4} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>
-                                                {loadingSubjects ? "Loading subjects..." : "No subjects found in database."}
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        subjects.map((sub: any) => (
-                                            <tr key={sub.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '16px 8px', fontWeight: 600, fontSize: '0.9rem' }}>{sub.name}</td>
-                                                <td style={{ padding: '16px 8px', fontSize: '0.85rem', color: '#475569' }}>{sub.topic_count}</td>
-                                                <td style={{ padding: '16px 8px', fontSize: '0.85rem', color: '#475569' }}>{sub.subtopic_count}</td>
-                                                <td style={{ padding: '16px 8px', textAlign: 'right' }}>
-                                                    <button
-                                                        onClick={() => handleDeleteSubject(sub.id)}
-                                                        style={{
-                                                            padding: '8px',
-                                                            borderRadius: '8px',
-                                                            border: 'none',
-                                                            background: '#fee2e2',
-                                                            color: '#dc2626',
-                                                            cursor: 'pointer',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '6px',
-                                                            fontSize: '0.8rem',
-                                                            fontWeight: 600
-                                                        }}
-                                                    >
-                                                        <Trash2 size={14} /> Delete
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                    /* Database Filesystem Tree */
+                    <DatabaseFilesystemTree
+                        subjects={subjects}
+                        loadingSubjects={loadingSubjects}
+                        onRefresh={fetchSubjects}
+                        onDeleteSubject={handleDeleteSubject}
+                    />
                 ) : activeTab === 'exercises' ? (
                     <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px' }}>
                         {/* Subject/Topic/Subtopic Browser */}
@@ -1117,7 +1307,339 @@ const tabButtonStyle = {
     transition: 'all 0.2s',
 };
 
-// Subject/Topic/Subtopic Browser Component
+// ===========================================================================
+// Database Filesystem Tree Component
+// ===========================================================================
+const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDeleteSubject }: {
+    subjects: any[];
+    loadingSubjects: boolean;
+    onRefresh: () => void;
+    onDeleteSubject: (id: string) => void;
+}) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [expandedLevels, setExpandedLevels] = useState<Set<string>>(new Set());
+    const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+
+    const { treeWithData, unmatched } = matchSubjectsToTree(subjects);
+
+    const toggleLevel = (level: string) => {
+        setExpandedLevels(prev => {
+            const next = new Set(prev);
+            next.has(level) ? next.delete(level) : next.add(level);
+            return next;
+        });
+    };
+
+    const toggleSubject = (key: string) => {
+        setExpandedSubjects(prev => {
+            const next = new Set(prev);
+            next.has(key) ? next.delete(key) : next.add(key);
+            return next;
+        });
+    };
+
+    // Filter tree by search
+    const filterMatches = (name: string) => {
+        if (!searchQuery) return true;
+        return name.toLowerCase().includes(searchQuery.toLowerCase());
+    };
+
+    // Count how many DB subjects exist under a level
+    const levelStats = (level: string) => {
+        const subjectsInLevel = treeWithData[level];
+        if (!subjectsInLevel) return { total: 0, withContent: 0 };
+        let total = 0;
+        let withContent = 0;
+        for (const subjectData of Object.values(subjectsInLevel)) {
+            const hasBoards = subjectData.boards.length > 0;
+            if (hasBoards) {
+                total += subjectData.boards.length;
+                withContent += subjectData.boards.filter(b => b.dbSubject).length;
+            } else {
+                total += 1;
+                if (subjectData.dbSubject) withContent += 1;
+            }
+        }
+        return { total, withContent };
+    };
+
+    return (
+        <div style={cardStyle}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ background: '#dbeafe', padding: '8px', borderRadius: '8px' }}>
+                        <Database size={20} color="#2563eb" />
+                    </div>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Content Database</h2>
+                </div>
+                <button
+                    onClick={onRefresh}
+                    style={{ padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer' }}
+                    disabled={loadingSubjects}
+                >
+                    <RefreshCw size={16} color="#64748b" className={loadingSubjects ? 'animate-spin' : ''} />
+                </button>
+            </div>
+
+            {/* Warning */}
+            <div style={{
+                background: '#fff7ed', border: '1px solid #ffedd5', borderRadius: '12px',
+                padding: '12px 16px', marginBottom: '16px', display: 'flex', gap: '10px', alignItems: 'center'
+            }}>
+                <AlertTriangle size={16} color="#ea580c" style={{ flexShrink: 0 }} />
+                <p style={{ color: '#c2410c', fontSize: '0.8rem', lineHeight: '1.4', margin: 0 }}>
+                    Unified database — deleting subjects here removes them from <strong>AI Tutor</strong> too.
+                </p>
+            </div>
+
+            {/* Search */}
+            <div style={{ position: 'relative', marginBottom: '20px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                    type="text"
+                    placeholder="Search subjects..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{
+                        ...inputStyle,
+                        paddingLeft: '36px',
+                    }}
+                />
+            </div>
+
+            {/* Tree */}
+            {loadingSubjects ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading database...</div>
+            ) : (
+                <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: '0.85rem' }}>
+                    {Object.entries(treeWithData).map(([level, subjectsMap]) => {
+                        const stats = levelStats(level);
+                        const isExpanded = expandedLevels.has(level);
+
+                        // Filter: if searching, only show levels with matching subjects
+                        const visibleSubjects = Object.entries(subjectsMap).filter(([name]) => filterMatches(name));
+                        if (searchQuery && visibleSubjects.length === 0) return null;
+
+                        return (
+                            <div key={level} style={{ marginBottom: '4px' }}>
+                                {/* Level row */}
+                                <button
+                                    onClick={() => toggleLevel(level)}
+                                    style={{
+                                        width: '100%', padding: '10px 8px', border: 'none',
+                                        background: isExpanded ? '#f0f9ff' : 'transparent',
+                                        cursor: 'pointer', textAlign: 'left',
+                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                        borderRadius: '8px', transition: 'background 0.15s',
+                                    }}
+                                    onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.background = '#f8fafc'; }}
+                                    onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.background = 'transparent'; }}
+                                >
+                                    {isExpanded ? <ChevronDown size={16} color="#3b82f6" /> : <ChevronRight size={16} color="#64748b" />}
+                                    {isExpanded ? <FolderOpen size={18} color="#3b82f6" /> : <Folder size={18} color="#64748b" />}
+                                    <span style={{ fontWeight: 700, color: isExpanded ? '#1d4ed8' : '#1e293b', fontFamily: 'inherit' }}>{level}/</span>
+                                    <span style={{
+                                        marginLeft: 'auto', fontSize: '0.7rem', padding: '2px 8px',
+                                        borderRadius: '10px', fontFamily: 'system-ui',
+                                        background: stats.withContent > 0 ? '#dbeafe' : '#f1f5f9',
+                                        color: stats.withContent > 0 ? '#2563eb' : '#94a3b8',
+                                        fontWeight: 600,
+                                    }}>
+                                        {stats.withContent}/{stats.total}
+                                    </span>
+                                </button>
+
+                                {/* Subjects under this level */}
+                                {isExpanded && (
+                                    <div style={{ paddingLeft: '24px', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                        {visibleSubjects.map(([subjectName, subjectData]) => {
+                                            const hasBoards = subjectData.boards.length > 0;
+                                            const subjectKey = `${level}/${subjectName}`;
+                                            const isSubjectExpanded = expandedSubjects.has(subjectKey);
+
+                                            // For subjects without boards (IB, HKDSE)
+                                            if (!hasBoards) {
+                                                const db = subjectData.dbSubject;
+                                                return (
+                                                    <div key={subjectKey} style={{
+                                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                                        padding: '6px 8px', borderRadius: '6px',
+                                                        opacity: db ? 1 : 0.5,
+                                                    }}>
+                                                        <FileText size={15} color={db ? '#3b82f6' : '#cbd5e1'} />
+                                                        <span style={{ color: db ? '#1e293b' : '#94a3b8', fontFamily: 'inherit' }}>{subjectName}</span>
+                                                        {db && (
+                                                            <>
+                                                                <span style={{
+                                                                    fontSize: '0.7rem', padding: '1px 6px', borderRadius: '8px',
+                                                                    background: '#ecfdf5', color: '#059669', fontWeight: 600, fontFamily: 'system-ui',
+                                                                }}>
+                                                                    {db.topic_count}T · {db.subtopic_count}S
+                                                                </span>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); onDeleteSubject(db.id); }}
+                                                                    style={{
+                                                                        marginLeft: 'auto', padding: '3px 6px', borderRadius: '4px',
+                                                                        border: 'none', background: '#fee2e2', color: '#dc2626',
+                                                                        cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600,
+                                                                        display: 'flex', alignItems: 'center', gap: '3px',
+                                                                    }}
+                                                                    title="Delete subject"
+                                                                >
+                                                                    <Trash2 size={11} />
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                );
+                                            }
+
+                                            // For subjects with boards (A-Level, IGCSE)
+                                            const boardsWithContent = subjectData.boards.filter(b => b.dbSubject).length;
+                                            return (
+                                                <div key={subjectKey} style={{ marginBottom: '2px' }}>
+                                                    <button
+                                                        onClick={() => toggleSubject(subjectKey)}
+                                                        style={{
+                                                            width: '100%', padding: '6px 8px', border: 'none',
+                                                            background: isSubjectExpanded ? '#f8fafc' : 'transparent',
+                                                            cursor: 'pointer', textAlign: 'left',
+                                                            display: 'flex', alignItems: 'center', gap: '6px',
+                                                            borderRadius: '6px', transition: 'background 0.15s',
+                                                        }}
+                                                        onMouseEnter={(e) => { if (!isSubjectExpanded) e.currentTarget.style.background = '#fafafa'; }}
+                                                        onMouseLeave={(e) => { if (!isSubjectExpanded) e.currentTarget.style.background = 'transparent'; }}
+                                                    >
+                                                        {isSubjectExpanded ? <ChevronDown size={14} color="#64748b" /> : <ChevronRight size={14} color="#94a3b8" />}
+                                                        {isSubjectExpanded
+                                                            ? <FolderOpen size={16} color={boardsWithContent > 0 ? '#3b82f6' : '#94a3b8'} />
+                                                            : <Folder size={16} color={boardsWithContent > 0 ? '#3b82f6' : '#cbd5e1'} />
+                                                        }
+                                                        <span style={{
+                                                            color: boardsWithContent > 0 ? '#1e293b' : '#94a3b8',
+                                                            fontFamily: 'inherit',
+                                                        }}>
+                                                            {subjectName}/
+                                                        </span>
+                                                        {boardsWithContent > 0 && (
+                                                            <span style={{
+                                                                fontSize: '0.65rem', padding: '1px 6px', borderRadius: '8px',
+                                                                background: '#dbeafe', color: '#2563eb', fontWeight: 600, fontFamily: 'system-ui',
+                                                            }}>
+                                                                {boardsWithContent}/{subjectData.boards.length}
+                                                            </span>
+                                                        )}
+                                                    </button>
+
+                                                    {/* Board-level items */}
+                                                    {isSubjectExpanded && (
+                                                        <div style={{ paddingLeft: '24px', borderLeft: '1px solid #f1f5f9', marginLeft: '14px' }}>
+                                                            {subjectData.boards.map((board) => {
+                                                                const db = board.dbSubject;
+                                                                return (
+                                                                    <div key={board.name} style={{
+                                                                        display: 'flex', alignItems: 'center', gap: '6px',
+                                                                        padding: '4px 8px', borderRadius: '4px',
+                                                                        opacity: db ? 1 : 0.45,
+                                                                    }}>
+                                                                        <FileText size={14} color={db ? '#3b82f6' : '#cbd5e1'} />
+                                                                        <span style={{
+                                                                            fontSize: '0.8rem', color: db ? '#334155' : '#94a3b8',
+                                                                            fontFamily: 'inherit',
+                                                                        }}>
+                                                                            {board.name}
+                                                                        </span>
+                                                                        {db && (
+                                                                            <>
+                                                                                <span style={{
+                                                                                    fontSize: '0.65rem', padding: '1px 6px', borderRadius: '8px',
+                                                                                    background: '#ecfdf5', color: '#059669', fontWeight: 600, fontFamily: 'system-ui',
+                                                                                }}>
+                                                                                    {db.topic_count}T · {db.subtopic_count}S
+                                                                                </span>
+                                                                                <button
+                                                                                    onClick={(e) => { e.stopPropagation(); onDeleteSubject(db.id); }}
+                                                                                    style={{
+                                                                                        marginLeft: 'auto', padding: '2px 5px', borderRadius: '4px',
+                                                                                        border: 'none', background: '#fee2e2', color: '#dc2626',
+                                                                                        cursor: 'pointer', fontSize: '0.65rem', fontWeight: 600,
+                                                                                        display: 'flex', alignItems: 'center', gap: '2px',
+                                                                                    }}
+                                                                                    title="Delete subject"
+                                                                                >
+                                                                                    <Trash2 size={10} />
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+
+                    {/* Unmatched DB subjects */}
+                    {unmatched.length > 0 && (
+                        <div style={{ marginTop: '8px' }}>
+                            <div style={{
+                                padding: '10px 8px', display: 'flex', alignItems: 'center', gap: '8px',
+                                borderRadius: '8px', background: '#fefce8',
+                            }}>
+                                <FolderOpen size={18} color="#ca8a04" />
+                                <span style={{ fontWeight: 700, color: '#854d0e', fontFamily: 'inherit' }}>Other (unlinked)/</span>
+                                <span style={{
+                                    fontSize: '0.7rem', padding: '2px 8px', borderRadius: '10px',
+                                    background: '#fef9c3', color: '#a16207', fontWeight: 600, fontFamily: 'system-ui',
+                                }}>{unmatched.length}</span>
+                            </div>
+                            <div style={{ paddingLeft: '24px', borderLeft: '1px solid #fde68a', marginLeft: '16px' }}>
+                                {unmatched.map((sub) => (
+                                    <div key={sub.id} style={{
+                                        display: 'flex', alignItems: 'center', gap: '6px',
+                                        padding: '4px 8px', borderRadius: '4px',
+                                    }}>
+                                        <FileText size={14} color="#ca8a04" />
+                                        <span style={{ fontSize: '0.8rem', color: '#854d0e', fontFamily: 'inherit' }}>{sub.name}</span>
+                                        <span style={{
+                                            fontSize: '0.65rem', padding: '1px 6px', borderRadius: '8px',
+                                            background: '#ecfdf5', color: '#059669', fontWeight: 600, fontFamily: 'system-ui',
+                                        }}>
+                                            {sub.topic_count}T · {sub.subtopic_count}S
+                                        </span>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onDeleteSubject(sub.id); }}
+                                            style={{
+                                                marginLeft: 'auto', padding: '2px 5px', borderRadius: '4px',
+                                                border: 'none', background: '#fee2e2', color: '#dc2626',
+                                                cursor: 'pointer', fontSize: '0.65rem', fontWeight: 600,
+                                                display: 'flex', alignItems: 'center', gap: '2px',
+                                            }}
+                                            title="Delete subject"
+                                        >
+                                            <Trash2 size={10} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ===========================================================================
+// Subject/Topic/Subtopic Browser Component (for Exercises tab)
+// ===========================================================================
 const SubjectExerciseBrowser = ({ subject, onSelectSubtopic, selectedSubtopicId }: any) => {
     const [expanded, setExpanded] = useState(false);
     const [topics, setTopics] = useState<any[]>([]);

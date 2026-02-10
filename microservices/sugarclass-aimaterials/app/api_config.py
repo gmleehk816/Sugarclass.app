@@ -2,24 +2,18 @@
 API Configuration Module
 ========================
 Central configuration for all LLM API calls.
+Reads from environment variables (set via .env / docker-compose).
 """
+import os
 import requests
-import importlib.util
-from pathlib import Path
-
-# Load config module
-spec = importlib.util.spec_from_file_location("config", str(Path(__file__).parent / "config.py"))
-config = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(config)
 
 def get_api_config():
-    """Get API configuration"""
-    config_class = getattr(config, 'config', None) if hasattr(config, 'config') else config
+    """Get API configuration from environment variables"""
     return {
-        'url': getattr(config_class, 'LLM_API_URL', None),
-        'key': getattr(config_class, 'LLM_API_KEY', None),
-        'model': getattr(config_class, 'LLM_MODEL', 'gemini-3-pro-preview'),
-        'fallbacks': getattr(config_class, 'FALLBACK_APIS', [])
+        'url': os.environ.get('LLM_API_URL', ''),
+        'key': os.environ.get('LLM_API_KEY', ''),
+        'model': os.environ.get('LLM_MODEL', 'gemini-3-pro-preview'),
+        'fallbacks': []
     }
 
 def make_api_call(messages, model=None, max_tokens=4096, temperature=0.7, auto_fallback=False, **kwargs):

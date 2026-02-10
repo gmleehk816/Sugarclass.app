@@ -377,6 +377,27 @@ async def get_db_subjects():
     finally:
         conn.close()
 
+@app.get("/api/db/tree")
+async def get_db_tree():
+    """Get all subjects grouped by syllabus for filesystem tree view."""
+    conn = get_db_connection()
+    try:
+        rows = conn.execute("""
+            SELECT s.id, s.name, s.syllabus_id,
+                   COUNT(DISTINCT t.id) as topic_count,
+                   COUNT(DISTINCT st.id) as subtopic_count,
+                   COUNT(DISTINCT cr.id) as content_count
+            FROM subjects s
+            LEFT JOIN topics t ON t.subject_id = s.id
+            LEFT JOIN subtopics st ON st.topic_id = t.id
+            LEFT JOIN content_raw cr ON cr.subtopic_id = st.id
+            GROUP BY s.id
+            ORDER BY s.syllabus_id, s.name
+        """).fetchall()
+        return [row_to_dict(row) for row in rows]
+    finally:
+        conn.close()
+
 @app.get("/api/db/subjects/{subject_id}/chapters", response_model=List[Dict[str, Any]])
 async def get_db_chapters(subject_id: str):
     """Get main chapters for a subject."""
