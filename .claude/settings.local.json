@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(npx vite build:*)",
+      "Bash(git --no-pager log --oneline -10)",
+      "Bash(docker-compose ps:*)"
+    ]
+  }
+}

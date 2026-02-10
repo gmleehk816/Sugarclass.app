@@ -611,7 +611,7 @@ def ingest_content(quality_report: dict, markdown_path: Path, subject_name: str 
         # Create topic
         topic_id = f"{subject_id}_ch{ch_num}"
         conn.execute(
-            "INSERT INTO topics (id, name, subject_id, type, order_num) VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO topics (id, name, subject_id, type, order_num) VALUES (?, ?, ?, ?, ?)",
             (topic_id, ch_title, subject_id, 'Chapter', ch_num)
         )
         topic_count += 1
@@ -622,7 +622,7 @@ def ingest_content(quality_report: dict, markdown_path: Path, subject_name: str 
             # Create subtopic using chapter title
             subtopic_id = f"{topic_id}_{sanitize_id(ch_title)}"
             conn.execute(
-                "INSERT INTO subtopics (id, name, topic_id, order_num) VALUES (?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO subtopics (id, name, topic_id, order_num) VALUES (?, ?, ?, ?)",
                 (subtopic_id, ch_title, topic_id, 1)
             )
             subtopic_count += 1
@@ -662,7 +662,7 @@ def ingest_content(quality_report: dict, markdown_path: Path, subject_name: str 
             # Create subtopic
             subtopic_id = f"{topic_id}_{sanitize_id(st_title)}"
             conn.execute(
-                "INSERT INTO subtopics (id, name, topic_id, order_num) VALUES (?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO subtopics (id, name, topic_id, order_num) VALUES (?, ?, ?, ?)",
                 (subtopic_id, st_title, topic_id, subtopic_order)
             )
             subtopic_count += 1
