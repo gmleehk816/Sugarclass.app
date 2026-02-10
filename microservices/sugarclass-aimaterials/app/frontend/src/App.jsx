@@ -6,7 +6,6 @@ import ChapterSidebar from './components/ChapterSidebar.orchestrator';
 import MainSidebar from './components/MainSidebar.orchestrator';
 import SubtopicSidebar from './components/SubtopicSidebar.orchestrator';
 import MiddleArea from './components/MiddleArea.orchestrator';
-import AdminDashboard from './components/AdminDashboard';
 
 function App() {
   /* -------------------------------------------------------------------------
@@ -263,30 +262,26 @@ function App() {
 
       {/* MIDDLE CONTENT */}
       <div className="materials-main">
-        {viewMode === 'admin' ? (
-          <AdminDashboard />
-        ) : (
-          <MiddleArea
-            viewMode={viewMode}
-            selectedTopic={selectedTopic}
+        <MiddleArea
+          viewMode={viewMode}
+          selectedTopic={selectedTopic}
 
-            /* content props */
-            selectedSubtopicId={selectedSubtopicId}
-            subjectId={selectedSubject}
-            contentMode={contentMode}
-            onContentModeChange={setContentMode}
+          /* content props */
+          selectedSubtopicId={selectedSubtopicId}
+          subjectId={selectedSubject}
+          contentMode={contentMode}
+          onContentModeChange={setContentMode}
 
-            /* exercise props */
-            exercises={exercises}
-            currentExerciseIndex={currentExerciseIndex}
-            onExerciseIndexChange={setCurrentExerciseIndex}
+          /* exercise props */
+          exercises={exercises}
+          currentExerciseIndex={currentExerciseIndex}
+          onExerciseIndexChange={setCurrentExerciseIndex}
 
-            /* QA props */
-            questions={questions}
-            currentQuestionIndex={currentQuestionIndex}
-            onQuestionIndexChange={setCurrentQuestionIndex}
-          />
-        )}
+          /* QA props */
+          questions={questions}
+          currentQuestionIndex={currentQuestionIndex}
+          onQuestionIndexChange={setCurrentQuestionIndex}
+        />
       </div>
 
       {/* RIGHT SIDEBAR */}
