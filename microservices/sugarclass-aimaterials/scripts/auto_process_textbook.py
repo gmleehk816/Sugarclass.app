@@ -32,7 +32,8 @@ from app.api_config import make_api_call
 
 # Configuration
 DB_PATH = Path(__file__).parent.parent / 'database' / 'rag_content.db'
-DEFAULT_SOURCE_DIR = Path(r"C:\Users\gmhome\SynologyDrive\coding\pdftomarkdown\output\materials_output")
+# Default to /books if in Docker, otherwise use a relative path to archive
+DEFAULT_SOURCE_DIR = Path("/books") if Path("/books").exists() else Path(__file__).parent.parent / 'archive'
 
 
 def get_conn():
