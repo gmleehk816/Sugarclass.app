@@ -6,6 +6,48 @@ Reads from environment variables (set via .env / docker-compose).
 """
 import os
 import requests
+import time
+from threading import Lock
+
+
+class RateLimiter:
+    """Simple rate limiter to avoid API rate limits"""
+
+    def __init__(self, max_calls: int = 15, period: int = 60):
+        """
+        Args:
+            max_calls: Maximum number of calls allowed in the period
+            period: Time period in seconds (default: 60 seconds = 1 minute)
+        """
+        self.max_calls = max_calls
+        self.period = period
+        self.calls = []
+        self.lock = Lock()
+
+    def wait_if_needed(self):
+        """Wait if we've hit the rate limit"""
+        with self.lock:
+            now = time.time()
+            # Remove calls older than the period
+            self.calls = [call_time for call_time in self.calls if now - call_time < self.period]
+
+            if len(self.calls) >= self.max_calls:
+                # We've hit the limit, wait until the oldest call is past the period
+                oldest_call = self.calls[0]
+                wait_time = self.period - (now - oldest_call) + 0.1  # Add small buffer
+                if wait_time > 0:
+                    print(f"⏳ Rate limit reached, waiting {wait_time:.1f} seconds...")
+                    time.sleep(wait_time)
+                    # Clean up old calls after waiting
+                    now = time.time()
+                    self.calls = [call_time for call_time in self.calls if now - call_time < self.period]
+
+            # Record this call
+            self.calls.append(now)
+
+
+# Global rate limiter instance (15 requests per minute by default)
+_rate_limiter = RateLimiter(max_calls=15, period=60)
 
 def get_api_config():
     """Get API configuration from environment variables"""
@@ -17,7 +59,9 @@ def get_api_config():
     }
 
 def make_api_call(messages, model=None, max_tokens=4096, temperature=0.7, auto_fallback=False, **kwargs):
-    """Make an LLM API call"""
+    """Make an LLM API call with rate limiting"""
+    # Apply rate limiting before making the API call
+    _rate_limiter.wait_if_needed()
     api_config = get_api_config()
     apis_to_try = []
     
