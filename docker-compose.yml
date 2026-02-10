@@ -398,7 +398,7 @@ services:
       - ./microservices/sugarclass-aimaterials/app/static:/app/app/static:ro
       - ./microservices/sugarclass-aimaterials/archive:/app/archive:ro
       - ./microservices/sugarclass-aimaterials/scripts:/app/scripts:ro
-      - E:/PROGRAMMING/IB:/books
+      - ${BOOKS_PATH:-./microservices/sugarclass-aimaterials/archive}:/books:ro
     networks:
       - sugarclass-network
     healthcheck:
