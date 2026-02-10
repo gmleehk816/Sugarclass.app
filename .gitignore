@@ -58,3 +58,8 @@ microservices/sugarclass-aimaterials/app/frontend/node_modules/
 microservices/sugarclass-aimaterials/app/frontend/dist/
 microservices/sugarclass-aimaterials/app/__pycache__/
 microservices/sugarclass-aimaterials/database/
+
+# Claude Code
+.tasks/
+.claude-summary.md
+CLAUDE.md
