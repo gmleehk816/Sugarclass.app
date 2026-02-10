@@ -53,10 +53,10 @@ function MainSidebar({ topics, selectedTopic, onSelectTopic, viewMode, onModeCha
           topics.map((topic) => (
             <button
               key={topic.id}
-              className={`list-item has-content ${selectedTopic?.id === topic.id ? 'active' : ''}`}
+              className={`sidebar-list-item has-content ${selectedTopic?.id === topic.id ? 'active' : ''}`}
               onClick={() => handleTopicClick(topic)}
             >
-              <span className="list-item-icon" style={{
+              <span className="sidebar-list-icon" style={{
                 background: topic.processed_count > 0 ? 'rgba(61, 90, 69, 0.1)' : 'rgba(30, 41, 59, 0.05)',
                 color: topic.processed_count > 0 ? 'var(--success)' : 'var(--primary-light)'
               }}>

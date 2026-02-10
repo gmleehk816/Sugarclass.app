@@ -39,10 +39,10 @@ function SubtopicSidebar({
             subtopics.map((subtopic) => (
               <button
                 key={subtopic.full_id}
-                className={`list-item ${subtopic.is_processed ? 'has-content' : ''} ${selectedSubtopicId === subtopic.full_id ? 'active' : ''}`}
+                className={`sidebar-list-item ${subtopic.is_processed ? 'has-content' : ''} ${selectedSubtopicId === subtopic.full_id ? 'active' : ''}`}
                 onClick={() => handleSubtopicClick(subtopic.full_id)}
               >
-                <span className="list-item-icon" style={{
+                <span className="sidebar-list-icon" style={{
                   background: subtopic.is_processed ? 'rgba(61, 90, 69, 0.1)' : 'rgba(30, 41, 59, 0.05)',
                   color: subtopic.is_processed ? 'var(--success)' : 'var(--primary-light)'
                 }}>
@@ -79,10 +79,10 @@ function SubtopicSidebar({
             exercises.map((exercise, index) => (
               <button
                 key={exercise.id || index}
-                className={`list-item ${currentExerciseIndex === index ? 'active' : ''}`}
+                className={`sidebar-list-item ${currentExerciseIndex === index ? 'active' : ''}`}
                 onClick={() => onSelectExercise && onSelectExercise(index)}
               >
-                <span className="list-item-icon">{index + 1}</span>
+                <span className="sidebar-list-icon">{index + 1}</span>
                 <span style={{ flex: 1, textAlign: 'left', fontSize: '0.9rem' }}>
                   {exercise.question || exercise.name || `Question ${index + 1}`}
                 </span>
@@ -114,10 +114,10 @@ function SubtopicSidebar({
             questions.map((question, index) => (
               <button
                 key={question.id || index}
-                className={`list-item ${currentQuestionIndex === index ? 'active' : ''}`}
+                className={`sidebar-list-item ${currentQuestionIndex === index ? 'active' : ''}`}
                 onClick={() => onSelectQuestion && onSelectQuestion(index)}
               >
-                <span className="list-item-icon">{index + 1}</span>
+                <span className="sidebar-list-icon">{index + 1}</span>
                 <span style={{ flex: 1, textAlign: 'left', fontSize: '0.9rem' }}>
                   {question.question || question.text || `Question ${index + 1}`}
                 </span>

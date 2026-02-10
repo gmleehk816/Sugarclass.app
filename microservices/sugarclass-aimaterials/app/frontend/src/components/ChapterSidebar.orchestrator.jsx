@@ -141,10 +141,10 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
         {chapters.map((chapter) => (
           <button
             key={chapter.id}
-            className={`list-item has-content ${selectedChapter?.id === chapter.id ? 'active' : ''}`}
+            className={`sidebar-list-item has-content ${selectedChapter?.id === chapter.id ? 'active' : ''}`}
             onClick={() => handleChapterClick(chapter)}
           >
-            <span className="list-item-icon">
+            <span className="sidebar-list-icon">
               {String(chapter.chapter_num || '').replace(/\D/g, '').slice(0, 2) || '•'}
             </span>
             <span style={{ flex: 1, textAlign: 'left' }}>{chapter.title}</span>

@@ -211,7 +211,7 @@ body {
     padding: 12px 8px 8px;
 }
 
-.list-item {
+.sidebar-list-item {
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -230,12 +230,12 @@ body {
     color: var(--foreground);
 }
 
-.list-item:hover {
+.sidebar-list-item:hover {
     background: rgba(30, 41, 59, 0.03);
     border-color: rgba(30, 41, 59, 0.08);
 }
 
-.list-item.active {
+.sidebar-list-item.active {
     background: var(--accent-muted);
     border-color: var(--accent);
     color: var(--primary);
@@ -243,7 +243,7 @@ body {
 
 
 
-.list-item-icon {
+.sidebar-list-icon {
     width: 32px;
     height: 32px;
     display: flex;
