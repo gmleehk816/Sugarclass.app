@@ -4,7 +4,11 @@
       "Bash(npm run build:*)",
       "Bash(npx vite build:*)",
       "Bash(git --no-pager log --oneline -10)",
-      "Bash(docker-compose ps:*)"
+      "Bash(docker-compose ps:*)",
+      "Bash(npx tsc:*)",
+      "Bash(docker ps:*)",
+      "Bash(python:*)",
+      "Bash(docker exec:*)"
     ]
   }
 }

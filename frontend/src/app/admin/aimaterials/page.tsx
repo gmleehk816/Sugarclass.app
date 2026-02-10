@@ -26,7 +26,8 @@ import {
     FolderOpen,
     ChevronRight,
     ChevronDown,
-    FileText
+    FileText,
+    Settings
 } from "lucide-react";
 
 const inputStyle = {
@@ -494,6 +495,810 @@ const QuestionCard = ({ exercise, onEdit, onDelete, onRegenerate }: any) => {
     );
 };
 
+// ===========================================================================
+// Content Edit Modal Component
+// ===========================================================================
+const ContentEditModal = ({ content, onClose, onSave }: { content: any, onClose: () => void, onSave: (data: any) => Promise<void> }) => {
+    const [formData, setFormData] = useState({
+        html_content: content?.html_content || '',
+        summary: content?.summary || '',
+        key_terms: content?.key_terms || ''
+    });
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+
+        if (!formData.html_content.trim()) {
+            setError('HTML content is required');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            await onSave(formData);
+        } catch (err: any) {
+            setError(err.message || 'Failed to save content');
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+        }}>
+            <div style={{
+                background: 'white',
+                borderRadius: '16px',
+                padding: '32px',
+                maxWidth: '900px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
+                        Edit Content: {content?.subtopic_name || ''}
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '1.5rem',
+                            cursor: 'pointer',
+                            color: '#64748b',
+                            padding: '4px'
+                        }}
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit}>
+                    {/* HTML Content Editor */}
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            HTML Content *
+                        </label>
+                        <textarea
+                            value={formData.html_content}
+                            onChange={(e) => setFormData({ ...formData, html_content: e.target.value })}
+                            style={{
+                                ...inputStyle,
+                                minHeight: '300px',
+                                fontFamily: 'monospace',
+                                fontSize: '0.85rem'
+                            }}
+                            placeholder="Enter HTML content..."
+                        />
+                    </div>
+
+                    {/* Live Preview */}
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Preview
+                        </label>
+                        <div style={{
+                            padding: '16px',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            minHeight: '200px',
+                            maxHeight: '400px',
+                            overflowY: 'auto',
+                            background: '#fafafa'
+                        }}>
+                            <div dangerouslySetInnerHTML={{ __html: formData.html_content }} />
+                        </div>
+                    </div>
+
+                    {/* Summary */}
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Summary (Optional)
+                        </label>
+                        <textarea
+                            value={formData.summary}
+                            onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+                            style={{
+                                ...inputStyle,
+                                minHeight: '80px',
+                                resize: 'vertical'
+                            }}
+                            placeholder="Brief summary of the content..."
+                        />
+                    </div>
+
+                    {/* Key Terms */}
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Key Terms (Optional)
+                        </label>
+                        <textarea
+                            value={formData.key_terms}
+                            onChange={(e) => setFormData({ ...formData, key_terms: e.target.value })}
+                            style={{
+                                ...inputStyle,
+                                minHeight: '80px',
+                                resize: 'vertical'
+                            }}
+                            placeholder="Key terms and definitions..."
+                        />
+                    </div>
+
+                    {error && (
+                        <div style={{
+                            padding: '12px',
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                            borderRadius: '8px',
+                            marginBottom: '16px',
+                            fontSize: '0.9rem'
+                        }}>
+                            {error}
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={saving}
+                            style={{
+                                padding: '12px 24px',
+                                borderRadius: '8px',
+                                border: '1px solid #e2e8f0',
+                                background: 'white',
+                                color: '#64748b',
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                fontWeight: 600
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            style={{
+                                padding: '12px 24px',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: saving ? '#94a3b8' : '#2563eb',
+                                color: 'white',
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}
+                        >
+                            {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                            {saving ? 'Saving...' : 'Save Changes'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+// ===========================================================================
+// Content Regenerate Modal Component
+// ===========================================================================
+const ContentRegenerateModal = ({
+    options,
+    setOptions,
+    onConfirm,
+    onClose,
+    regenerating
+}: {
+    options: any;
+    setOptions: (options: any) => void;
+    onConfirm: () => void;
+    onClose: () => void;
+    regenerating: boolean;
+}) => {
+    const focusOptions = [
+        { value: '', label: 'Standard (balanced)' },
+        { value: 'more creative', label: 'More Creative & Engaging' },
+        { value: 'simpler', label: 'Simpler & More Concise' },
+        { value: 'focus on examples', label: 'Focus on Real-World Examples' },
+        { value: 'focus on visual learning', label: 'Focus on Visual Learning' },
+        { value: 'more detailed', label: 'More Detailed & Comprehensive' }
+    ];
+
+    return (
+        <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+        }}>
+            <div style={{
+                background: 'white',
+                borderRadius: '16px',
+                padding: '32px',
+                maxWidth: '500px',
+                width: '100%'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
+                        Regenerate Content
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        disabled={regenerating}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '1.5rem',
+                            cursor: regenerating ? 'not-allowed' : 'pointer',
+                            color: '#64748b',
+                            padding: '4px'
+                        }}
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* Focus Option */}
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Enhancement Focus
+                        </label>
+                        <select
+                            value={options.focus}
+                            onChange={(e) => setOptions({ ...options, focus: e.target.value })}
+                            disabled={regenerating}
+                            style={{
+                                ...inputStyle,
+                                cursor: regenerating ? 'not-allowed' : 'pointer',
+                                background: regenerating ? '#f8fafc' : 'white'
+                            }}
+                        >
+                            {focusOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Creativity Level */}
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Creativity Level: {options.temperature.toFixed(1)}
+                        </label>
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.1"
+                            value={options.temperature}
+                            onChange={(e) => setOptions({ ...options, temperature: parseFloat(e.target.value) })}
+                            disabled={regenerating}
+                            style={{ width: '100%', cursor: regenerating ? 'not-allowed' : 'pointer' }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
+                            <span>Conservative</span>
+                            <span>Balanced</span>
+                            <span>Creative</span>
+                        </div>
+                    </div>
+
+                    {/* Content Sections */}
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '12px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Include Sections
+                        </label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={options.include_key_terms}
+                                    onChange={(e) => setOptions({ ...options, include_key_terms: e.target.checked })}
+                                    disabled={regenerating}
+                                />
+                                <span style={{ fontSize: '0.9rem' }}>Key Terms & Definitions</span>
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={options.include_summary}
+                                    onChange={(e) => setOptions({ ...options, include_summary: e.target.checked })}
+                                    disabled={regenerating}
+                                />
+                                <span style={{ fontSize: '0.9rem' }}>Summary Section</span>
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={options.include_think_about_it}
+                                    onChange={(e) => setOptions({ ...options, include_think_about_it: e.target.checked })}
+                                    disabled={regenerating}
+                                />
+                                <span style={{ fontSize: '0.9rem' }}>Think About It Questions</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Info */}
+                    <div style={{
+                        padding: '12px',
+                        background: '#eff6ff',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        color: '#1e40af',
+                        borderLeft: '3px solid #3b82f6'
+                    }}>
+                        <strong>Note:</strong> Regeneration will create a new enhanced version using AI. This process runs in the background and may take a minute.
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={regenerating}
+                            style={{
+                                padding: '12px 24px',
+                                borderRadius: '8px',
+                                border: '1px solid #e2e8f0',
+                                background: 'white',
+                                color: '#64748b',
+                                cursor: regenerating ? 'not-allowed' : 'pointer',
+                                fontWeight: 600
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={onConfirm}
+                            disabled={regenerating}
+                            style={{
+                                padding: '12px 24px',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: regenerating ? '#94a3b8' : '#7c3aed',
+                                color: 'white',
+                                cursor: regenerating ? 'not-allowed' : 'pointer',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}
+                        >
+                            {regenerating ? <RefreshCw size={16} className="animate-spin" /> : <Zap size={16} />}
+                            {regenerating ? 'Starting...' : 'Regenerate'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ===========================================================================
+// Content Browser Component
+// ===========================================================================
+const ContentBrowser = ({
+    subjects,
+    loadingSubjects,
+    onRefresh,
+    selectedSubtopicId,
+    onSelectSubtopic,
+    contents,
+    loadingContents,
+    selectedContent,
+    onSelectContent,
+    onEdit,
+    onRegenerate,
+    onDelete,
+    regeneratingContent,
+    onShowAdvancedOptions
+}: {
+    subjects: any[];
+    loadingSubjects: boolean;
+    onRefresh: () => void;
+    selectedSubtopicId: string;
+    onSelectSubtopic: (subtopicId: string) => void;
+    contents: any[];
+    loadingContents: boolean;
+    selectedContent: any | null;
+    onSelectContent: (content: any) => void;
+    onEdit: (content: any) => void;
+    onRegenerate: (content: any) => void;
+    onDelete: (contentId: number) => void;
+    regeneratingContent: Record<string, boolean>;
+    onShowAdvancedOptions?: (subtopicId: string) => void;
+}) => {
+    const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+    const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
+
+    const toggleSubject = (subjectId: string) => {
+        setExpandedSubjects(prev => {
+            const next = new Set(prev);
+            next.has(subjectId) ? next.delete(subjectId) : next.add(subjectId);
+            return next;
+        });
+    };
+
+    const toggleTopic = (topicId: string) => {
+        setExpandedTopics(prev => {
+            const next = new Set(prev);
+            next.has(topicId) ? next.delete(topicId) : next.add(topicId);
+            return next;
+        });
+    };
+
+    // Fetch topics for a subject
+    const [topicsCache, setTopicsCache] = useState<Record<string, any[]>>({});
+    const [subtopicsCache, setSubtopicsCache] = useState<Record<string, any[]>>({});
+    const [loadingSubtopics, setLoadingSubtopics] = useState<Record<string, boolean>>({});
+
+    const fetchTopicsForSubject = async (subjectId: string) => {
+        if (topicsCache[subjectId]) return;
+
+        try {
+            const data = await serviceFetch('aimaterials', `/api/db/subjects/${subjectId}/topics`);
+            setTopicsCache(prev => ({ ...prev, [subjectId]: data }));
+        } catch (err) {
+            console.error('Error fetching topics', err);
+        }
+    };
+
+    const fetchSubtopicsForTopic = async (topicId: string) => {
+        if (subtopicsCache[topicId]) return;
+
+        setLoadingSubtopics(prev => ({ ...prev, [topicId]: true }));
+        try {
+            const data = await serviceFetch('aimaterials', `/api/db/topics/${topicId}/subtopics`);
+            setSubtopicsCache(prev => ({ ...prev, [topicId]: data }));
+        } catch (err) {
+            console.error('Error fetching subtopics', err);
+        } finally {
+            setLoadingSubtopics(prev => ({ ...prev, [topicId]: false }));
+        }
+    };
+
+    const handleSubjectClick = (subjectId: string) => {
+        toggleSubject(subjectId);
+        if (!expandedSubjects.has(subjectId)) {
+            fetchTopicsForSubject(subjectId);
+        }
+    };
+
+    const handleTopicClick = (topicId: string) => {
+        toggleTopic(topicId);
+        if (!expandedTopics.has(topicId)) {
+            fetchSubtopicsForTopic(topicId);
+        }
+    };
+
+    return (
+        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px' }}>
+            {/* Left: Tree View */}
+            <div style={cardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Browse Content</h3>
+                    <button
+                        onClick={onRefresh}
+                        style={{ padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer' }}
+                        disabled={loadingSubjects}
+                    >
+                        <RefreshCw size={16} color="#64748b" className={loadingSubjects ? 'animate-spin' : ''} />
+                    </button>
+                </div>
+
+                {loadingSubjects ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
+                ) : subjects.length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No subjects found</div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {subjects.map((subject: any) => (
+                            <div key={subject.id}>
+                                <div
+                                    onClick={() => handleSubjectClick(subject.id)}
+                                    style={{
+                                        padding: '10px 12px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        background: expandedSubjects.has(subject.id) ? '#f1f5f9' : 'transparent'
+                                    }}
+                                >
+                                    {expandedSubjects.has(subject.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                    <FolderOpen size={16} color="#3b82f6" />
+                                    <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{subject.name}</span>
+                                    <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#94a3b8' }}>
+                                        {subject.content_count || 0}
+                                    </span>
+                                </div>
+
+                                {expandedSubjects.has(subject.id) && topicsCache[subject.id] && (
+                                    <div style={{ marginLeft: '20px', marginTop: '4px' }}>
+                                        {topicsCache[subject.id].map((topic: any) => (
+                                            <div key={topic.id}>
+                                                <div
+                                                    onClick={() => handleTopicClick(topic.id)}
+                                                    style={{
+                                                        padding: '8px 12px',
+                                                        borderRadius: '6px',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        background: expandedTopics.has(topic.id) ? '#f8fafc' : 'transparent'
+                                                    }}
+                                                >
+                                                    {expandedTopics.has(topic.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                                    <span style={{ fontSize: '0.85rem' }}>{topic.name}</span>
+                                                </div>
+
+                                                {expandedTopics.has(topic.id) && loadingSubtopics[topic.id] && (
+                                                    <div style={{ marginLeft: '20px', padding: '8px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                                                        Loading subtopics...
+                                                    </div>
+                                                )}
+                                                {expandedTopics.has(topic.id) && subtopicsCache[topic.id] && (
+                                                    <div style={{ marginLeft: '20px' }}>
+                                                        {subtopicsCache[topic.id].map((subtopic: any) => (
+                                                            <div
+                                                                key={subtopic.id}
+                                                                onClick={() => onSelectSubtopic(subtopic.id)}
+                                                                style={{
+                                                                    padding: '6px 12px',
+                                                                    borderRadius: '6px',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '6px',
+                                                                    fontSize: '0.85rem',
+                                                                    background: selectedSubtopicId === subtopic.id ? '#dbeafe' : 'transparent',
+                                                                    color: selectedSubtopicId === subtopic.id ? '#1e40af' : 'inherit'
+                                                                }}
+                                                            >
+                                                                <FileText size={14} />
+                                                                {subtopic.name}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Right: Content Display */}
+            <div style={cardStyle}>
+                {selectedContent ? (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <div>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{selectedContent.subtopic_name}</h3>
+                                <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>
+                                    {selectedContent.subject_name} → {selectedContent.topic_name}
+                                </p>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    onClick={() => onRegenerate(selectedContent)}
+                                    disabled={regeneratingContent[selectedContent.subtopic_id]}
+                                    style={{
+                                        padding: '8px 16px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        background: regeneratingContent[selectedContent.subtopic_id] ? '#94a3b8' : '#7c3aed',
+                                        color: 'white',
+                                        cursor: regeneratingContent[selectedContent.subtopic_id] ? 'not-allowed' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        fontSize: '0.9rem',
+                                        fontWeight: 600
+                                    }}
+                                >
+                                    <Zap size={16} /> Regenerate
+                                </button>
+                                <button
+                                    onClick={() => onEdit(selectedContent)}
+                                    style={{
+                                        padding: '8px 16px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        background: '#2563eb',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        fontSize: '0.9rem',
+                                        fontWeight: 600
+                                    }}
+                                >
+                                    <Edit size={16} /> Edit
+                                </button>
+                                <button
+                                    onClick={() => onDelete(selectedContent.id)}
+                                    style={{
+                                        padding: '8px 16px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        background: '#ef4444',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        fontSize: '0.9rem',
+                                        fontWeight: 600
+                                    }}
+                                >
+                                    <Trash2 size={16} /> Delete
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Metadata */}
+                        <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', fontSize: '0.8rem', color: '#64748b' }}>
+                            <span>Version: {selectedContent.processor_version || 'unknown'}</span>
+                            <span>•</span>
+                            <span>Processed: {new Date(selectedContent.processed_at).toLocaleDateString()}</span>
+                        </div>
+
+                        {/* HTML Content */}
+                        <div style={{
+                            padding: '24px',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '12px',
+                            background: '#fafafa',
+                            minHeight: '400px',
+                            maxHeight: '600px',
+                            overflowY: 'auto'
+                        }}>
+                            <div dangerouslySetInnerHTML={{ __html: selectedContent.html_content }} />
+                        </div>
+
+                        {/* Summary & Key Terms */}
+                        {selectedContent.summary && (
+                            <div style={{
+                                marginTop: '16px',
+                                padding: '16px',
+                                background: '#fef3c7',
+                                borderRadius: '8px',
+                                borderLeft: '3px solid #f59e0b'
+                            }}>
+                                <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginTop: 0, marginBottom: '8px' }}>Summary</h4>
+                                <p style={{ fontSize: '0.9rem', margin: 0 }}>{selectedContent.summary}</p>
+                            </div>
+                        )}
+
+                        {selectedContent.key_terms && (
+                            <div style={{
+                                marginTop: '16px',
+                                padding: '16px',
+                                background: '#dbeafe',
+                                borderRadius: '8px',
+                                borderLeft: '3px solid #3b82f6'
+                            }}>
+                                <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginTop: 0, marginBottom: '8px' }}>Key Terms</h4>
+                                <div style={{ fontSize: '0.9rem' }} dangerouslySetInnerHTML={{ __html: selectedContent.key_terms }} />
+                            </div>
+                        )}
+                    </>
+                ) : selectedSubtopicId ? (
+                    loadingContents ? (
+                        <div style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>Loading content...</div>
+                    ) : contents.length === 0 ? (
+                        <div style={{ padding: '60px 20px', textAlign: 'center', color: '#64748b' }}>
+                            <FileText size={48} style={{ margin: '0 auto 20px', opacity: 0.3 }} />
+                            <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '12px' }}>No Processed Content</div>
+                            <div style={{ fontSize: '0.9rem', marginBottom: '24px', color: '#94a3b8' }}>
+                                This subtopic has raw content but no processed version yet.
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '16px' }}>
+                                <button
+                                    onClick={() => {
+                                        // Create a dummy content object with just the subtopic_id for regeneration
+                                        const dummyContent = { subtopic_id: selectedSubtopicId };
+                                        onRegenerate(dummyContent);
+                                    }}
+                                    disabled={regeneratingContent[selectedSubtopicId]}
+                                    style={{
+                                        padding: '14px 28px',
+                                        borderRadius: '12px',
+                                        border: 'none',
+                                        background: regeneratingContent[selectedSubtopicId] ? '#94a3b8' : '#7c3aed',
+                                        color: 'white',
+                                        cursor: regeneratingContent[selectedSubtopicId] ? 'not-allowed' : 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        fontSize: '1rem',
+                                        fontWeight: 600
+                                    }}
+                                >
+                                    {regeneratingContent[selectedSubtopicId] ? (
+                                        <>
+                                            <RefreshCw size={20} className="animate-spin" />
+                                            Generating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Zap size={20} />
+                                            Quick Generate
+                                        </>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        // Show modal with advanced options
+                                        const dummyContent = { subtopic_id: selectedSubtopicId };
+                                        onSelectContent(dummyContent);
+                                        // This will trigger the modal through the parent component
+                                        onShowAdvancedOptions?.(selectedSubtopicId);
+                                    }}
+                                    disabled={regeneratingContent[selectedSubtopicId]}
+                                    style={{
+                                        padding: '14px 28px',
+                                        borderRadius: '12px',
+                                        border: '1px solid #7c3aed',
+                                        background: 'white',
+                                        color: '#7c3aed',
+                                        cursor: regeneratingContent[selectedSubtopicId] ? 'not-allowed' : 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        fontSize: '1rem',
+                                        fontWeight: 600
+                                    }}
+                                >
+                                    <Settings size={20} />
+                                    Advanced Options
+                                </button>
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                                This will process the raw content and create an enhanced version with AI.
+                            </div>
+                        </div>
+                    ) : null
+                ) : (
+                    <div style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
+                        <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                        <div style={{ fontSize: '1rem' }}>Select a subtopic to view content</div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const AIMaterialsAdmin = () => {
     const [files, setFiles] = useState<File[]>([]);
     const [subjectName, setSubjectName] = useState('');
@@ -509,7 +1314,7 @@ const AIMaterialsAdmin = () => {
     const [selectedBoard, setSelectedBoard] = useState('');
     const [manualEntry, setManualEntry] = useState(false);
     const [loadingTasks, setLoadingTasks] = useState(false);
-    const [activeTab, setActiveTab] = useState<'uploader' | 'database' | 'exercises'>('uploader');
+    const [activeTab, setActiveTab] = useState<'uploader' | 'database' | 'exercises' | 'contents'>('uploader');
     const [subjects, setSubjects] = useState<any[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState(false);
 
@@ -521,6 +1326,23 @@ const AIMaterialsAdmin = () => {
     const [showExerciseModal, setShowExerciseModal] = useState(false);
     const [generatingExercises, setGeneratingExercises] = useState<Record<string, boolean>>({});
     const [generationTasks, setGenerationTasks] = useState<Record<string, string>>({});
+
+    // Content management state
+    const [contents, setContents] = useState<any[]>([]);
+    const [selectedContentSubtopicId, setSelectedContentSubtopicId] = useState<string>('');
+    const [loadingContents, setLoadingContents] = useState(false);
+    const [selectedContent, setSelectedContent] = useState<any | null>(null);
+    const [editingContent, setEditingContent] = useState<any | null>(null);
+    const [showContentEditModal, setShowContentEditModal] = useState(false);
+    const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+    const [regeneratingContent, setRegeneratingContent] = useState<Record<string, boolean>>({});
+    const [regenerateOptions, setRegenerateOptions] = useState({
+        focus: '',
+        temperature: 0.7,
+        include_key_terms: true,
+        include_summary: true,
+        include_think_about_it: true
+    });
 
     const fetchTasks = async () => {
         try {
@@ -555,6 +1377,9 @@ const AIMaterialsAdmin = () => {
         }
         if (activeTab === 'exercises') {
             fetchSubjects(); // Load subjects for exercise browser
+        }
+        if (activeTab === 'contents') {
+            fetchSubjects(); // Load subjects for content browser
         }
     }, [activeTab]);
 
@@ -763,6 +1588,97 @@ const AIMaterialsAdmin = () => {
         }
     };
 
+    // Content management handlers
+    const fetchContents = async (subtopicId: string) => {
+        setLoadingContents(true);
+        try {
+            const data = await serviceFetch('aimaterials', `/api/admin/contents?subtopic_id=${subtopicId}`);
+            setContents(data);
+            setSelectedContentSubtopicId(subtopicId);
+            if (data.length > 0) {
+                setSelectedContent(data[0]);
+            } else {
+                setSelectedContent(null);
+            }
+        } catch (err) {
+            console.error('Error fetching contents', err);
+        } finally {
+            setLoadingContents(false);
+        }
+    };
+
+    const handleSaveContent = async (formData: any) => {
+        try {
+            await serviceFetch('aimaterials', `/api/admin/contents/${editingContent.id}`, {
+                method: 'PUT',
+                body: JSON.stringify(formData)
+            });
+            setStatusMessage('Content updated successfully');
+            setShowContentEditModal(false);
+            setEditingContent(null);
+            fetchContents(selectedContentSubtopicId);
+        } catch (err: any) {
+            console.error('Error saving content', err);
+            setStatusMessage(`Error: ${err.message}`);
+        }
+    };
+
+    const handleDeleteContent = async (contentId: number) => {
+        if (!confirm('Are you sure you want to delete this processed content? The raw content will be preserved for re-processing.')) {
+            return;
+        }
+
+        try {
+            await serviceFetch('aimaterials', `/api/admin/contents/${contentId}`, {
+                method: 'DELETE'
+            });
+            setStatusMessage('Content deleted successfully. Raw content preserved.');
+            fetchContents(selectedContentSubtopicId);
+        } catch (err: any) {
+            console.error('Error deleting content', err);
+            setStatusMessage(`Error: ${err.message}`);
+        }
+    };
+
+    const handleRegenerateContent = async () => {
+        if (!selectedContent) return;
+
+        const subtopicId = selectedContent.subtopic_id;
+        setRegeneratingContent(prev => ({ ...prev, [subtopicId]: true }));
+
+        try {
+            // Use default options for quick generation, or modal options if set
+            const options = showRegenerateModal ? regenerateOptions : {
+                focus: '',
+                temperature: 0.7,
+                include_key_terms: true,
+                include_summary: true,
+                include_think_about_it: true
+            };
+
+            const result = await serviceFetch('aimaterials', `/api/admin/contents/regenerate?subtopic_id=${subtopicId}`, {
+                method: 'POST',
+                body: JSON.stringify(options)
+            });
+            setShowRegenerateModal(false);
+            setStatusMessage('Content regeneration started...');
+            fetchTasks(); // Refresh to see the task
+
+            // Poll for task completion and refresh contents
+            const pollInterval = setInterval(() => {
+                fetchTasks();
+                fetchContents(subtopicId);
+            }, 3000);
+
+            // Stop polling after 2 minutes
+            setTimeout(() => clearInterval(pollInterval), 120000);
+        } catch (err: any) {
+            console.error('Error regenerating content', err);
+            setStatusMessage(`Error: ${err.message}`);
+            setRegeneratingContent(prev => ({ ...prev, [selectedContent.subtopic_id]: false }));
+        }
+    };
+
     return (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: '40px', alignItems: 'start' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -800,6 +1716,17 @@ const AIMaterialsAdmin = () => {
                         }}
                     >
                         <ListOrdered size={16} /> Exercises
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('contents')}
+                        style={{
+                            ...tabButtonStyle,
+                            background: activeTab === 'contents' ? 'white' : 'transparent',
+                            boxShadow: activeTab === 'contents' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                            color: activeTab === 'contents' ? '#1e293b' : '#64748b'
+                        }}
+                    >
+                        <FileText size={16} /> Contents
                     </button>
                 </div>
 
@@ -1015,15 +1942,38 @@ const AIMaterialsAdmin = () => {
                         {/* Status Message */}
                         {statusMessage && (
                             <div style={{
-                                padding: '16px',
+                                padding: '12px 16px',
                                 background: '#f0f9ff',
                                 borderLeft: '4px solid #0ea5e9',
                                 borderRadius: '8px',
                                 fontSize: '0.9rem',
                                 fontWeight: 500,
-                                color: '#0369a1'
+                                color: '#0369a1',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '12px'
                             }}>
-                                {statusMessage}
+                                <span>{statusMessage}</span>
+                                <button
+                                    onClick={() => setStatusMessage('')}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#0369a1',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        opacity: 0.7,
+                                        transition: 'opacity 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                                    title="Dismiss"
+                                >
+                                    <XIcon size={16} />
+                                </button>
                             </div>
                         )}
                     </>
@@ -1154,6 +2104,26 @@ const AIMaterialsAdmin = () => {
                             )}
                         </div>
                     </div>
+                ) : activeTab === 'contents' ? (
+                    <ContentBrowser
+                        subjects={subjects}
+                        loadingSubjects={loadingSubjects}
+                        onRefresh={fetchSubjects}
+                        selectedSubtopicId={selectedContentSubtopicId}
+                        onSelectSubtopic={fetchContents}
+                        contents={contents}
+                        loadingContents={loadingContents}
+                        selectedContent={selectedContent}
+                        onSelectContent={setSelectedContent}
+                        onEdit={(content) => { setEditingContent(content); setShowContentEditModal(true); }}
+                        onRegenerate={(content) => { setSelectedContent(content); setShowRegenerateModal(true); }}
+                        onDelete={handleDeleteContent}
+                        regeneratingContent={regeneratingContent}
+                        onShowAdvancedOptions={(subtopicId) => {
+                            setSelectedContent({ subtopic_id: subtopicId });
+                            setShowRegenerateModal(true);
+                        }}
+                    />
                 ) : null}
             </div>
 
@@ -1250,6 +2220,29 @@ const AIMaterialsAdmin = () => {
                         setEditingExercise(null);
                     }}
                     onSave={handleSaveExercise}
+                />
+            )}
+
+            {/* Content Edit Modal */}
+            {showContentEditModal && editingContent && (
+                <ContentEditModal
+                    content={editingContent}
+                    onClose={() => {
+                        setShowContentEditModal(false);
+                        setEditingContent(null);
+                    }}
+                    onSave={handleSaveContent}
+                />
+            )}
+
+            {/* Content Regenerate Modal */}
+            {showRegenerateModal && selectedContent && (
+                <ContentRegenerateModal
+                    options={regenerateOptions}
+                    setOptions={setRegenerateOptions}
+                    onConfirm={handleRegenerateContent}
+                    onClose={() => setShowRegenerateModal(false)}
+                    regenerating={regeneratingContent[selectedContent.subtopic_id] || false}
                 />
             )}
 

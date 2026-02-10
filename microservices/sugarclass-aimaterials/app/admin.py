@@ -663,3 +663,447 @@ async def get_task_status(task_id: str):
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
     return tasks[task_id]
+
+# ============================================================================
+# Content CRUD Operations
+# ============================================================================
+
+class ContentUpdateRequest(BaseModel):
+    """Request model for updating processed content."""
+    html_content: str
+    summary: Optional[str] = None
+    key_terms: Optional[str] = None
+
+class ContentRegenerateRequest(BaseModel):
+    """Request model for regenerating content with options."""
+    focus: Optional[str] = None  # e.g., "more creative", "focus on examples", "simpler"
+    temperature: Optional[float] = 0.7  # Creativity level
+    include_key_terms: bool = True
+    include_summary: bool = True
+    include_think_about_it: bool = True
+
+@router.get("/contents", response_model=List[Dict[str, Any]])
+async def get_contents(
+    subject_id: Optional[str] = Query(None),
+    topic_id: Optional[str] = Query(None),
+    subtopic_id: Optional[str] = Query(None),
+    include_raw: bool = False
+):
+    """Get processed content filtered by subject, topic, or subtopic."""
+    from .main import get_db_connection
+    conn = get_db_connection()
+
+    try:
+        if subtopic_id:
+            query = """
+                SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+                FROM content_processed cp
+                JOIN subtopics s ON cp.subtopic_id = s.id
+                JOIN topics t ON s.topic_id = t.id
+                JOIN subjects sub ON t.subject_id = sub.id
+                WHERE cp.subtopic_id = ?
+                ORDER BY s.order_num
+            """
+            rows = conn.execute(query, (subtopic_id,)).fetchall()
+        elif topic_id:
+            query = """
+                SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+                FROM content_processed cp
+                JOIN subtopics s ON cp.subtopic_id = s.id
+                JOIN topics t ON s.topic_id = t.id
+                JOIN subjects sub ON t.subject_id = sub.id
+                WHERE t.id = ?
+                ORDER BY s.order_num
+            """
+            rows = conn.execute(query, (topic_id,)).fetchall()
+        elif subject_id:
+            query = """
+                SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+                FROM content_processed cp
+                JOIN subtopics s ON cp.subtopic_id = s.id
+                JOIN topics t ON s.topic_id = t.id
+                JOIN subjects sub ON t.subject_id = sub.id
+                WHERE t.subject_id = ?
+                ORDER BY sub.name, t.name, s.order_num
+            """
+            rows = conn.execute(query, (subject_id,)).fetchall()
+        else:
+            query = """
+                SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+                FROM content_processed cp
+                JOIN subtopics s ON cp.subtopic_id = s.id
+                JOIN topics t ON s.topic_id = t.id
+                JOIN subjects sub ON t.subject_id = sub.id
+                ORDER BY sub.name, t.name, s.order_num
+            """
+            rows = conn.execute(query).fetchall()
+
+        contents = []
+        for row in rows:
+            content = dict(row)
+            # Optionally include raw content
+            if include_raw and content.get('raw_id'):
+                raw = conn.execute(
+                    "SELECT markdown_content FROM content_raw WHERE id = ?",
+                    (content['raw_id'],)
+                ).fetchone()
+                if raw:
+                    content['markdown_content'] = raw['markdown_content']
+            contents.append(content)
+
+        return contents
+    finally:
+        conn.close()
+
+@router.get("/contents/{content_id}", response_model=Dict[str, Any])
+async def get_content(content_id: int, include_raw: bool = False):
+    """Get a single processed content by ID."""
+    from .main import get_db_connection
+    conn = get_db_connection()
+
+    try:
+        row = conn.execute("""
+            SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+            FROM content_processed cp
+            JOIN subtopics s ON cp.subtopic_id = s.id
+            JOIN topics t ON s.topic_id = t.id
+            JOIN subjects sub ON t.subject_id = sub.id
+            WHERE cp.id = ?
+        """, (content_id,)).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        content = dict(row)
+
+        # Include raw content if requested
+        if include_raw and content.get('raw_id'):
+            raw = conn.execute(
+                "SELECT markdown_content, title FROM content_raw WHERE id = ?",
+                (content['raw_id'],)
+            ).fetchone()
+            if raw:
+                content['markdown_content'] = raw['markdown_content']
+                content['raw_title'] = raw['title']
+
+        return content
+    finally:
+        conn.close()
+
+@router.get("/contents/subtopic/{subtopic_id}", response_model=Dict[str, Any])
+async def get_content_by_subtopic(subtopic_id: str, include_raw: bool = False):
+    """Get processed content for a specific subtopic."""
+    from .main import get_db_connection
+    conn = get_db_connection()
+
+    try:
+        row = conn.execute("""
+            SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+            FROM content_processed cp
+            JOIN subtopics s ON cp.subtopic_id = s.id
+            JOIN topics t ON s.topic_id = t.id
+            JOIN subjects sub ON t.subject_id = sub.id
+            WHERE cp.subtopic_id = ?
+        """, (subtopic_id,)).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Content not found for this subtopic")
+
+        content = dict(row)
+
+        # Include raw content if requested
+        if include_raw and content.get('raw_id'):
+            raw = conn.execute(
+                "SELECT markdown_content, title FROM content_raw WHERE id = ?",
+                (content['raw_id'],)
+            ).fetchone()
+            if raw:
+                content['markdown_content'] = raw['markdown_content']
+                content['raw_title'] = raw['title']
+
+        return content
+    finally:
+        conn.close()
+
+@router.put("/contents/{content_id}", response_model=Dict[str, Any])
+async def update_content(content_id: int, request: ContentUpdateRequest):
+    """Update processed content (html_content, summary, key_terms)."""
+    from .main import get_db_connection
+    conn = get_db_connection()
+
+    try:
+        # Check if content exists
+        existing = conn.execute(
+            "SELECT * FROM content_processed WHERE id = ?",
+            (content_id,)
+        ).fetchone()
+
+        if not existing:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        # Update processed content
+        conn.execute("""
+            UPDATE content_processed
+            SET html_content = ?,
+                summary = COALESCE(?, summary),
+                key_terms = COALESCE(?, key_terms),
+                processor_version = 'manual_edit',
+                processed_at = datetime('now')
+            WHERE id = ?
+        """, (request.html_content, request.summary, request.key_terms, content_id))
+
+        conn.commit()
+
+        # Return updated content
+        row = conn.execute("""
+            SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+            FROM content_processed cp
+            JOIN subtopics s ON cp.subtopic_id = s.id
+            JOIN topics t ON s.topic_id = t.id
+            JOIN subjects sub ON t.subject_id = sub.id
+            WHERE cp.id = ?
+        """, (content_id,)).fetchone()
+
+        return dict(row)
+    finally:
+        conn.close()
+
+@router.delete("/contents/{content_id}", response_model=Dict[str, Any])
+async def delete_content(content_id: int):
+    """Delete processed content only (keeps raw content for re-processing)."""
+    from .main import get_db_connection
+    conn = get_db_connection()
+
+    try:
+        # Check if content exists
+        existing = conn.execute(
+            "SELECT id, subtopic_id FROM content_processed WHERE id = ?",
+            (content_id,)
+        ).fetchone()
+
+        if not existing:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        subtopic_id = existing['subtopic_id']
+
+        # Delete only from content_processed (raw content is preserved)
+        conn.execute("DELETE FROM content_processed WHERE id = ?", (content_id,))
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": f"Content {content_id} deleted. Raw content preserved for re-processing.",
+            "subtopic_id": subtopic_id
+        }
+    finally:
+        conn.close()
+
+@router.delete("/contents", response_model=Dict[str, Any])
+async def delete_contents_bulk(subtopic_id: str = Query(...)):
+    """Delete all processed content for a subtopic (keeps raw content)."""
+    from .main import get_db_connection
+    conn = get_db_connection()
+
+    try:
+        # Get count
+        count = conn.execute(
+            "SELECT COUNT(*) FROM content_processed WHERE subtopic_id = ?",
+            (subtopic_id,)
+        ).fetchone()[0]
+
+        # Delete only from content_processed
+        conn.execute("DELETE FROM content_processed WHERE subtopic_id = ?", (subtopic_id,))
+        conn.commit()
+
+        return {
+            "success": True,
+            "message": f"Deleted {count} processed contents for subtopic {subtopic_id}. Raw content preserved.",
+            "deleted_count": count
+        }
+    finally:
+        conn.close()
+
+def run_content_regenerate_task(
+    task_id: str,
+    subtopic_id: str,
+    focus: Optional[str],
+    temperature: float,
+    include_key_terms: bool,
+    include_summary: bool,
+    include_think_about_it: bool
+):
+    """Background task for content regeneration with options."""
+    from .main import DB_PATH, get_db_connection
+    import markdown
+
+    tasks[task_id]["status"] = "running"
+    tasks[task_id]["logs"] = []
+
+    def add_log(message: str):
+        print(f"[{task_id}] {message}")
+        tasks[task_id]["logs"].append(message)
+        if len(tasks[task_id]["logs"]) > 50:
+            tasks[task_id]["logs"].pop(0)
+        tasks[task_id]["message"] = message
+
+    try:
+        conn = get_db_connection()
+
+        # Get raw content
+        add_log("Fetching raw content...")
+        raw_row = conn.execute("""
+            SELECT cr.id, cr.markdown_content, cr.title, cr.subtopic_id
+            FROM content_raw cr
+            WHERE cr.subtopic_id = ?
+            ORDER BY cr.id DESC
+            LIMIT 1
+        """, (subtopic_id,)).fetchone()
+
+        if not raw_row:
+            tasks[task_id]["status"] = "failed"
+            tasks[task_id]["message"] = f"No raw content found for subtopic {subtopic_id}"
+            return
+
+        markdown_content = raw_row['markdown_content']
+
+        # Check if there's already a processed entry
+        existing = conn.execute(
+            "SELECT id FROM content_processed WHERE subtopic_id = ?",
+            (subtopic_id,)
+        ).fetchone()
+
+        # Convert markdown to HTML
+        add_log("Converting markdown to HTML...")
+        html_content = markdown.markdown(
+            markdown_content,
+            extensions=['tables', 'fenced_code', 'nl2br', 'sane_lists']
+        )
+
+        # Build system prompt based on focus
+        system_prompt = "You are an expert educational content enhancer."
+        if focus:
+            system_prompt += f" Focus: {focus}."
+
+        # Build user prompt with sections
+        user_prompt = f"""Enhance the following educational content in HTML format.
+
+{f"Make it more creative and engaging." if temperature > 0.7 else f"Keep it clear and concise." if temperature < 0.5 else ""}
+
+{"Include key terms with definitions." if include_key_terms else ""}
+
+{"Include a summary section." if include_summary else ""}
+
+{"Include 'Think About It' reflection questions." if include_think_about_it else ""}
+
+Return the enhanced HTML content wrapped in ```html``` code blocks.
+Do NOT include the original markdown - return only the enhanced HTML.
+
+Original HTML content:
+{html_content}"""
+
+        add_log(f"Calling LLM with temperature={temperature}...")
+
+        # Use OpenAI client for content generation
+        from openai import OpenAI
+        from .config_fastapi import settings
+
+        if not settings.LLM_API_KEY:
+            tasks[task_id]["status"] = "failed"
+            tasks[task_id]["message"] = "LLM_API_KEY not configured"
+            return
+
+        client = OpenAI(
+            api_key=settings.LLM_API_KEY,
+            base_url=settings.LLM_API_URL
+        )
+
+        try:
+            response = client.chat.completions.create(
+                model=settings.LLM_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=temperature
+            )
+
+            llm_result = response.choices[0].message
+
+            if llm_result and llm_result.content:
+                # Extract HTML from code blocks if present
+                enhanced_html = llm_result.content
+
+                # Remove markdown code blocks if wrapped
+                if '```html' in enhanced_html:
+                    enhanced_html = enhanced_html.split('```html')[1]
+                    if '```' in enhanced_html:
+                        enhanced_html = enhanced_html.split('```')[0]
+                elif '```' in enhanced_html:
+                    enhanced_html = enhanced_html.split('```')[1]
+                    if '```' in enhanced_html:
+                        enhanced_html = enhanced_html.split('```')[0]
+
+                enhanced_html = enhanced_html.strip()
+
+                add_log("Saving enhanced content...")
+
+                if existing:
+                    # Update existing
+                    conn.execute("""
+                        UPDATE content_processed
+                        SET html_content = ?,
+                            processor_version = ?,
+                            processed_at = datetime('now')
+                        WHERE id = ?
+                    """, (enhanced_html, f'llm_regenerate_{focus or "default"}', existing['id']))
+                else:
+                    # Insert new
+                    conn.execute("""
+                        INSERT INTO content_processed (
+                            raw_id, subtopic_id, html_content, processor_version
+                        ) VALUES (?, ?, ?, ?)
+                    """, (raw_row['id'], subtopic_id, enhanced_html, f'llm_regenerate_{focus or "default"}'))
+
+                conn.commit()
+                add_log("Content regeneration completed successfully!")
+                tasks[task_id]["status"] = "completed"
+                tasks[task_id]["message"] = "Content regenerated successfully"
+            else:
+                tasks[task_id]["status"] = "failed"
+                tasks[task_id]["message"] = "LLM returned no content"
+
+        except Exception as llm_error:
+            add_log(f"LLM API error: {str(llm_error)}")
+            tasks[task_id]["status"] = "failed"
+            tasks[task_id]["message"] = f"LLM API error: {str(llm_error)}"
+
+    except Exception as e:
+        add_log(f"Error: {str(e)}")
+        tasks[task_id]["status"] = "failed"
+        tasks[task_id]["message"] = f"Error: {str(e)}"
+    finally:
+        conn.close()
+
+@router.post("/contents/regenerate", response_model=TaskResponse)
+async def regenerate_content(
+    request: ContentRegenerateRequest,
+    background_tasks: BackgroundTasks,
+    subtopic_id: str = Query(...)
+):
+    """Regenerate content with AI using specified options."""
+    # Get the subtopic_id from query parameter
+    task_id = str(uuid.uuid4())
+    tasks[task_id] = {"status": "pending", "message": "Regeneration queued", "logs": []}
+
+    background_tasks.add_task(
+        run_content_regenerate_task,
+        task_id,
+        subtopic_id,
+        request.focus,
+        request.temperature or 0.7,
+        request.include_key_terms,
+        request.include_summary,
+        request.include_think_about_it
+    )
+
+    return {"task_id": task_id, "status": "pending", "message": "Content regeneration started"}

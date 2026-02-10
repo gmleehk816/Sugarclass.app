@@ -365,11 +365,13 @@ async def get_db_subjects():
             SELECT s.id, s.name, s.syllabus_id, 'N/A' as code,
                    COUNT(DISTINCT t.id) as topic_count,
                    COUNT(DISTINCT st.id) as subtopic_count,
-                   COUNT(DISTINCT cr.id) as processed_count
+                   COUNT(DISTINCT cr.id) as processed_count,
+                   COUNT(DISTINCT cp.id) as content_count
             FROM subjects s
             LEFT JOIN topics t ON t.subject_id = s.id
             LEFT JOIN subtopics st ON st.topic_id = t.id
             LEFT JOIN content_raw cr ON cr.subtopic_id = st.id
+            LEFT JOIN content_processed cp ON cp.subtopic_id = st.id
             GROUP BY s.id
             ORDER BY s.name
         """).fetchall()
