@@ -61,6 +61,8 @@ class ExerciseUpdateRequest(BaseModel):
     generate_image: bool = False
     image_prompt: Optional[str] = None
 
+class SubjectRenameRequest(BaseModel):
+    name: str
 
 def extract_metadata_from_upload(batch_dir: Path, md_filename: str) -> Dict[str, Optional[str]]:
     """
@@ -321,6 +323,40 @@ async def delete_subject(subject_id: str):
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete subject: {str(e)}")
+    finally:
+        conn.close()
+
+@router.patch("/db/subjects/{subject_id}", response_model=Dict[str, Any])
+async def rename_subject(subject_id: str, request: SubjectRenameRequest):
+    """Rename a subject."""
+    from .main import get_db_connection
+    conn = get_db_connection()
+    try:
+        # Check if subject exists
+        subject = conn.execute("SELECT name FROM subjects WHERE id = ?", (subject_id,)).fetchone()
+        if not subject:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        
+        old_name = subject[0]
+        new_name = request.name.strip()
+        
+        if not new_name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+            
+        conn.execute("UPDATE subjects SET name = ? WHERE id = ?", (new_name, subject_id))
+        conn.commit()
+        
+        return {
+            "success": True,
+            "message": f"Subject renamed from '{old_name}' to '{new_name}'",
+            "subject_id": subject_id,
+            "new_name": new_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to rename subject: {str(e)}")
     finally:
         conn.close()
 
@@ -1033,16 +1069,20 @@ Original HTML content:
                 # Extract HTML from code blocks if present
                 enhanced_html = llm_result.content
 
-                # Remove markdown code blocks if wrapped
-                if '```html' in enhanced_html:
-                    enhanced_html = enhanced_html.split('```html')[1]
-                    if '```' in enhanced_html:
-                        enhanced_html = enhanced_html.split('```')[0]
-                elif '```' in enhanced_html:
-                    enhanced_html = enhanced_html.split('```')[1]
-                    if '```' in enhanced_html:
-                        enhanced_html = enhanced_html.split('```')[0]
+                enhanced_html = enhanced_html.strip()
 
+                # NEW: Clean up HTML to prevent global style leaks
+                # 1. Extract body content if present
+                body_match = re.search(r'<body[^>]*>(.*?)</body>', enhanced_html, re.DOTALL | re.IGNORECASE)
+                if body_match:
+                    enhanced_html = body_match.group(1)
+                
+                # 2. Strip ALL <style> tags (they cause layout issues when inlined)
+                enhanced_html = re.sub(r'<style[^>]*>.*?</style>', '', enhanced_html, flags=re.DOTALL | re.IGNORECASE)
+                
+                # 3. Strip <html> and <head> tags if they still exist
+                enhanced_html = re.sub(r'<html[^>]*>|</html>|<head[^>]*>.*?</head>|<!DOCTYPE[^>]*>', '', enhanced_html, flags=re.DOTALL | re.IGNORECASE)
+                
                 enhanced_html = enhanced_html.strip()
 
                 add_log("Saving enhanced content...")

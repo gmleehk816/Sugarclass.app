@@ -18,6 +18,7 @@ import {
     AlertTriangle,
     ListOrdered,
     Edit,
+    Edit2,
     Plus,
     GripVertical,
     Save,
@@ -123,9 +124,6 @@ const DATATREE: Record<string, Record<string, string[]>> = {
     "secondary": {},
 };
 
-// ===========================================================================
-// Helper: Match DB subjects to tree nodes
-// ===========================================================================
 type DbSubject = {
     id: string;
     name: string;
@@ -135,13 +133,22 @@ type DbSubject = {
     content_count: number;
 };
 
+// Helper: Sanitize string for matching (must match backend logic)
+function sanitizeId(name: string): string {
+    return name.toLowerCase()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/[-\s]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .substring(0, 50);
+}
+
 function matchSubjectsToTree(dbSubjects: DbSubject[]) {
     const matched = new Set<string>();
-    const subjectMap: Record<string, DbSubject> = {};
+    const subjectIdMap: Record<string, DbSubject> = {};
 
-    // Build a lookup: normalize subject name → DbSubject
+    // Build a lookup: subject ID → DbSubject
     for (const sub of dbSubjects) {
-        subjectMap[sub.name.toLowerCase().trim()] = sub;
+        subjectIdMap[sub.id] = sub;
     }
 
     // Try to match each tree leaf to a DB subject
@@ -151,15 +158,14 @@ function matchSubjectsToTree(dbSubjects: DbSubject[]) {
         treeWithData[level] = {};
         for (const [subjectName, boards] of Object.entries(subjects)) {
             const boardEntries = boards.map(boardName => {
-                const key = boardName.toLowerCase().trim();
-                const db = subjectMap[key];
+                const targetId = sanitizeId(boardName);
+                const db = subjectIdMap[targetId];
                 if (db) matched.add(db.id);
                 return { name: boardName, dbSubject: db };
             });
 
-            // Also try matching the subject-level name (for IB/HKDSE which have no boards)
-            const subjectKey = subjectName.toLowerCase().trim();
-            const subjectDb = subjectMap[subjectKey];
+            const subjectId = sanitizeId(subjectName);
+            const subjectDb = subjectIdMap[subjectId];
             if (subjectDb) matched.add(subjectDb.id);
 
             treeWithData[level][subjectName] = {
@@ -169,7 +175,6 @@ function matchSubjectsToTree(dbSubjects: DbSubject[]) {
         }
     }
 
-    // Collect unmatched DB subjects
     const unmatched = dbSubjects.filter(s => !matched.has(s.id));
 
     return { treeWithData, unmatched };
@@ -600,7 +605,10 @@ const ContentEditModal = ({ content, onClose, onSave }: { content: any, onClose:
                             overflowY: 'auto',
                             background: '#fafafa'
                         }}>
-                            <div dangerouslySetInnerHTML={{ __html: formData.html_content }} />
+                            <div
+                                dangerouslySetInnerHTML={{ __html: formData.html_content }}
+                                className="content-html-scope"
+                            />
                         </div>
                     </div>
 
@@ -994,7 +1002,7 @@ const ContentBrowser = ({
     };
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr)', gap: '24px', minWidth: 0 }}>
             {/* Left: Tree View */}
             <div style={cardStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1096,7 +1104,7 @@ const ContentBrowser = ({
             </div>
 
             {/* Right: Content Display */}
-            <div style={cardStyle}>
+            <div style={{ ...cardStyle, minWidth: 0, overflow: 'hidden' }}>
                 {selectedContent ? (
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -1180,9 +1188,13 @@ const ContentBrowser = ({
                             background: '#fafafa',
                             minHeight: '400px',
                             maxHeight: '600px',
-                            overflowY: 'auto'
+                            overflowY: 'auto',
+                            overflowX: 'hidden'
                         }}>
-                            <div dangerouslySetInnerHTML={{ __html: selectedContent.html_content }} />
+                            <div
+                                dangerouslySetInnerHTML={{ __html: selectedContent.html_content }}
+                                className="content-html-scope"
+                            />
                         </div>
 
                         {/* Summary & Key Terms */}
@@ -1208,7 +1220,10 @@ const ContentBrowser = ({
                                 borderLeft: '3px solid #3b82f6'
                             }}>
                                 <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginTop: 0, marginBottom: '8px' }}>Key Terms</h4>
-                                <div style={{ fontSize: '0.9rem' }} dangerouslySetInnerHTML={{ __html: selectedContent.key_terms }} />
+                                <div
+                                    className="content-html-scope"
+                                    dangerouslySetInnerHTML={{ __html: selectedContent.key_terms }}
+                                />
                             </div>
                         )}
                     </>
@@ -1588,6 +1603,20 @@ const AIMaterialsAdmin = () => {
         }
     };
 
+    const handleRenameSubject = async (subjectId: string, newName: string) => {
+        try {
+            const res = await serviceFetch('aimaterials', `/api/admin/db/subjects/${subjectId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ name: newName })
+            });
+            setStatusMessage(`Subject renamed: ${res.message}`);
+            fetchSubjects();
+        } catch (err: any) {
+            console.error('Error renaming subject', err);
+            setStatusMessage(`Error: ${err.message}`);
+        }
+    };
+
     // Content management handlers
     const fetchContents = async (subtopicId: string) => {
         setLoadingContents(true);
@@ -1664,14 +1693,37 @@ const AIMaterialsAdmin = () => {
             setStatusMessage('Content regeneration started...');
             fetchTasks(); // Refresh to see the task
 
+            const taskId = result.task_id;
+
             // Poll for task completion and refresh contents
-            const pollInterval = setInterval(() => {
-                fetchTasks();
-                fetchContents(subtopicId);
+            const pollInterval = setInterval(async () => {
+                try {
+                    fetchTasks();
+                    if (taskId) {
+                        const taskStatus = await serviceFetch('aimaterials', `/api/admin/tasks/${taskId}`);
+                        if (taskStatus.status === 'completed') {
+                            clearInterval(pollInterval);
+                            setRegeneratingContent(prev => ({ ...prev, [subtopicId]: false }));
+                            setStatusMessage('✅ Content regenerated successfully!');
+                            fetchContents(subtopicId);
+                        } else if (taskStatus.status === 'failed') {
+                            clearInterval(pollInterval);
+                            setRegeneratingContent(prev => ({ ...prev, [subtopicId]: false }));
+                            setStatusMessage(`❌ Regeneration failed: ${taskStatus.message}`);
+                        }
+                    } else {
+                        fetchContents(subtopicId);
+                    }
+                } catch (pollErr) {
+                    console.error('Error polling task', pollErr);
+                }
             }, 3000);
 
             // Stop polling after 2 minutes
-            setTimeout(() => clearInterval(pollInterval), 120000);
+            setTimeout(() => {
+                clearInterval(pollInterval);
+                setRegeneratingContent(prev => ({ ...prev, [subtopicId]: false }));
+            }, 120000);
         } catch (err: any) {
             console.error('Error regenerating content', err);
             setStatusMessage(`Error: ${err.message}`);
@@ -1680,8 +1732,8 @@ const AIMaterialsAdmin = () => {
     };
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: '40px', alignItems: 'start' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: '24px', alignItems: 'start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', minWidth: 0 }}>
                 {/* Tab Navigation */}
                 <div style={{ display: 'flex', gap: '8px', background: '#f1f5f9', padding: '6px', borderRadius: '12px', width: 'fit-content' }}>
                     <button
@@ -1939,43 +1991,6 @@ const AIMaterialsAdmin = () => {
                             </button>
                         </div>
 
-                        {/* Status Message */}
-                        {statusMessage && (
-                            <div style={{
-                                padding: '12px 16px',
-                                background: '#f0f9ff',
-                                borderLeft: '4px solid #0ea5e9',
-                                borderRadius: '8px',
-                                fontSize: '0.9rem',
-                                fontWeight: 500,
-                                color: '#0369a1',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '12px'
-                            }}>
-                                <span>{statusMessage}</span>
-                                <button
-                                    onClick={() => setStatusMessage('')}
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: '#0369a1',
-                                        cursor: 'pointer',
-                                        padding: '4px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        opacity: 0.7,
-                                        transition: 'opacity 0.2s'
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
-                                    title="Dismiss"
-                                >
-                                    <XIcon size={16} />
-                                </button>
-                            </div>
-                        )}
                     </>
                 ) : activeTab === 'database' ? (
                     /* Database Filesystem Tree */
@@ -1984,6 +1999,7 @@ const AIMaterialsAdmin = () => {
                         loadingSubjects={loadingSubjects}
                         onRefresh={fetchSubjects}
                         onDeleteSubject={handleDeleteSubject}
+                        onRenameSubject={handleRenameSubject}
                     />
                 ) : activeTab === 'exercises' ? (
                     <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px' }}>
@@ -2125,10 +2141,62 @@ const AIMaterialsAdmin = () => {
                         }}
                     />
                 ) : null}
+
+                {/* Status Message — visible on all tabs */}
+                {statusMessage && (
+                    <div style={{
+                        padding: '14px 20px',
+                        background: statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#fef2f2' : statusMessage.includes('✅') ? '#f0fdf4' : '#f0f9ff',
+                        borderLeft: `5px solid ${statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#ef4444' : statusMessage.includes('✅') ? '#22c55e' : '#0ea5e9'}`,
+                        borderRadius: '12px',
+                        fontSize: '0.95rem',
+                        fontWeight: 600,
+                        color: statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#991b1b' : statusMessage.includes('✅') ? '#166534' : '#0369a1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '16px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                        animation: 'fadeIn 0.3s ease-out'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            {statusMessage.includes('✅') ? <CheckCircle2 size={18} /> :
+                                (statusMessage.startsWith('Error') || statusMessage.includes('❌') ? <AlertTriangle size={18} /> : <Clock size={18} />)}
+                            <span>{statusMessage}</span>
+                        </div>
+                        <button
+                            onClick={() => setStatusMessage('')}
+                            style={{
+                                background: statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#fee2e2' : statusMessage.includes('✅') ? '#dcfce7' : '#e0f2fe',
+                                border: 'none',
+                                color: 'inherit',
+                                cursor: 'pointer',
+                                padding: '6px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s',
+                                flexShrink: 0
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.1)';
+                                e.currentTarget.style.background = 'white';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.background = statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#fee2e2' : statusMessage.includes('✅') ? '#dcfce7' : '#e0f2fe';
+                            }}
+                            title="Dismiss"
+                        >
+                            <XIcon size={18} strokeWidth={2.5} />
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Task monitor on the right */}
-            <div style={{ ...cardStyle, border: 'none', background: '#f8fafc', position: 'sticky', top: '120px' }}>
+            <div style={{ ...cardStyle, border: 'none', background: '#f8fafc', position: 'sticky', top: '120px', width: '300px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                     <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Task Monitor</h3>
                     <RefreshCw size={16} color="#64748b" style={{ cursor: 'pointer' }} onClick={fetchTasks} />
@@ -2303,15 +2371,18 @@ const tabButtonStyle = {
 // ===========================================================================
 // Database Filesystem Tree Component
 // ===========================================================================
-const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDeleteSubject }: {
+const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDeleteSubject, onRenameSubject }: {
     subjects: any[];
     loadingSubjects: boolean;
     onRefresh: () => void;
     onDeleteSubject: (id: string) => void;
+    onRenameSubject: (id: string, newName: string) => void;
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedLevels, setExpandedLevels] = useState<Set<string>>(new Set());
     const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+    const [renamingId, setRenamingId] = useState<string | null>(null);
+    const [tempName, setTempName] = useState('');
 
     const { treeWithData, unmatched } = matchSubjectsToTree(subjects);
 
@@ -2454,6 +2525,8 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                             // For subjects without boards (IB, HKDSE)
                                             if (!hasBoards) {
                                                 const db = subjectData.dbSubject;
+                                                const isRenaming = db && renamingId === db.id;
+
                                                 return (
                                                     <div key={subjectKey} style={{
                                                         display: 'flex', alignItems: 'center', gap: '8px',
@@ -2461,8 +2534,33 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                                         opacity: db ? 1 : 0.5,
                                                     }}>
                                                         <FileText size={15} color={db ? '#3b82f6' : '#cbd5e1'} />
-                                                        <span style={{ color: db ? '#1e293b' : '#94a3b8', fontFamily: 'inherit' }}>{subjectName}</span>
-                                                        {db && (
+                                                        {isRenaming ? (
+                                                            <input
+                                                                autoFocus
+                                                                value={tempName}
+                                                                onChange={(e) => setTempName(e.target.value)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') {
+                                                                        onRenameSubject(db.id, tempName);
+                                                                        setRenamingId(null);
+                                                                    } else if (e.key === 'Escape') {
+                                                                        setRenamingId(null);
+                                                                    }
+                                                                }}
+                                                                onBlur={() => setRenamingId(null)}
+                                                                style={{
+                                                                    ...inputStyle,
+                                                                    padding: '2px 8px',
+                                                                    fontSize: '0.85rem',
+                                                                    height: 'auto',
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <span style={{ color: db ? '#1e293b' : '#94a3b8', fontFamily: 'inherit' }}>
+                                                                {db?.name || subjectName}
+                                                            </span>
+                                                        )}
+                                                        {db && !isRenaming && (
                                                             <>
                                                                 <span style={{
                                                                     fontSize: '0.7rem', padding: '1px 6px', borderRadius: '8px',
@@ -2470,18 +2568,36 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                                                 }}>
                                                                     {db.topic_count}T · {db.subtopic_count}S
                                                                 </span>
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); onDeleteSubject(db.id); }}
-                                                                    style={{
-                                                                        marginLeft: 'auto', padding: '3px 6px', borderRadius: '4px',
-                                                                        border: 'none', background: '#fee2e2', color: '#dc2626',
-                                                                        cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600,
-                                                                        display: 'flex', alignItems: 'center', gap: '3px',
-                                                                    }}
-                                                                    title="Delete subject"
-                                                                >
-                                                                    <Trash2 size={11} />
-                                                                </button>
+                                                                <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setRenamingId(db.id);
+                                                                            setTempName(subjectName);
+                                                                        }}
+                                                                        style={{
+                                                                            padding: '3px 6px', borderRadius: '4px',
+                                                                            border: 'none', background: '#f1f5f9', color: '#64748b',
+                                                                            cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600,
+                                                                            display: 'flex', alignItems: 'center',
+                                                                        }}
+                                                                        title="Rename subject"
+                                                                    >
+                                                                        <Edit2 size={11} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); onDeleteSubject(db.id); }}
+                                                                        style={{
+                                                                            padding: '3px 6px', borderRadius: '4px',
+                                                                            border: 'none', background: '#fee2e2', color: '#dc2626',
+                                                                            cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600,
+                                                                            display: 'flex', alignItems: 'center', gap: '3px',
+                                                                        }}
+                                                                        title="Delete subject"
+                                                                    >
+                                                                        <Trash2 size={11} />
+                                                                    </button>
+                                                                </div>
                                                             </>
                                                         )}
                                                     </div>
@@ -2513,7 +2629,7 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                                             color: boardsWithContent > 0 ? '#1e293b' : '#94a3b8',
                                                             fontFamily: 'inherit',
                                                         }}>
-                                                            {subjectName}/
+                                                            {(subjectData.dbSubject?.name || subjectName)}/
                                                         </span>
                                                         {boardsWithContent > 0 && (
                                                             <span style={{
@@ -2530,6 +2646,8 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                                         <div style={{ paddingLeft: '24px', borderLeft: '1px solid #f1f5f9', marginLeft: '14px' }}>
                                                             {subjectData.boards.map((board) => {
                                                                 const db = board.dbSubject;
+                                                                const isRenaming = db && renamingId === db.id;
+
                                                                 return (
                                                                     <div key={board.name} style={{
                                                                         display: 'flex', alignItems: 'center', gap: '6px',
@@ -2537,13 +2655,37 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                                                         opacity: db ? 1 : 0.45,
                                                                     }}>
                                                                         <FileText size={14} color={db ? '#3b82f6' : '#cbd5e1'} />
-                                                                        <span style={{
-                                                                            fontSize: '0.8rem', color: db ? '#334155' : '#94a3b8',
-                                                                            fontFamily: 'inherit',
-                                                                        }}>
-                                                                            {board.name}
-                                                                        </span>
-                                                                        {db && (
+                                                                        {isRenaming ? (
+                                                                            <input
+                                                                                autoFocus
+                                                                                value={tempName}
+                                                                                onChange={(e) => setTempName(e.target.value)}
+                                                                                onKeyDown={(e) => {
+                                                                                    if (e.key === 'Enter') {
+                                                                                        onRenameSubject(db.id, tempName);
+                                                                                        setRenamingId(null);
+                                                                                    } else if (e.key === 'Escape') {
+                                                                                        setRenamingId(null);
+                                                                                    }
+                                                                                }}
+                                                                                onBlur={() => setRenamingId(null)}
+                                                                                style={{
+                                                                                    ...inputStyle,
+                                                                                    padding: '1px 6px',
+                                                                                    fontSize: '0.8rem',
+                                                                                    height: 'auto',
+                                                                                    margin: 0,
+                                                                                }}
+                                                                            />
+                                                                        ) : (
+                                                                            <span style={{
+                                                                                fontSize: '0.8rem', color: db ? '#334155' : '#94a3b8',
+                                                                                fontFamily: 'inherit',
+                                                                            }}>
+                                                                                {db?.name || board.name}
+                                                                            </span>
+                                                                        )}
+                                                                        {db && !isRenaming && (
                                                                             <>
                                                                                 <span style={{
                                                                                     fontSize: '0.65rem', padding: '1px 6px', borderRadius: '8px',
@@ -2551,18 +2693,36 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                                                                 }}>
                                                                                     {db.topic_count}T · {db.subtopic_count}S
                                                                                 </span>
-                                                                                <button
-                                                                                    onClick={(e) => { e.stopPropagation(); onDeleteSubject(db.id); }}
-                                                                                    style={{
-                                                                                        marginLeft: 'auto', padding: '2px 5px', borderRadius: '4px',
-                                                                                        border: 'none', background: '#fee2e2', color: '#dc2626',
-                                                                                        cursor: 'pointer', fontSize: '0.65rem', fontWeight: 600,
-                                                                                        display: 'flex', alignItems: 'center', gap: '2px',
-                                                                                    }}
-                                                                                    title="Delete subject"
-                                                                                >
-                                                                                    <Trash2 size={10} />
-                                                                                </button>
+                                                                                <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
+                                                                                    <button
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            setRenamingId(db.id);
+                                                                                            setTempName(board.name);
+                                                                                        }}
+                                                                                        style={{
+                                                                                            padding: '2px 5px', borderRadius: '4px',
+                                                                                            border: 'none', background: '#f1f5f9', color: '#64748b',
+                                                                                            cursor: 'pointer', fontSize: '0.65rem', fontWeight: 600,
+                                                                                            display: 'flex', alignItems: 'center',
+                                                                                        }}
+                                                                                        title="Rename subject"
+                                                                                    >
+                                                                                        <Edit2 size={10} />
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={(e) => { e.stopPropagation(); onDeleteSubject(db.id); }}
+                                                                                        style={{
+                                                                                            padding: '2px 5px', borderRadius: '4px',
+                                                                                            border: 'none', background: '#fee2e2', color: '#dc2626',
+                                                                                            cursor: 'pointer', fontSize: '0.65rem', fontWeight: 600,
+                                                                                            display: 'flex', alignItems: 'center', gap: '2px',
+                                                                                        }}
+                                                                                        title="Delete subject"
+                                                                                    >
+                                                                                        <Trash2 size={10} />
+                                                                                    </button>
+                                                                                </div>
                                                                             </>
                                                                         )}
                                                                     </div>
