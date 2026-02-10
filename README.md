@@ -14,7 +14,8 @@ sugarclass.app/
 ├── frontend/                   # Main Dashboard UI (Next.js)
 └── microservices/
     ├── sugarclass-aitutor/     # RAG-based AI Tutor
-    └── sugarclass-aiwriter/    # News-based AI Writing Assistant
+    ├── sugarclass-aiwriter/    # News-based AI Writing Assistant
+    └── sugarclass-aimaterials/ # AI-powered Materials & Exercises (New)
 ```
 
 ### Services & Ports
@@ -26,6 +27,7 @@ sugarclass.app/
 | **AI Writer Frontend** | 3001 | Writing assistant UI |
 | **AI Writer Backend** | 8001 | News collection, AI drafts |
 | **AI Tutor Backend** | 8002 | RAG tutoring, quizzes |
+| **AI Materials Backend** | 8004 | Enhanced content, Exercise CRUD |
 | **AI Writer DB (Postgres)** | 5602 | News/drafts storage |
 | **AI Tutor Content DB** | 5600 | Syllabus content |
 | **AI Tutor Agent DB** | 5601 | Sessions, mastery |
@@ -60,6 +62,7 @@ docker-compose up -d --build
 
 - **Dashboard**: http://localhost:3000
 - **AI Writer**: http://localhost:3001/aiwriter
+- **AI Materials**: http://localhost:8004 (Embedded)
 - **AI Tutor API**: http://localhost:8002/docs
 - **Qdrant Dashboard**: http://localhost:6333/dashboard
 
@@ -78,6 +81,12 @@ A RAG-based tutoring system that:
 - Uses syllabus-specific content (IGCSE, A-Level, etc.)
 - Provides contextual Q&A from educational materials
 - Tracks student mastery and generates quizzes
+
+### AI Materials (`microservices/sugarclass-aimaterials/`)
+An AI-powered content enhancement service that:
+- Rewrites textbook content into structured HTML/SVG
+- Generates educational images via Diffusion models
+- Provides a full Admin CRUD for exercises and questions
 
 ---
 
@@ -111,8 +120,6 @@ docker-compose down
 3. **Microservice Paths**: All microservices are in `./microservices/{service-name}/`.
 4. **Database Isolation**: Each microservice has its own database (no shared state).
 5. **Port Mapping**: Dashboard=8000/3000, Writer=8001/3001, Tutor=8002.
-
----
 
 ---
 

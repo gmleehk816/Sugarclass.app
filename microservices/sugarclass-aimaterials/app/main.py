@@ -103,13 +103,45 @@ app.include_router(admin_router)
 
 @app.on_event("startup")
 async def startup_event():
-    """Log database path on startup."""
+    """Log database path on startup and initialize database if needed."""
     import logging
     logger = logging.getLogger("uvicorn")
     logger.info(f"AI Materials DB_PATH: {DB_PATH}")
     logger.info(f"Database file exists: {os.path.exists(DB_PATH)}")
-    if os.path.exists(DB_PATH):
-        logger.info(f"Database size: {os.path.getsize(DB_PATH)} bytes")
+    
+    # Initialize database if it doesn't exist or is missing tables
+    try:
+        # Import the init function
+        from .processors.content_splitter import init_database as init_db_tables
+        
+        # Check if tables exist
+        needs_init = False
+        if not os.path.exists(DB_PATH):
+            logger.info("Database file not found, will create with tables")
+            # Create directory if it doesn't exist
+            DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+            needs_init = True
+        else:
+            logger.info(f"Database size: {os.path.getsize(DB_PATH)} bytes")
+            # Check if subtopics table exists
+            try:
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='subtopics'")
+                if not cursor.fetchone():
+                    logger.warning("subtopics table not found, will initialize tables")
+                    needs_init = True
+                conn.close()
+            except Exception as e:
+                logger.error(f"Error checking database tables: {e}")
+                needs_init = True
+        
+        if needs_init:
+            logger.info("Initializing database tables...")
+            init_db_tables(DB_PATH)
+            logger.info("✅ Database tables initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
 
 # ============================================================================
 # Static Files

@@ -25,13 +25,15 @@ from typing import List, Dict, Optional, Tuple
 # Paths
 APP_DIR = Path(__file__).parent.parent
 PROJECT_ROOT = APP_DIR.parent
-DB_PATH = APP_DIR / "rag_content.db"  # Database in app/ folder
+# Respect environment DB_PATH, fallback to app directory for local scripts
+DB_PATH = Path(os.getenv("DB_PATH", APP_DIR / "rag_content.db"))
 OUTPUT_DIR = PROJECT_ROOT / "output"
 
 
-def init_database():
+def init_database(db_path=None):
     """Initialize database with required tables"""
-    conn = sqlite3.connect(DB_PATH)
+    target_path = db_path or DB_PATH
+    conn = sqlite3.connect(target_path)
     
     # Syllabuses table
     conn.execute("""
@@ -147,7 +149,7 @@ def init_database():
     
     conn.commit()
     conn.close()
-    print(f"✅ Database initialized: {DB_PATH}")
+    print(f"✅ Database initialized: {target_path}")
 
 
 class ContentSplitter:
@@ -162,11 +164,14 @@ class ContentSplitter:
     # Fallback: any single-# heading becomes next chapter in order
     MATH_TOPIC_FALLBACK = r'^#\s+(.+)$'
     MATH_SUBTOPIC_PATTERN = r'^([A-Z])\s+(.+?)(?:\s+\d+)?$'
+    # Numbered subtopics like 2.1 Additive manufacturing
+    NUMBERED_SUBTOPIC_PATTERN = r'^(\d+\.\d+)\s+(.+?)(?:\s+\d+)?$'
     
-    def __init__(self, syllabus_id: str = "cie_igcse", subject_id: str = "combined_science"):
+    def __init__(self, syllabus_id: str = "cie_igcse", subject_id: str = "combined_science", db_path=None):
         self.syllabus_id = syllabus_id
         self.subject_id = subject_id
-        self.conn = sqlite3.connect(DB_PATH)
+        self.db_path = db_path or DB_PATH
+        self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
     
     def split_markdown(self, markdown_path: Path) -> Dict:
@@ -252,9 +257,11 @@ class ContentSplitter:
                 contents_mode = False
                 continue
             
-            # Check for subtopic (B1.01 Characteristics...)
+            # Check for subtopics
             subtopic_match = re.match(self.SUBTOPIC_PATTERN, line)
             math_subtopic_match = re.match(self.MATH_SUBTOPIC_PATTERN, line)
+            numbered_subtopic_match = re.match(self.NUMBERED_SUBTOPIC_PATTERN, line)
+            
             if subtopic_match:
                 # Save previous subtopic content
                 if current_subtopic and current_content:

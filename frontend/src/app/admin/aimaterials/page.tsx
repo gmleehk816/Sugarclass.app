@@ -15,8 +15,343 @@ import {
     LayoutDashboard,
     Database,
     Trash2,
-    AlertTriangle
+    AlertTriangle,
+    ListOrdered,
+    Edit,
+    Plus,
+    GripVertical,
+    Save,
+    X as XIcon
 } from "lucide-react";
+
+const inputStyle = {
+    width: '100%',
+    padding: '10px 14px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '0.95rem',
+    fontFamily: 'inherit'
+};
+
+// Exercise Modal Component
+const ExerciseModal = ({ exercise, onClose, onSave }: { exercise: any, onClose: () => void, onSave: (data: any) => Promise<void> }) => {
+    const [formData, setFormData] = useState({
+        question_text: exercise?.question_text || '',
+        options: exercise?.options || { A: '', B: '', C: '', D: '' },
+        correct_answer: exercise?.correct_answer || 'A',
+        explanation: exercise?.explanation || ''
+    });
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+
+        // Validation
+        if (!formData.question_text.trim()) {
+            setError('Question text is required');
+            return;
+        }
+        if (!formData.options.A || !formData.options.B || !formData.options.C || !formData.options.D) {
+            setError('All 4 options are required');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            await onSave(formData);
+        } catch (err: any) {
+            setError(err.message || 'Failed to save exercise');
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+        }}>
+            <div style={{
+                background: 'white',
+                borderRadius: '16px',
+                padding: '32px',
+                maxWidth: '600px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
+                        {exercise ? 'Edit Question' : 'Add New Question'}
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '1.5rem',
+                            cursor: 'pointer',
+                            color: '#64748b',
+                            padding: '4px'
+                        }}
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit}>
+                    {/* Question Text */}
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Question Text *
+                        </label>
+                        <textarea
+                            value={formData.question_text}
+                            onChange={(e) => setFormData({ ...formData, question_text: e.target.value })}
+                            style={{
+                                ...inputStyle,
+                                minHeight: '100px',
+                                resize: 'vertical'
+                            }}
+                            placeholder="Enter the question text..."
+                        />
+                    </div>
+
+                    {/* Options */}
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', marginBottom: '12px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Answer Options *
+                        </label>
+                        {['A', 'B', 'C', 'D'].map((key) => (
+                            <div key={key} style={{ marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <span style={{
+                                        fontWeight: 600,
+                                        minWidth: '24px',
+                                        color: '#64748b'
+                                    }}>
+                                        {key}:
+                                    </span>
+                                    <input
+                                        type="text"
+                                        value={formData.options[key as 'A' | 'B' | 'C' | 'D']}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            options: { ...formData.options, [key]: e.target.value }
+                                        })}
+                                        style={inputStyle}
+                                        placeholder={`Option ${key}`}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Correct Answer */}
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Correct Answer *
+                        </label>
+                        <select
+                            value={formData.correct_answer}
+                            onChange={(e) => setFormData({ ...formData, correct_answer: e.target.value })}
+                            style={{
+                                ...inputStyle,
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                        </select>
+                    </div>
+
+                    {/* Explanation */}
+                    <div style={{ marginBottom: '24px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Explanation (Optional)
+                        </label>
+                        <textarea
+                            value={formData.explanation}
+                            onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
+                            style={{
+                                ...inputStyle,
+                                minHeight: '80px',
+                                resize: 'vertical'
+                            }}
+                            placeholder="Explain why this is the correct answer..."
+                        />
+                    </div>
+
+                    {/* Error */}
+                    {error && (
+                        <div style={{
+                            padding: '12px',
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                            borderRadius: '8px',
+                            marginBottom: '20px',
+                            fontSize: '0.9rem'
+                        }}>
+                            {error}
+                        </div>
+                    )}
+
+                    {/* Buttons */}
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={saving}
+                            style={{
+                                padding: '10px 20px',
+                                borderRadius: '8px',
+                                border: '1px solid #e2e8f0',
+                                background: 'white',
+                                color: '#64748b',
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                fontWeight: 600,
+                                opacity: saving ? 0.5 : 1
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            style={{
+                                padding: '10px 20px',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: '#10b981',
+                                color: 'white',
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                fontWeight: 600,
+                                opacity: saving ? 0.6 : 1
+                            }}
+                        >
+                            {saving ? 'Saving...' : (exercise ? 'Update' : 'Create')}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+// Question Card Component
+const QuestionCard = ({ exercise, onEdit, onDelete, onRegenerate }: any) => {
+    return (
+        <div style={{
+            background: '#fafafa',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #e5e7eb'
+        }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b', flex: 1 }}>
+                    Q{exercise.question_num}: {exercise.question_text}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                        onClick={onEdit}
+                        title="Edit Question"
+                        style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: '#e0e7ff',
+                            color: '#4f46e5',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center'
+                        }}
+                    >
+                        <Edit size={14} />
+                    </button>
+                    <button
+                        onClick={onRegenerate}
+                        title="Regenerate with AI"
+                        style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: '#f3e8ff',
+                            color: '#9333ea',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center'
+                        }}
+                    >
+                        <Zap size={14} />
+                    </button>
+                    <button
+                        onClick={onDelete}
+                        title="Delete Question"
+                        style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center'
+                        }}
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                {Object.entries(exercise.options).map(([key, value]: [string, any]) => (
+                    <div
+                        key={key}
+                        style={{
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            background: key === exercise.correct_answer ? '#d1fae5' : 'white',
+                            border: `1px solid ${key === exercise.correct_answer ? '#10b981' : '#e5e7eb'}`,
+                            fontSize: '0.85rem'
+                        }}
+                    >
+                        <strong>{key}:</strong> {value}
+                    </div>
+                ))}
+            </div>
+
+            {exercise.explanation && (
+                <div style={{
+                    padding: '10px 12px',
+                    background: '#fef3c7',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    borderLeft: '3px solid #f59e0b'
+                }}>
+                    <strong>Explanation:</strong> {exercise.explanation}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const AIMaterialsAdmin = () => {
     const [files, setFiles] = useState<File[]>([]);
@@ -27,9 +362,18 @@ const AIMaterialsAdmin = () => {
     const [statusMessage, setStatusMessage] = useState('');
     const [subtopicId, setSubtopicId] = useState('');
     const [loadingTasks, setLoadingTasks] = useState(false);
-    const [activeTab, setActiveTab] = useState<'uploader' | 'database'>('uploader');
+    const [activeTab, setActiveTab] = useState<'uploader' | 'database' | 'exercises'>('uploader');
     const [subjects, setSubjects] = useState<any[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState(false);
+
+    // Exercise management state
+    const [exercises, setExercises] = useState<any[]>([]);
+    const [selectedSubtopicId, setSelectedSubtopicId] = useState<string>('');
+    const [loadingExercises, setLoadingExercises] = useState(false);
+    const [editingExercise, setEditingExercise] = useState<any | null>(null);
+    const [showExerciseModal, setShowExerciseModal] = useState(false);
+    const [generatingExercises, setGeneratingExercises] = useState<Record<string, boolean>>({});
+    const [generationTasks, setGenerationTasks] = useState<Record<string, string>>({});
 
     const fetchTasks = async () => {
         try {
@@ -62,7 +406,64 @@ const AIMaterialsAdmin = () => {
         if (activeTab === 'database') {
             fetchSubjects();
         }
+        if (activeTab === 'exercises') {
+            fetchSubjects(); // Load subjects for exercise browser
+        }
     }, [activeTab]);
+
+    const fetchExercises = async (subtopicId: string) => {
+        setLoadingExercises(true);
+        try {
+            const data = await serviceFetch('aimaterials', `/api/admin/exercises?subtopic_id=${subtopicId}`);
+            setExercises(data);
+            setSelectedSubtopicId(subtopicId);
+        } catch (err) {
+            console.error('Error fetching exercises', err);
+        } finally {
+            setLoadingExercises(false);
+        }
+    };
+
+    const handleSaveExercise = async (formData: any) => {
+        try {
+            if (editingExercise) {
+                // Update existing
+                await serviceFetch('aimaterials', `/api/admin/exercises/${editingExercise.id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(formData)
+                });
+                setStatusMessage('Exercise updated successfully');
+            } else {
+                // Create new
+                await serviceFetch('aimaterials', '/api/admin/exercises', {
+                    method: 'POST',
+                    body: JSON.stringify({ ...formData, subtopic_id: selectedSubtopicId })
+                });
+                setStatusMessage('Exercise created successfully');
+            }
+            setShowExerciseModal(false);
+            setEditingExercise(null);
+            fetchExercises(selectedSubtopicId);
+        } catch (err: any) {
+            console.error('Error saving exercise', err);
+            setStatusMessage(`Error: ${err.message}`);
+        }
+    };
+
+    const handleDeleteExercise = async (exerciseId: number) => {
+        if (!confirm('Are you sure you want to delete this question?')) return;
+
+        try {
+            await serviceFetch('aimaterials', `/api/admin/exercises/${exerciseId}`, {
+                method: 'DELETE'
+            });
+            setStatusMessage('Exercise deleted');
+            fetchExercises(selectedSubtopicId);
+        } catch (err: any) {
+            console.error('Error deleting exercise', err);
+            setStatusMessage(`Error: ${err.message}`);
+        }
+    };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -132,24 +533,68 @@ const AIMaterialsAdmin = () => {
         }
     };
 
-    const handleGenerateExercises = async () => {
-        if (!subtopicId) {
-            setStatusMessage('Please enter a subtopic ID.');
-            return;
-        }
-
+    const handleGenerateExercises = async (subtopicId: string, generateImages: boolean = true, count: number = 5) => {
+        setGeneratingExercises(prev => ({ ...prev, [subtopicId]: true }));
         try {
-            const res = await serviceFetch('aimaterials', '/api/admin/generate-exercises', {
+            const response = await serviceFetch('aimaterials', '/api/admin/generate-exercises', {
                 method: 'POST',
                 body: JSON.stringify({
                     subtopic_id: subtopicId,
-                    generate_images: true
-                })
+                    generate_images: generateImages,
+                    count: count
+                }),
             });
-            setStatusMessage(`Exercise generation started! Task ID: ${res.task_id}`);
-            fetchTasks();
-        } catch (err: any) {
+
+            const taskId = response.task_id;
+            setGenerationTasks(prev => ({ ...prev, [subtopicId]: taskId }));
+
+            // Poll task status
+            const pollInterval = setInterval(async () => {
+                try {
+                    const taskStatus = await serviceFetch('aimaterials', `/api/admin/tasks/${taskId}`);
+
+                    if (taskStatus.status === 'completed') {
+                        clearInterval(pollInterval);
+                        setGeneratingExercises(prev => ({ ...prev, [subtopicId]: false }));
+                        // Refresh exercises if this is the currently selected subtopic
+                        if (selectedSubtopicId === subtopicId) {
+                            await fetchExercises(subtopicId);
+                        }
+                    } else if (taskStatus.status === 'failed') {
+                        clearInterval(pollInterval);
+                        setGeneratingExercises(prev => ({ ...prev, [subtopicId]: false }));
+                        alert(`Generation failed: ${taskStatus.message}`);
+                    }
+                } catch (err) {
+                    console.error('Error polling task status', err);
+                }
+            }, 3000);
+
+            // Stop polling after 5 minutes
+            setTimeout(() => clearInterval(pollInterval), 300000);
+
+        } catch (err) {
             console.error('Error generating exercises', err);
+            setGeneratingExercises(prev => ({ ...prev, [subtopicId]: false }));
+            alert('Failed to start exercise generation');
+        }
+    };
+
+    const handleRegenerateExercise = async (exerciseId: number, subtopicId: string) => {
+        if (!confirm('Are you sure you want to regenerate this question? The current one will be deleted.')) return;
+
+        try {
+            // 1. Delete the exercise
+            await serviceFetch('aimaterials', `/api/admin/exercises/${exerciseId}`, {
+                method: 'DELETE'
+            });
+
+            // 2. Generate a new one
+            await handleGenerateExercises(subtopicId, true, 1);
+
+            setStatusMessage('Regeneration started...');
+        } catch (err: any) {
+            console.error('Error regenerating exercise', err);
             setStatusMessage(`Error: ${err.message}`);
         }
     };
@@ -197,6 +642,17 @@ const AIMaterialsAdmin = () => {
                         }}
                     >
                         <Database size={16} /> Database
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('exercises')}
+                        style={{
+                            ...tabButtonStyle,
+                            background: activeTab === 'exercises' ? 'white' : 'transparent',
+                            boxShadow: activeTab === 'exercises' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                            color: activeTab === 'exercises' ? '#1e293b' : '#64748b'
+                        }}
+                    >
+                        <ListOrdered size={16} /> Exercises
                     </button>
                 </div>
 
@@ -298,39 +754,8 @@ const AIMaterialsAdmin = () => {
                                 {statusMessage}
                             </div>
                         )}
-
-                        {/* Exercise Generation Section */}
-                        <div style={cardStyle}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                                <div style={{ background: '#dcfce7', padding: '8px', borderRadius: '8px' }}>
-                                    <Zap size={20} color="#166534" />
-                                </div>
-                                <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Exercise Generation</h2>
-                            </div>
-
-                            <div style={{ ...inputGroupStyle, marginBottom: '24px' }}>
-                                <label style={labelStyle}>Subtopic ID</label>
-                                <div style={{ position: 'relative' }}>
-                                    <Search size={18} color="#94a3b8" style={{ position: 'absolute', left: '12px', top: '13px' }} />
-                                    <input
-                                        style={{ ...inputStyle, paddingLeft: '40px' }}
-                                        type="text"
-                                        placeholder="e.g. ib_dp_chemistry_3.7"
-                                        value={subtopicId}
-                                        onChange={(e) => setSubtopicId(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleGenerateExercises}
-                                style={{ ...buttonStyle, background: '#927559' }}
-                            >
-                                Generate MCQs with AI Images
-                            </button>
-                        </div>
                     </>
-                ) : (
+                ) : activeTab === 'database' ? (
                     /* Database Management Section */
                     <div style={cardStyle}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -420,7 +845,126 @@ const AIMaterialsAdmin = () => {
                             </table>
                         </div>
                     </div>
-                )}
+                ) : activeTab === 'exercises' ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px' }}>
+                        {/* Subject/Topic/Subtopic Browser */}
+                        <div style={cardStyle}>
+                            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '16px' }}>Browse Subjects</h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {loadingSubjects ? (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
+                                ) : subjects.length === 0 ? (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No subjects found</div>
+                                ) : (
+                                    subjects.map((subject: any) => (
+                                        <SubjectExerciseBrowser
+                                            key={subject.id}
+                                            subject={subject}
+                                            onSelectSubtopic={fetchExercises}
+                                            selectedSubtopicId={selectedSubtopicId}
+                                        />
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Exercise List */}
+                        <div style={cardStyle}>
+                            {selectedSubtopicId ? (
+                                <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                        <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Questions ({exercises.length})</h3>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => handleGenerateExercises(selectedSubtopicId, true, 1)}
+                                                disabled={generatingExercises[selectedSubtopicId]}
+                                                style={{
+                                                    padding: '8px 16px',
+                                                    borderRadius: '8px',
+                                                    border: 'none',
+                                                    background: generatingExercises[selectedSubtopicId] ? '#94a3b8' : '#7c3aed',
+                                                    color: 'white',
+                                                    cursor: generatingExercises[selectedSubtopicId] ? 'not-allowed' : 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    fontSize: '0.9rem',
+                                                    fontWeight: 600,
+                                                    opacity: generatingExercises[selectedSubtopicId] ? 0.6 : 1
+                                                }}
+                                            >
+                                                <Zap size={16} /> {generatingExercises[selectedSubtopicId] && generationTasks[selectedSubtopicId] ? 'Generating...' : 'Generate One'}
+                                            </button>
+                                            <button
+                                                onClick={() => handleGenerateExercises(selectedSubtopicId, true, 5)}
+                                                disabled={generatingExercises[selectedSubtopicId]}
+                                                style={{
+                                                    padding: '8px 16px',
+                                                    borderRadius: '8px',
+                                                    border: 'none',
+                                                    background: generatingExercises[selectedSubtopicId] ? '#94a3b8' : '#4f46e5',
+                                                    color: 'white',
+                                                    cursor: generatingExercises[selectedSubtopicId] ? 'not-allowed' : 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    fontSize: '0.9rem',
+                                                    fontWeight: 600,
+                                                    opacity: generatingExercises[selectedSubtopicId] ? 0.6 : 1
+                                                }}
+                                            >
+                                                <Zap size={16} /> {generatingExercises[selectedSubtopicId] && generationTasks[selectedSubtopicId] ? 'Generating...' : 'Generate 5 with AI'}
+                                            </button>
+                                            <button
+                                                onClick={() => { setEditingExercise(null); setShowExerciseModal(true); }}
+                                                style={{
+                                                    padding: '8px 16px',
+                                                    borderRadius: '8px',
+                                                    border: 'none',
+                                                    background: '#10b981',
+                                                    color: 'white',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    fontSize: '0.9rem',
+                                                    fontWeight: 600
+                                                }}
+                                            >
+                                                <Plus size={16} /> Add Question
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {loadingExercises ? (
+                                        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading exercises...</div>
+                                    ) : exercises.length === 0 ? (
+                                        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                                            No exercises yet. Click "Add Question" to create one.
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                            {exercises.map((ex: any) => (
+                                                <QuestionCard
+                                                    key={ex.id}
+                                                    exercise={ex}
+                                                    onEdit={() => { setEditingExercise(ex); setShowExerciseModal(true); }}
+                                                    onDelete={() => handleDeleteExercise(ex.id)}
+                                                    onRegenerate={() => handleRegenerateExercise(ex.id, selectedSubtopicId)}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
+                                    <ListOrdered size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                                    <div style={{ fontSize: '1rem' }}>Select a subtopic to view exercises</div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : null}
             </div>
 
             {/* Task monitor on the right */}
@@ -507,6 +1051,18 @@ const AIMaterialsAdmin = () => {
                 </div>
             </div>
 
+            {/* Exercise Modal */}
+            {showExerciseModal && (
+                <ExerciseModal
+                    exercise={editingExercise}
+                    onClose={() => {
+                        setShowExerciseModal(false);
+                        setEditingExercise(null);
+                    }}
+                    onSave={handleSaveExercise}
+                />
+            )}
+
         </div>
     );
 };
@@ -531,15 +1087,6 @@ const labelStyle = {
     color: '#475569',
 };
 
-const inputStyle = {
-    padding: '12px 16px',
-    borderRadius: '12px',
-    border: '1px solid #e2e8f0',
-    fontSize: '0.95rem',
-    fontFamily: 'inherit',
-    outline: 'none',
-    transition: 'border-color 0.2s',
-};
 
 const buttonStyle = {
     display: 'flex',
@@ -569,5 +1116,143 @@ const tabButtonStyle = {
     cursor: 'pointer',
     transition: 'all 0.2s',
 };
+
+// Subject/Topic/Subtopic Browser Component
+const SubjectExerciseBrowser = ({ subject, onSelectSubtopic, selectedSubtopicId }: any) => {
+    const [expanded, setExpanded] = useState(false);
+    const [topics, setTopics] = useState<any[]>([]);
+    const [loadingTopics, setLoadingTopics] = useState(false);
+
+    const handleExpand = async () => {
+        if (!expanded && topics.length === 0) {
+            setLoadingTopics(true);
+            try {
+                const data = await serviceFetch('aimaterials', `/api/db/subjects/${subject.id}/topics`);
+                setTopics(data);
+            } catch (err) {
+                console.error('Error fetching topics', err);
+            } finally {
+                setLoadingTopics(false);
+            }
+        }
+        setExpanded(!expanded);
+    };
+
+    return (
+        <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+            <button
+                onClick={handleExpand}
+                style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.9rem',
+                    fontWeight: 600
+                }}
+            >
+                <span>{expanded ? '▼' : '▶'}</span>
+                {subject.name}
+            </button>
+
+            {expanded && (
+                <div style={{ paddingLeft: '20px', marginTop: '8px' }}>
+                    {loadingTopics ? (
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Loading...</div>
+                    ) : (
+                        topics.map((topic: any) => (
+                            <TopicBrowser
+                                key={topic.id}
+                                topic={topic}
+                                onSelectSubtopic={onSelectSubtopic}
+                                selectedSubtopicId={selectedSubtopicId}
+                            />
+                        ))
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const TopicBrowser = ({ topic, onSelectSubtopic, selectedSubtopicId }: any) => {
+    const [expanded, setExpanded] = useState(false);
+    const [subtopics, setSubtopics] = useState<any[]>([]);
+    const [loadingSubtopics, setLoadingSubtopics] = useState(false);
+
+    const handleExpand = async () => {
+        if (!expanded && subtopics.length === 0) {
+            setLoadingSubtopics(true);
+            try {
+                const data = await serviceFetch('aimaterials', `/api/db/topics/${topic.id}/subtopics`);
+                setSubtopics(data);
+            } catch (err) {
+                console.error('Error fetching subtopics', err);
+            } finally {
+                setLoadingSubtopics(false);
+            }
+        }
+        setExpanded(!expanded);
+    };
+
+    return (
+        <div style={{ marginBottom: '4px' }}>
+            <button
+                onClick={handleExpand}
+                style={{
+                    width: '100%',
+                    padding: '6px',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '0.85rem'
+                }}
+            >
+                <span style={{ fontSize: '0.7rem' }}>{expanded ? '▼' : '▶'}</span>
+                {topic.name}
+            </button>
+
+            {expanded && (
+                <div style={{ paddingLeft: '16px', marginTop: '4px' }}>
+                    {loadingSubtopics ? (
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Loading...</div>
+                    ) : (
+                        subtopics.map((subtopic: any) => (
+                            <button
+                                key={subtopic.id}
+                                onClick={() => onSelectSubtopic(subtopic.id)}
+                                style={{
+                                    width: '100%',
+                                    padding: '6px 8px',
+                                    border: 'none',
+                                    background: selectedSubtopicId === subtopic.id ? '#e0e7ff' : 'transparent',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    fontSize: '0.8rem',
+                                    borderRadius: '4px',
+                                    marginBottom: '2px',
+                                    color: selectedSubtopicId === subtopic.id ? '#4f46e5' : '#475569'
+                                }}
+                            >
+                                {subtopic.name}
+                            </button>
+                        ))
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+
 
 export default AIMaterialsAdmin;

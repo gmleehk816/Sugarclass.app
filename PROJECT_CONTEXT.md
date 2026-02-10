@@ -22,6 +22,7 @@ Modules are separate applications (often with their own backends) embedded into 
 1. **Writing Hub (AI Writer)**: A news-based writing platform. Integrated from `../sugarclass-aiwriter`.
 2. **AI Teacher (Tutor)**: Placeholder for conceptual synthesis and tutoring.
 3. **Quiz Master (Examiner)**: Integrated from `../sugarclass-aiexaminer`.
+4. **AI Materials**: Content enrichment and exercise manager. Integrated from `../sugarclass-aimaterials`. Port 8004.
 
 ---
 
@@ -61,6 +62,7 @@ The project is orchestrated via `docker-compose.yml` for local development.
 
 - **Dashboard (Shell)**: `localhost:3000` (Backend: `localhost:8000`)
 - **AI Writer (Module)**: `localhost:3001/aiwriter` (Backend: `localhost:8001`)
+- **AI Materials (Module)**: `localhost:8004` (Backend: `localhost:8004`)
 - **Network**: All containers communicate over a shared `sugarclass-network`.
 
 ---
@@ -92,6 +94,7 @@ The main dashboard uses a **1:1:1 Balanced Grid**. Every column weight should be
 - **Auth**: Fully implemented (Login/Register).
 - **Dashboard**: UI established with real telemetry data.
 - **AI Writer**: Production-ready, news-fetching active, integrated via port 3001.
+- **AI Materials**: Fully functional with FastAPI backend, Exercise CRUD, Content Enhancement, and LLM-powered exercise generation (MCQ with image support). Integrated via port 8004.
 - **AI Teacher/Quiz Master**: UI Placeholders in the sidebar/dashboard; core logic and frame urls need implementation.
 
 ---

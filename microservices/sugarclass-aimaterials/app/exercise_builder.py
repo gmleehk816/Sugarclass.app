@@ -13,7 +13,8 @@ from PIL import Image
 from io import BytesIO
 
 # Configuration
-DB_PATH = Path(__file__).parent / "rag_content.db"
+APP_DIR = Path(__file__).parent
+DB_PATH = Path(os.getenv("DB_PATH", APP_DIR / "rag_content.db"))
 EXERCISE_IMAGES_DIR = Path(__file__).parent / "exercise_images"
 EXERCISE_IMAGES_DIR.mkdir(exist_ok=True)
 
@@ -21,19 +22,22 @@ EXERCISE_IMAGES_DIR.mkdir(exist_ok=True)
 from dotenv import load_dotenv
 load_dotenv()
 
-API_KEY = os.environ.get("NANO_BANANA_API_KEY", "sk-S8qTUcN4th1J4VVVrBjesjhUp4FiZWKme4nqwHZ1Xtro7iOy")
-API_URL = os.environ.get("NANO_BANANA_API_URL", "https://newapi.pockgo.com/v1/chat/completions")
-TEXT_MODEL = "nano-banana"
-IMAGE_MODEL = "nano-banana"
+API_KEY = os.environ.get("LLM_API_KEY", os.environ.get("NANO_BANANA_API_KEY", "sk-S8qTUcN4th1J4VVVrBjesjhUp4FiZWKme4nqwHZ1Xtro7iOy"))
+API_URL = os.environ.get("LLM_API_URL", os.environ.get("NANO_BANANA_API_URL", "https://newapi.pockgo.com/v1/chat/completions"))
+if API_URL and not API_URL.endswith('/chat/completions'):
+    API_URL = API_URL.rstrip('/') + '/chat/completions'
+TEXT_MODEL = os.environ.get("LLM_MODEL", "nano-banana")
+IMAGE_MODEL = os.environ.get("LLM_IMAGE_MODEL", "nano-banana")
 
 
-def get_subtopic_content(subtopic_id):
+def get_subtopic_content(subtopic_id, db_path=None):
     """Get raw content for a subtopic"""
-    conn = sqlite3.connect(DB_PATH)
+    effective_db_path = db_path if db_path else DB_PATH
+    conn = sqlite3.connect(str(effective_db_path))
     conn.row_factory = sqlite3.Row
     
     row = conn.execute("""
-        SELECT s.id, s.name, cr.markdown_content, t.name as topic_name, t.type
+        SELECT s.id, s.name, s.topic_id, cr.markdown_content, t.name as topic_name, t.type
         FROM subtopics s
         LEFT JOIN content_raw cr ON cr.subtopic_id = s.id
         LEFT JOIN topics t ON t.id = s.topic_id
@@ -44,13 +48,13 @@ def get_subtopic_content(subtopic_id):
     return dict(row) if row else None
 
 
-def generate_questions(subtopic_data, max_retries=3):
-    """Generate 5 multiple choice questions using AI"""
+def generate_questions(subtopic_data, count=5, max_retries=3):
+    """Generate multiple choice questions using AI"""
     content = subtopic_data['markdown_content'] or ''
     name = subtopic_data['name']
     topic_type = subtopic_data['type'] or 'Science'
     
-    prompt = f"""Based on this {topic_type} content about "{name}", create exactly 5 multiple choice questions.
+    prompt = f"""Based on this {topic_type} content about "{name}", create exactly {count} multiple choice questions.
 
 CONTENT:
 {content[:8000]}
@@ -75,12 +79,12 @@ OUTPUT FORMAT (JSON):
       }},
       "correct_answer": "B",
       "explanation": "Brief explanation of why B is correct",
-      "image_prompt": "A simple educational diagram showing [specific concept] for IGCSE students"
+      "image_prompt": "A simple educational diagram showing [specific concept] for students"
     }}
   ]
 }}
 
-Generate exactly 5 questions in valid JSON format."""
+Generate exactly {count} questions in valid JSON format."""
 
     for attempt in range(max_retries):
         try:
@@ -177,15 +181,17 @@ def generate_image(prompt, filename, max_retries=2):
     return None
 
 
-def save_exercises_to_db(subtopic_id, questions):
+def save_exercises_to_db(subtopic_id, questions, topic_id=None, db_path=None):
     """Save generated exercises to database"""
-    conn = sqlite3.connect(DB_PATH)
+    effective_db_path = db_path if db_path else DB_PATH
+    conn = sqlite3.connect(str(effective_db_path))
     
-    # Create exercises table if not exists
+    # Create exercises table if not exists (with topic_id for compatibility)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS exercises (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             subtopic_id TEXT NOT NULL,
+            topic_id TEXT,
             question_num INTEGER NOT NULL,
             question_text TEXT NOT NULL,
             options TEXT NOT NULL,
@@ -203,10 +209,11 @@ def save_exercises_to_db(subtopic_id, questions):
     # Insert new exercises
     for i, q in enumerate(questions, 1):
         conn.execute("""
-            INSERT INTO exercises (subtopic_id, question_num, question_text, options, correct_answer, explanation, image_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO exercises (subtopic_id, topic_id, question_num, question_text, options, correct_answer, explanation, image_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             subtopic_id,
+            topic_id,
             i,
             q['question'],
             json.dumps(q['options']),
@@ -220,12 +227,15 @@ def save_exercises_to_db(subtopic_id, questions):
     print(f"  💾 Saved {len(questions)} exercises to database")
 
 
-def build_exercises_for_subtopic(subtopic_id, generate_images=True):
+def build_exercises_for_subtopic(subtopic_id, generate_images=True, count=5, db_path=None):
     """Build exercises for a single subtopic"""
+    global DB_PATH
+    if db_path:
+        DB_PATH = Path(db_path)
     print(f"\n📚 Building exercises for {subtopic_id}...")
     
     # Get content
-    data = get_subtopic_content(subtopic_id)
+    data = get_subtopic_content(subtopic_id, db_path=DB_PATH)
     if not data or not data.get('markdown_content'):
         print(f"  ⚠️ No content found for {subtopic_id}")
         return False
@@ -234,8 +244,8 @@ def build_exercises_for_subtopic(subtopic_id, generate_images=True):
     print(f"  📄 Content: {len(data['markdown_content'])} chars")
     
     # Generate questions
-    print("  🤖 Generating questions...")
-    questions = generate_questions(data)
+    print(f"  🤖 Generating {count} questions...")
+    questions = generate_questions(data, count=count)
     
     if not questions:
         print("  ❌ Failed to generate questions")
@@ -252,8 +262,9 @@ def build_exercises_for_subtopic(subtopic_id, generate_images=True):
                 q['image_path'] = img_path
                 time.sleep(2)  # Rate limiting
     
-    # Save to database
-    save_exercises_to_db(subtopic_id, questions)
+    # Save to database (include topic_id from subtopic data)
+    topic_id = data.get('topic_id')
+    save_exercises_to_db(subtopic_id, questions, topic_id=topic_id, db_path=DB_PATH)
     
     return True
 
