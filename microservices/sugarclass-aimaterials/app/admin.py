@@ -701,6 +701,119 @@ async def get_task_status(task_id: str):
     return tasks[task_id]
 
 # ============================================================================
+# Content Image Generation
+# ============================================================================
+
+class ContentImageRequest(BaseModel):
+    """Request model for generating a content image."""
+    prompt: str
+
+@router.post("/generate-content-image", response_model=Dict[str, Any])
+async def generate_content_image(request: ContentImageRequest):
+    """Generate an image using grok-image-1.0 and return its URL."""
+    import requests as http_requests
+    from io import BytesIO
+    from PIL import Image
+    from .config_fastapi import settings
+
+    if not settings.LLM_API_KEY:
+        raise HTTPException(status_code=500, detail="LLM_API_KEY not configured")
+
+    # Build the API URL
+    api_url = settings.LLM_API_URL.rstrip('/') if settings.LLM_API_URL else ''
+    if not api_url:
+        raise HTTPException(status_code=500, detail="LLM_API_URL not configured")
+    if not api_url.endswith('/chat/completions'):
+        api_url = f"{api_url}/chat/completions" if api_url.endswith('/v1') else f"{api_url}/v1/chat/completions"
+
+    full_prompt = f"Generate an image: {request.prompt}"
+
+    try:
+        response = http_requests.post(
+            api_url,
+            headers={
+                "Authorization": f"Bearer {settings.LLM_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "grok-imagine-1.0",
+                "messages": [{"role": "user", "content": full_prompt}]
+            },
+            timeout=120
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Image API returned status {response.status_code}: {response.text[:200]}"
+            )
+
+        result = response.json()
+        content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+
+        # Extract image URL from markdown format: ![...](https://...)
+        match = re.search(r'!\[.*?\]\((https://[^)]+)\)', content)
+        if not match:
+            raise HTTPException(
+                status_code=502,
+                detail="Image generation did not return an image URL"
+            )
+
+        image_url = match.group(1)
+
+        # Download the image (with retries — the proxy can return 5xx intermittently)
+        img_response = None
+        download_headers = {"User-Agent": "Mozilla/5.0 (compatible; Sugarclass/1.0)"}
+        for attempt in range(3):
+            try:
+                img_response = http_requests.get(image_url, timeout=30, headers=download_headers)
+                if img_response.status_code == 200:
+                    break
+            except Exception:
+                pass
+            import time
+            time.sleep(2 * (attempt + 1))  # 2s, 4s, 6s backoff
+
+        if not img_response or img_response.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to download generated image (status: {img_response.status_code if img_response else 'no response'}). The image was generated but the download proxy is unavailable. URL: {image_url}"
+            )
+
+        # Save to generated_images directory
+        gen_images_dir = BASE_DIR / "generated_images"
+        gen_images_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"content_{uuid.uuid4().hex[:12]}.jpg"
+        img_path = gen_images_dir / filename
+
+        img = Image.open(BytesIO(img_response.content))
+        if img.mode in ('RGBA', 'LA'):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            background.paste(img, mask=img.split()[-1])
+            img = background
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+
+        img.save(img_path, 'JPEG', quality=90)
+
+        # Return the relative URL that FastAPI serves via static mounting
+        # generated_images/ is mounted at /generated_images/ in main.py
+        served_url = f"/generated_images/{filename}"
+
+        return {
+            "success": True,
+            "image_url": served_url,
+            "filename": filename,
+            "prompt": request.prompt
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image generation failed: {str(e)}")
+
+# ============================================================================
 # Content CRUD Operations
 # ============================================================================
 
@@ -717,6 +830,107 @@ class ContentRegenerateRequest(BaseModel):
     include_key_terms: bool = True
     include_summary: bool = True
     include_think_about_it: bool = True
+
+class ChunkRegenerateRequest(BaseModel):
+    """Request model for regenerating a specific chunk."""
+    content: str
+    type: str
+    focus: Optional[str] = None
+    temperature: Optional[float] = 0.7
+    subtopic_name: Optional[str] = None
+    surrounding_context: Optional[Dict[str, str]] = None  # { "before": "...", "after": "..." }
+
+# Type-specific prompt strategies
+CHUNK_TYPE_PROMPTS = {
+    "heading": "Rephrase this heading to be more engaging and clear while keeping the same topic scope. Return only the heading HTML tag (e.g. <h2>...</h2>).",
+    "text": "Enhance this educational paragraph. Improve clarity, add transition sentences, use active voice, and make it engaging for students. Return only the enhanced HTML paragraph(s).",
+    "list": "Improve these list items. Make each point clearer, more specific, and educational. Keep the list structure (<ul>/<ol> with <li> items). Return only the enhanced list HTML.",
+    "quote": "Enhance this quote or callout. Make it more impactful and thought-provoking while preserving the core message. Return only the enhanced HTML.",
+    "callout": "Improve this callout/details section. Make the content clearer and more helpful for students. Return only the enhanced HTML.",
+    "table": "Improve this table's content. Make headers clearer, data more meaningful, and add context where helpful. Return only the enhanced HTML table.",
+}
+
+@router.post("/contents/regenerate-chunk", response_model=Dict[str, Any])
+async def regenerate_chunk(request: ChunkRegenerateRequest):
+    """Regenerate a specific content chunk using AI with type-aware prompts."""
+    from openai import OpenAI
+    from .config_fastapi import settings
+
+    if not settings.LLM_API_KEY:
+        raise HTTPException(status_code=500, detail="LLM_API_KEY not configured")
+
+    # Build system prompt with topic context
+    system_prompt = "You are an expert educational content enhancer specializing in clear, engaging learning materials."
+    if request.subtopic_name:
+        system_prompt += f" The content belongs to the subtopic: '{request.subtopic_name}'."
+    if request.focus:
+        system_prompt += f" Enhancement focus: {request.focus}."
+
+    # Get type-specific instructions
+    type_instruction = CHUNK_TYPE_PROMPTS.get(request.type, CHUNK_TYPE_PROMPTS["text"])
+
+    # Build context from surrounding chunks
+    context_section = ""
+    if request.surrounding_context:
+        before = request.surrounding_context.get("before", "").strip()
+        after = request.surrounding_context.get("after", "").strip()
+        if before or after:
+            context_section = "\n\nSurrounding content for context (do NOT include this in your output):"
+            if before:
+                context_section += f"\n[BEFORE]: {before[:500]}"
+            if after:
+                context_section += f"\n[AFTER]: {after[:500]}"
+
+    # Temperature-based tone guidance
+    temp = request.temperature or 0.7
+    tone = ""
+    if temp > 0.7:
+        tone = "Be more creative, use vivid language and metaphors where appropriate."
+    elif temp < 0.5:
+        tone = "Keep it clear, concise, and straightforward."
+
+    user_prompt = f"""{type_instruction}
+
+{tone}
+
+Original Content:
+{request.content}
+{context_section}
+
+IMPORTANT: Return ONLY the enhanced HTML content. No markdown code fences, no commentary, no explanations. Just the raw HTML."""
+
+    try:
+        client = OpenAI(
+            api_key=settings.LLM_API_KEY,
+            base_url=settings.LLM_API_URL
+        )
+
+        response = client.chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=temp,
+            timeout=60,
+        )
+
+        enhanced_content = response.choices[0].message.content
+        if enhanced_content:
+            # Thorough cleanup
+            enhanced_content = enhanced_content.strip()
+            enhanced_content = re.sub(r'^```(?:html)?\n|```$', '', enhanced_content, flags=re.MULTILINE).strip()
+            enhanced_content = re.sub(r'<style[^>]*>.*?</style>', '', enhanced_content, flags=re.DOTALL | re.IGNORECASE)
+            enhanced_content = re.sub(r'<html[^>]*>|</html>|<head[^>]*>.*?</head>|<body[^>]*>|</body>|<!DOCTYPE[^>]*>', '', enhanced_content, flags=re.DOTALL | re.IGNORECASE).strip()
+            return {"success": True, "content": enhanced_content}
+        else:
+            raise HTTPException(status_code=502, detail="LLM returned empty content")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chunk regeneration failed: {str(e)}")
+
 
 @router.get("/contents", response_model=List[Dict[str, Any]])
 async def get_contents(

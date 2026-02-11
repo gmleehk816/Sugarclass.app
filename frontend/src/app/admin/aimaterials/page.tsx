@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { serviceFetch } from '@/lib/microservices';
+import ChunkEditor from './components/ChunkEditor';
 import {
     Upload,
     Book,
@@ -28,7 +29,39 @@ import {
     ChevronRight,
     ChevronDown,
     FileText,
-    Settings
+    Settings,
+    Image,
+    Video,
+    Bold,
+    Italic,
+    Heading,
+    List,
+    Quote,
+    Code,
+    Eye,
+    EyeOff,
+    Undo2,
+    Redo2,
+    Type,
+    Loader2,
+    Underline,
+    Strikethrough,
+    Palette,
+    Highlighter,
+    Link,
+    Minus,
+    Maximize2,
+    Minimize2,
+    AlignLeft,
+    AlignCenter,
+    AlignRight,
+    ArrowUp,
+    ArrowDown,
+    Move,
+    Trash,
+    CornerDownLeft,
+    MousePointer2,
+    Sparkles
 } from "lucide-react";
 
 const inputStyle = {
@@ -41,8 +74,8 @@ const inputStyle = {
 };
 
 // ===========================================================================
-// DATATREE — Full educational hierarchy from datatree.md
-// Structure: Level → Subject → Board-specific variants (with exam codes)
+// DATATREE â€” Full educational hierarchy from datatree.md
+// Structure: Level â†’ Subject â†’ Board-specific variants (with exam codes)
 // ===========================================================================
 const DATATREE: Record<string, Record<string, string[]>> = {
     "A-Level": {
@@ -146,7 +179,7 @@ function matchSubjectsToTree(dbSubjects: DbSubject[]) {
     const matched = new Set<string>();
     const subjectIdMap: Record<string, DbSubject> = {};
 
-    // Build a lookup: subject ID → DbSubject
+    // Build a lookup: subject ID â†’ DbSubject
     for (const sub of dbSubjects) {
         subjectIdMap[sub.id] = sub;
     }
@@ -180,9 +213,34 @@ function matchSubjectsToTree(dbSubjects: DbSubject[]) {
     return { treeWithData, unmatched };
 }
 
+// ===========================================================================
+// Exercise Interfaces
+// ===========================================================================
+interface Exercise {
+    id?: number;
+    question_num?: number;
+    question_text: string;
+    options: {
+        A: string;
+        B: string;
+        C: string;
+        D: string;
+    };
+    correct_answer: string;
+    explanation?: string;
+}
+
 // Exercise Modal Component
-const ExerciseModal = ({ exercise, onClose, onSave }: { exercise: any, onClose: () => void, onSave: (data: any) => Promise<void> }) => {
-    const [formData, setFormData] = useState({
+const ExerciseModal = ({
+    exercise,
+    onClose,
+    onSave
+}: {
+    exercise: Exercise | null,
+    onClose: () => void,
+    onSave: (data: Partial<Exercise>) => Promise<void>
+}) => {
+    const [formData, setFormData] = useState<Exercise>({
         question_text: exercise?.question_text || '',
         options: exercise?.options || { A: '', B: '', C: '', D: '' },
         correct_answer: exercise?.correct_answer || 'A',
@@ -252,7 +310,7 @@ const ExerciseModal = ({ exercise, onClose, onSave }: { exercise: any, onClose: 
                             padding: '4px'
                         }}
                     >
-                        ×
+                        Ã—
                     </button>
                 </div>
 
@@ -398,7 +456,17 @@ const ExerciseModal = ({ exercise, onClose, onSave }: { exercise: any, onClose: 
 };
 
 // Question Card Component
-const QuestionCard = ({ exercise, onEdit, onDelete, onRegenerate }: any) => {
+const QuestionCard = ({
+    exercise,
+    onEdit,
+    onDelete,
+    onRegenerate
+}: {
+    exercise: Exercise,
+    onEdit: () => void,
+    onDelete: () => void,
+    onRegenerate: () => void
+}) => {
     return (
         <div style={{
             background: '#fafafa',
@@ -501,206 +569,29 @@ const QuestionCard = ({ exercise, onEdit, onDelete, onRegenerate }: any) => {
 };
 
 // ===========================================================================
-// Content Edit Modal Component
+// Interfaces
 // ===========================================================================
-const ContentEditModal = ({ content, onClose, onSave }: { content: any, onClose: () => void, onSave: (data: any) => Promise<void> }) => {
-    const [formData, setFormData] = useState({
-        html_content: content?.html_content || '',
-        summary: content?.summary || '',
-        key_terms: content?.key_terms || ''
-    });
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState('');
+interface ResourceContent {
+    id: number;
+    subtopic_id: number;
+    subtopic_name?: string;
+    html_content: string;
+    summary?: string;
+    key_terms?: string;
+}
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
 
-        if (!formData.html_content.trim()) {
-            setError('HTML content is required');
-            return;
-        }
 
-        setSaving(true);
-        try {
-            await onSave(formData);
-        } catch (err: any) {
-            setError(err.message || 'Failed to save content');
-            setSaving(false);
-        }
-    };
-
-    return (
-        <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '20px'
-        }}>
-            <div style={{
-                background: 'white',
-                borderRadius: '16px',
-                padding: '32px',
-                maxWidth: '900px',
-                width: '100%',
-                maxHeight: '90vh',
-                overflowY: 'auto'
-            }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                    <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
-                        Edit Content: {content?.subtopic_name || ''}
-                    </h2>
-                    <button
-                        onClick={onClose}
-                        style={{
-                            background: 'none',
-                            border: 'none',
-                            fontSize: '1.5rem',
-                            cursor: 'pointer',
-                            color: '#64748b',
-                            padding: '4px'
-                        }}
-                    >
-                        ×
-                    </button>
-                </div>
-
-                <form onSubmit={handleSubmit}>
-                    {/* HTML Content Editor */}
-                    <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            HTML Content *
-                        </label>
-                        <textarea
-                            value={formData.html_content}
-                            onChange={(e) => setFormData({ ...formData, html_content: e.target.value })}
-                            style={{
-                                ...inputStyle,
-                                minHeight: '300px',
-                                fontFamily: 'monospace',
-                                fontSize: '0.85rem'
-                            }}
-                            placeholder="Enter HTML content..."
-                        />
-                    </div>
-
-                    {/* Live Preview */}
-                    <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            Preview
-                        </label>
-                        <div style={{
-                            padding: '16px',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '8px',
-                            minHeight: '200px',
-                            maxHeight: '400px',
-                            overflowY: 'auto',
-                            background: '#fafafa'
-                        }}>
-                            <div
-                                dangerouslySetInnerHTML={{ __html: formData.html_content }}
-                                className="content-html-scope"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Summary */}
-                    <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            Summary (Optional)
-                        </label>
-                        <textarea
-                            value={formData.summary}
-                            onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
-                            style={{
-                                ...inputStyle,
-                                minHeight: '80px',
-                                resize: 'vertical'
-                            }}
-                            placeholder="Brief summary of the content..."
-                        />
-                    </div>
-
-                    {/* Key Terms */}
-                    <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            Key Terms (Optional)
-                        </label>
-                        <textarea
-                            value={formData.key_terms}
-                            onChange={(e) => setFormData({ ...formData, key_terms: e.target.value })}
-                            style={{
-                                ...inputStyle,
-                                minHeight: '80px',
-                                resize: 'vertical'
-                            }}
-                            placeholder="Key terms and definitions..."
-                        />
-                    </div>
-
-                    {error && (
-                        <div style={{
-                            padding: '12px',
-                            background: '#fee2e2',
-                            color: '#dc2626',
-                            borderRadius: '8px',
-                            marginBottom: '16px',
-                            fontSize: '0.9rem'
-                        }}>
-                            {error}
-                        </div>
-                    )}
-
-                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            disabled={saving}
-                            style={{
-                                padding: '12px 24px',
-                                borderRadius: '8px',
-                                border: '1px solid #e2e8f0',
-                                background: 'white',
-                                color: '#64748b',
-                                cursor: saving ? 'not-allowed' : 'pointer',
-                                fontWeight: 600
-                            }}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={saving}
-                            style={{
-                                padding: '12px 24px',
-                                borderRadius: '8px',
-                                border: 'none',
-                                background: saving ? '#94a3b8' : '#2563eb',
-                                color: 'white',
-                                cursor: saving ? 'not-allowed' : 'pointer',
-                                fontWeight: 600,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}
-                        >
-                            {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
-                            {saving ? 'Saving...' : 'Save Changes'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
+// ===========================================================================
+// Content Regenerate Modal Component
+// ===========================================================================
+interface RegenerateOptions {
+    focus: string;
+    temperature: number;
+    include_key_terms: boolean;
+    include_summary: boolean;
+    include_think_about_it: boolean;
+}
 
 // ===========================================================================
 // Content Regenerate Modal Component
@@ -712,8 +603,8 @@ const ContentRegenerateModal = ({
     onClose,
     regenerating
 }: {
-    options: any;
-    setOptions: (options: any) => void;
+    options: RegenerateOptions;
+    setOptions: (options: RegenerateOptions) => void;
     onConfirm: () => void;
     onClose: () => void;
     regenerating: boolean;
@@ -764,7 +655,7 @@ const ContentRegenerateModal = ({
                             padding: '4px'
                         }}
                     >
-                        ×
+                        Ã—
                     </button>
                 </div>
 
@@ -801,7 +692,7 @@ const ContentRegenerateModal = ({
                             max="1"
                             step="0.1"
                             value={options.temperature}
-                            onChange={(e) => setOptions({ ...options, temperature: parseFloat(e.target.value) })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, temperature: parseFloat(e.target.value) })}
                             disabled={regenerating}
                             style={{ width: '100%', cursor: regenerating ? 'not-allowed' : 'pointer' }}
                         />
@@ -822,7 +713,7 @@ const ContentRegenerateModal = ({
                                 <input
                                     type="checkbox"
                                     checked={options.include_key_terms}
-                                    onChange={(e) => setOptions({ ...options, include_key_terms: e.target.checked })}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, include_key_terms: e.target.checked })}
                                     disabled={regenerating}
                                 />
                                 <span style={{ fontSize: '0.9rem' }}>Key Terms & Definitions</span>
@@ -831,7 +722,7 @@ const ContentRegenerateModal = ({
                                 <input
                                     type="checkbox"
                                     checked={options.include_summary}
-                                    onChange={(e) => setOptions({ ...options, include_summary: e.target.checked })}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, include_summary: e.target.checked })}
                                     disabled={regenerating}
                                 />
                                 <span style={{ fontSize: '0.9rem' }}>Summary Section</span>
@@ -840,7 +731,7 @@ const ContentRegenerateModal = ({
                                 <input
                                     type="checkbox"
                                     checked={options.include_think_about_it}
-                                    onChange={(e) => setOptions({ ...options, include_think_about_it: e.target.checked })}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, include_think_about_it: e.target.checked })}
                                     disabled={regenerating}
                                 />
                                 <span style={{ fontSize: '0.9rem' }}>Think About It Questions</span>
@@ -1111,7 +1002,7 @@ const ContentBrowser = ({
                             <div>
                                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{selectedContent.subtopic_name}</h3>
                                 <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>
-                                    {selectedContent.subject_name} → {selectedContent.topic_name}
+                                    {selectedContent.subject_name} â†’ {selectedContent.topic_name}
                                 </p>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
@@ -1176,7 +1067,7 @@ const ContentBrowser = ({
                         {/* Metadata */}
                         <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', fontSize: '0.8rem', color: '#64748b' }}>
                             <span>Version: {selectedContent.processor_version || 'unknown'}</span>
-                            <span>•</span>
+                            <span>â€¢</span>
                             <span>Processed: {new Date(selectedContent.processed_at).toLocaleDateString()}</span>
                         </div>
 
@@ -1704,12 +1595,12 @@ const AIMaterialsAdmin = () => {
                         if (taskStatus.status === 'completed') {
                             clearInterval(pollInterval);
                             setRegeneratingContent(prev => ({ ...prev, [subtopicId]: false }));
-                            setStatusMessage('✅ Content regenerated successfully!');
+                            setStatusMessage('âœ… Content regenerated successfully!');
                             fetchContents(subtopicId);
                         } else if (taskStatus.status === 'failed') {
                             clearInterval(pollInterval);
                             setRegeneratingContent(prev => ({ ...prev, [subtopicId]: false }));
-                            setStatusMessage(`❌ Regeneration failed: ${taskStatus.message}`);
+                            setStatusMessage(`âŒ Regeneration failed: ${taskStatus.message}`);
                         }
                     } else {
                         fetchContents(subtopicId);
@@ -1832,7 +1723,7 @@ const AIMaterialsAdmin = () => {
                                                     if (e.target.value) {
                                                         const boards = selectedLevel ? DATATREE[selectedLevel]?.[e.target.value] : [];
                                                         if (!boards || boards.length === 0) {
-                                                            // No board variants (IB, HKDSE) — use subject name directly
+                                                            // No board variants (IB, HKDSE) â€” use subject name directly
                                                             setSubjectName(e.target.value);
                                                         } else {
                                                             setSubjectName('');
@@ -1847,7 +1738,7 @@ const AIMaterialsAdmin = () => {
                                             </select>
                                         </div>
 
-                                        {/* Board variant dropdown — only show if boards exist */}
+                                        {/* Board variant dropdown â€” only show if boards exist */}
                                         <div style={inputGroupStyle}>
                                             <label style={labelStyle}>Board / Exam</label>
                                             <select
@@ -1893,8 +1784,8 @@ const AIMaterialsAdmin = () => {
                                             <FileText size={14} />
                                             <span>
                                                 {selectedLevel}
-                                                {selectedSubject && <> › {selectedSubject}</>}
-                                                {selectedBoard && <> › {selectedBoard}</>}
+                                                {selectedSubject && <> â€º {selectedSubject}</>}
+                                                {selectedBoard && <> â€º {selectedBoard}</>}
                                             </span>
                                         </div>
                                     )}
@@ -1934,7 +1825,7 @@ const AIMaterialsAdmin = () => {
                                         onClick={() => setManualEntry(false)}
                                         style={{ background: 'none', border: 'none', fontSize: '0.8rem', color: '#94a3b8', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline' }}
                                     >
-                                        ← back to tree selector
+                                        â† back to tree selector
                                     </button>
                                 </div>
                             )}
@@ -1964,7 +1855,7 @@ const AIMaterialsAdmin = () => {
                                                 <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
                                                     {files.map((f, i) => (
                                                         <li key={i} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
-                                                            {f.name.endsWith('.md') ? '📖 ' : '⚙️ '} {f.name}
+                                                            {f.name.endsWith('.md') ? 'ðŸ“– ' : 'âš™ï¸ '} {f.name}
                                                         </li>
                                                     ))}
                                                 </ul>
@@ -2142,16 +2033,16 @@ const AIMaterialsAdmin = () => {
                     />
                 ) : null}
 
-                {/* Status Message — visible on all tabs */}
+                {/* Status Message â€” visible on all tabs */}
                 {statusMessage && (
                     <div style={{
                         padding: '14px 20px',
-                        background: statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#fef2f2' : statusMessage.includes('✅') ? '#f0fdf4' : '#f0f9ff',
-                        borderLeft: `5px solid ${statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#ef4444' : statusMessage.includes('✅') ? '#22c55e' : '#0ea5e9'}`,
+                        background: statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#fef2f2' : statusMessage.includes('âœ…') ? '#f0fdf4' : '#f0f9ff',
+                        borderLeft: `5px solid ${statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#ef4444' : statusMessage.includes('âœ…') ? '#22c55e' : '#0ea5e9'}`,
                         borderRadius: '12px',
                         fontSize: '0.95rem',
                         fontWeight: 600,
-                        color: statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#991b1b' : statusMessage.includes('✅') ? '#166534' : '#0369a1',
+                        color: statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#991b1b' : statusMessage.includes('âœ…') ? '#166534' : '#0369a1',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
@@ -2160,14 +2051,14 @@ const AIMaterialsAdmin = () => {
                         animation: 'fadeIn 0.3s ease-out'
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {statusMessage.includes('✅') ? <CheckCircle2 size={18} /> :
-                                (statusMessage.startsWith('Error') || statusMessage.includes('❌') ? <AlertTriangle size={18} /> : <Clock size={18} />)}
+                            {statusMessage.includes('âœ…') ? <CheckCircle2 size={18} /> :
+                                (statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? <AlertTriangle size={18} /> : <Clock size={18} />)}
                             <span>{statusMessage}</span>
                         </div>
                         <button
                             onClick={() => setStatusMessage('')}
                             style={{
-                                background: statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#fee2e2' : statusMessage.includes('✅') ? '#dcfce7' : '#e0f2fe',
+                                background: statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#fee2e2' : statusMessage.includes('âœ…') ? '#dcfce7' : '#e0f2fe',
                                 border: 'none',
                                 color: 'inherit',
                                 cursor: 'pointer',
@@ -2185,7 +2076,7 @@ const AIMaterialsAdmin = () => {
                             }}
                             onMouseLeave={(e) => {
                                 e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.background = statusMessage.startsWith('Error') || statusMessage.includes('❌') ? '#fee2e2' : statusMessage.includes('✅') ? '#dcfce7' : '#e0f2fe';
+                                e.currentTarget.style.background = statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#fee2e2' : statusMessage.includes('âœ…') ? '#dcfce7' : '#e0f2fe';
                             }}
                             title="Dismiss"
                         >
@@ -2293,7 +2184,7 @@ const AIMaterialsAdmin = () => {
 
             {/* Content Edit Modal */}
             {showContentEditModal && editingContent && (
-                <ContentEditModal
+                <ChunkEditor
                     content={editingContent}
                     onClose={() => {
                         setShowContentEditModal(false);
@@ -2453,7 +2344,7 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
             }}>
                 <AlertTriangle size={16} color="#ea580c" style={{ flexShrink: 0 }} />
                 <p style={{ color: '#c2410c', fontSize: '0.8rem', lineHeight: '1.4', margin: 0 }}>
-                    Unified database — deleting subjects here removes them from <strong>AI Tutor</strong> too.
+                    Unified database â€” deleting subjects here removes them from <strong>AI Tutor</strong> too.
                 </p>
             </div>
 
@@ -2566,7 +2457,7 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                                                     fontSize: '0.7rem', padding: '1px 6px', borderRadius: '8px',
                                                                     background: '#ecfdf5', color: '#059669', fontWeight: 600, fontFamily: 'system-ui',
                                                                 }}>
-                                                                    {db.topic_count}T · {db.subtopic_count}S
+                                                                    {db.topic_count}T Â· {db.subtopic_count}S
                                                                 </span>
                                                                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
                                                                     <button
@@ -2691,7 +2582,7 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                                                                     fontSize: '0.65rem', padding: '1px 6px', borderRadius: '8px',
                                                                                     background: '#ecfdf5', color: '#059669', fontWeight: 600, fontFamily: 'system-ui',
                                                                                 }}>
-                                                                                    {db.topic_count}T · {db.subtopic_count}S
+                                                                                    {db.topic_count}T Â· {db.subtopic_count}S
                                                                                 </span>
                                                                                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
                                                                                     <button
@@ -2765,7 +2656,7 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                                             fontSize: '0.65rem', padding: '1px 6px', borderRadius: '8px',
                                             background: '#ecfdf5', color: '#059669', fontWeight: 600, fontFamily: 'system-ui',
                                         }}>
-                                            {sub.topic_count}T · {sub.subtopic_count}S
+                                            {sub.topic_count}T Â· {sub.subtopic_count}S
                                         </span>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); onDeleteSubject(sub.id); }}
@@ -2831,7 +2722,7 @@ const SubjectExerciseBrowser = ({ subject, onSelectSubtopic, selectedSubtopicId 
                     fontWeight: 600
                 }}
             >
-                <span>{expanded ? '▼' : '▶'}</span>
+                <span>{expanded ? 'â–¼' : 'â–¶'}</span>
                 {subject.name}
             </button>
 
@@ -2892,7 +2783,7 @@ const TopicBrowser = ({ topic, onSelectSubtopic, selectedSubtopicId }: any) => {
                     fontSize: '0.85rem'
                 }}
             >
-                <span style={{ fontSize: '0.7rem' }}>{expanded ? '▼' : '▶'}</span>
+                <span style={{ fontSize: '0.7rem' }}>{expanded ? 'â–¼' : 'â–¶'}</span>
                 {topic.name}
             </button>
 
