@@ -700,6 +700,14 @@ async def get_task_status(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
     return tasks[task_id]
 
+@router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str):
+    """Dismiss/delete a task from the monitor."""
+    if task_id in tasks:
+        del tasks[task_id]
+        return {"success": True, "message": f"Task {task_id} dismissed"}
+    raise HTTPException(status_code=404, detail="Task not found")
+
 # ============================================================================
 # Content Image Generation
 # ============================================================================
@@ -796,50 +804,74 @@ def _generate_single_image_internal(prompt: str) -> Dict[str, Any]:
     }
 
 def _generate_images_for_content(html_content: str, subtopic_id: str, conn, add_log):
-    """Parses HTML for headings and inserts generated images after them."""
+    """Parses HTML for [GENERATE_IMAGE: prompt] markers and replaces them with images."""
     import re
     
-    # 1. Find all headings (h1, h2, h3)
-    headings = re.findall(r'<(h[1-3])[^>]*>(.*?)</\1>', html_content, re.IGNORECASE | re.DOTALL)
-    if not headings:
-        add_log("No headings found in content, skipping image generation.")
-        return html_content
+    # regex to find [GENERATE_IMAGE: some descriptive prompt]
+    marker_pattern = r'\[GENERATE_IMAGE:\s*(.*?)\]'
+    markers = re.findall(marker_pattern, html_content)
+    
+    if not markers:
+        add_log("No image markers found in content, using fallback (headings)...")
+        # Fallback to old behavior if no markers found
+        headings = re.findall(r'<(h[1-3])[^>]*>(.*?)</\1>', html_content, re.IGNORECASE | re.DOTALL)
+        if not headings:
+            add_log("No headings found either, skipping image generation.")
+            return html_content
+        
+        # Limit to 2 fallback images to be safe
+        markers = [re.sub(r'<[^>]+>', '', h[1]).strip() for h in headings[:2]]
+        is_fallback = True
+    else:
+        is_fallback = False
+        add_log(f"Found {len(markers)} intentional image markers from AI.")
+
+        # Limit AI markers to 5 to avoid infinite generation loops/costs
+        if len(markers) > 5:
+            add_log("Too many markers found, limiting to first 5.")
+            markers = markers[:5]
 
     new_html = html_content
-    # To keep things efficient and not overload the API/slow down too much, 
-    # we'll limit to first 3 headings
-    headings_to_process = headings[:3]
-    add_log(f"Found {len(headings)} headings, processing first {len(headings_to_process)} for images...")
+    processed_count = 0
 
-    for tag, content in headings_to_process:
-        # Clean heading content (strip HTML tags if any)
-        clean_heading = re.sub(r'<[^>]+>', '', content).strip()
-        if len(clean_heading) < 5:
+    for prompt in markers:
+        if len(prompt) < 3:
             continue
             
         try:
-            add_log(f"Generating image for heading: '{clean_heading}'...")
-            res = _generate_single_image_internal(clean_heading)
+            add_log(f"Generating image for: '{prompt}'...")
+            res = _generate_single_image_internal(prompt)
             
             if res["success"]:
                 img_url = res["image_url"]
-                # Determine base URL for image
-                # In background task we use relative if possible, but for the saved HTML 
-                # we usually want it to be served relative
-                image_html = f'<figure style="text-align:center;margin:20px 0;"><img src="{img_url}" alt="{clean_heading}" style="max-width:100%;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);"/><figcaption style="margin-top:8px;font-size:0.85rem;color:#64748b;font-style:italic;">{clean_heading}</figcaption></figure>'
+                image_html = f'<figure style="text-align:center;margin:24px 0;"><img src="{img_url}" alt="{prompt}" style="max-width:100%;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,0.12);"/><figcaption style="margin-top:12px;font-size:0.9rem;color:#64748b;font-style:italic;max-width:80%;margin-left:auto;margin-right:auto;">{prompt}</figcaption></figure>'
                 
-                # Insert after the heading
-                # We search for the specific heading tag + content to ensure we insert in the right place
-                pattern = re.escape(f'<{tag}') + r'[^>]*>' + re.escape(content) + re.escape(f'</{tag}>')
-                # Replace only the first occurrence to avoid duplicates if headings are identical
-                new_html = re.sub(pattern, f'<{tag}>{content}</{tag}>\n{image_html}', new_html, count=1, flags=re.IGNORECASE | re.DOTALL)
-                add_log(f"✅ Image generated and inserted for section: {clean_heading}")
+                if is_fallback:
+                    # Old logic: Find the heading and insert after it
+                    # We need to find the heading that matched this prompt
+                    # This is slightly complex in fallback mode, so we just replace the first Match
+                    pattern = r'<(h[1-3])[^>]*>.*?' + re.escape(prompt) + r'.*?</\1>'
+                    new_html = re.sub(pattern, lambda m: m.group(0) + '\n' + image_html, new_html, count=1, flags=re.IGNORECASE | re.DOTALL)
+                else:
+                    # New logic: Replace the marker exactly
+                    # Escaping the specific marker to be safe
+                    specific_marker = f'[GENERATE_IMAGE: {prompt}]'
+                    # Handle cases where AI might have slightly different spacing
+                    esc_prompt = re.escape(prompt)
+                    marker_regex = r'\[GENERATE_IMAGE:\s*' + esc_prompt + r'\s*\]'
+                    new_html = re.sub(marker_regex, image_html, new_html, count=1)
+                
+                processed_count += 1
+                add_log(f"✅ Image {processed_count} generated and inserted.")
         except Exception as e:
-            add_log(f"⚠️ Failed to generate image for '{clean_heading}': {str(e)}")
+            add_log(f"⚠️ Failed to generate image for '{prompt}': {str(e)}")
+
+    # Cleanup any remaining markers if AI went crazy
+    new_html = re.sub(marker_pattern, '', new_html)
 
     # Update database with the new HTML containing images
-    if new_html != html_content:
-        add_log("Updating database with content containing images...")
+    if processed_count > 0:
+        add_log(f"Updating database with {processed_count} images inserted.")
         conn.execute("UPDATE content_processed SET html_content = ? WHERE subtopic_id = ?", (new_html, subtopic_id))
         conn.commit()
     
@@ -1293,6 +1325,10 @@ def run_content_regenerate_task(
 
 Return the enhanced HTML content wrapped in ```html``` code blocks.
 Do NOT include the original markdown - return only the enhanced HTML.
+
+IMPORTANT (IMAGE PLACEMENT):
+If "Generate Images" is requested, you MUST identify 2-3 optimal locations in the content where an illustrative image would be helpful. At these locations, insert the marker [GENERATE_IMAGE: descriptive prompt for the image].
+The prompt should be a detailed description of what the image should show to explain the surrounding text. Do NOT place images too close together.
 
 Original HTML content:
 {html_content}"""

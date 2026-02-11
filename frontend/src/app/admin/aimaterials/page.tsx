@@ -1039,7 +1039,7 @@ const ContentBrowser = ({
                             <div>
                                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{selectedContent.subtopic_name}</h3>
                                 <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>
-                                    {selectedContent.subject_name} â†’ {selectedContent.topic_name}
+                                    {selectedContent.subject_name} → {selectedContent.topic_name}
                                 </p>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
@@ -1114,8 +1114,8 @@ const ContentBrowser = ({
                             border: '1px solid #e2e8f0',
                             borderRadius: '12px',
                             background: '#fafafa',
-                            minHeight: '400px',
-                            maxHeight: '600px',
+                            minHeight: '600px',
+                            maxHeight: '850px',
                             overflowY: 'auto',
                             overflowX: 'hidden'
                         }}>
@@ -1295,6 +1295,24 @@ const AIMaterialsAdmin = () => {
             setTasks(data);
         } catch (err) {
             console.error('Error fetching tasks', err);
+        }
+    };
+
+    const handleDismissTask = async (taskId: string) => {
+        try {
+            await serviceFetch('aimaterials', `/api/admin/tasks/${taskId}`, {
+                method: 'DELETE'
+            });
+            // Update local state immediately for snappy feel
+            setTasks(prev => {
+                const next = { ...prev };
+                delete next[taskId];
+                return next;
+            });
+        } catch (err) {
+            console.error('Error dismissing task', err);
+            // Refresh tasks anyway to stay in sync
+            fetchTasks();
         }
     };
 
@@ -2153,9 +2171,30 @@ const AIMaterialsAdmin = () => {
                             }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', color: '#94a3b8' }}>#{id.slice(0, 8)}</span>
-                                    {info.status === 'completed' && <CheckCircle2 size={16} color="#22c55e" />}
-                                    {info.status === 'failed' && <XCircle size={16} color="#ef4444" />}
-                                    {info.status === 'running' && <RefreshCw size={16} color="#3b82f6" className="animate-spin" />}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        {info.status === 'completed' && <CheckCircle2 size={16} color="#22c55e" />}
+                                        {info.status === 'failed' && <XCircle size={16} color="#ef4444" />}
+                                        {info.status === 'running' && <RefreshCw size={16} color="#3b82f6" className="animate-spin" />}
+                                        <button
+                                            onClick={() => handleDismissTask(id)}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#94a3b8',
+                                                cursor: 'pointer',
+                                                padding: '2px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                borderRadius: '4px'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                                            onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                                            title="Dismiss Task"
+                                        >
+                                            <XIcon size={14} />
+                                        </button>
+                                    </div>
                                 </div>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
                                     {info.status.charAt(0).toUpperCase() + info.status.slice(1)}
@@ -2763,7 +2802,7 @@ const SubjectExerciseBrowser = ({ subject, onSelectSubtopic, selectedSubtopicId 
                     fontWeight: 600
                 }}
             >
-                <span>{expanded ? 'â–¼' : 'â–¶'}</span>
+                {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 {subject.name}
             </button>
 
@@ -2824,7 +2863,7 @@ const TopicBrowser = ({ topic, onSelectSubtopic, selectedSubtopicId }: any) => {
                     fontSize: '0.85rem'
                 }}
             >
-                <span style={{ fontSize: '0.7rem' }}>{expanded ? 'â–¼' : 'â–¶'}</span>
+                {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 {topic.name}
             </button>
 
