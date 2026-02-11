@@ -591,6 +591,8 @@ interface RegenerateOptions {
     include_key_terms: boolean;
     include_summary: boolean;
     include_think_about_it: boolean;
+    generate_images: boolean;
+    generate_videos: boolean;
 }
 
 // ===========================================================================
@@ -735,6 +737,33 @@ const ContentRegenerateModal = ({
                                     disabled={regenerating}
                                 />
                                 <span style={{ fontSize: '0.9rem' }}>Think About It Questions</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Media Generation */}
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '12px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Media Generation
+                        </label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={options.generate_images}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, generate_images: e.target.checked })}
+                                    disabled={regenerating}
+                                />
+                                <span style={{ fontSize: '0.9rem' }}>🖼️ Generate Images for Topics</span>
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'not-allowed', opacity: 0.5 }}>
+                                <input
+                                    type="checkbox"
+                                    checked={options.generate_videos}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, generate_videos: e.target.checked })}
+                                    disabled={true}
+                                />
+                                <span style={{ fontSize: '0.9rem' }}>🎬 Generate Videos <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>(coming soon)</span></span>
                             </label>
                         </div>
                     </div>
@@ -1247,7 +1276,9 @@ const AIMaterialsAdmin = () => {
         temperature: 0.7,
         include_key_terms: true,
         include_summary: true,
-        include_think_about_it: true
+        include_think_about_it: true,
+        generate_images: false,
+        generate_videos: false
     });
 
     const fetchTasks = async () => {

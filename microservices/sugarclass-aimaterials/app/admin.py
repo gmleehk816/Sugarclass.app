@@ -708,107 +708,153 @@ class ContentImageRequest(BaseModel):
     """Request model for generating a content image."""
     prompt: str
 
-@router.post("/generate-content-image", response_model=Dict[str, Any])
-async def generate_content_image(request: ContentImageRequest):
-    """Generate an image using grok-image-1.0 and return its URL."""
+def _generate_single_image_internal(prompt: str) -> Dict[str, Any]:
+    """Internal helper to generate an image and return URL/filename."""
     import requests as http_requests
     from io import BytesIO
     from PIL import Image
+    import re
+    import uuid
     from .config_fastapi import settings
 
     if not settings.LLM_API_KEY:
-        raise HTTPException(status_code=500, detail="LLM_API_KEY not configured")
+        raise Exception("LLM_API_KEY not configured")
 
-    # Build the API URL
     api_url = settings.LLM_API_URL.rstrip('/') if settings.LLM_API_URL else ''
     if not api_url:
-        raise HTTPException(status_code=500, detail="LLM_API_URL not configured")
+        raise Exception("LLM_API_URL not configured")
     if not api_url.endswith('/chat/completions'):
         api_url = f"{api_url}/chat/completions" if api_url.endswith('/v1') else f"{api_url}/v1/chat/completions"
 
-    full_prompt = f"Generate an image: {request.prompt}"
+    full_prompt = f"Generate an image: {prompt}"
+
+    response = http_requests.post(
+        api_url,
+        headers={
+            "Authorization": f"Bearer {settings.LLM_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "grok-imagine-1.0",
+            "messages": [{"role": "user", "content": full_prompt}]
+        },
+        timeout=120
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"Image API returned status {response.status_code}: {response.text[:200]}")
+
+    result = response.json()
+    content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+
+    match = re.search(r'!\[.*?\]\((https://[^)]+)\)', content)
+    if not match:
+        raise Exception("Image generation did not return an image URL")
+
+    image_url = match.group(1)
+    served_url = image_url
+    filename = None
 
     try:
-        response = http_requests.post(
-            api_url,
-            headers={
-                "Authorization": f"Bearer {settings.LLM_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "grok-imagine-1.0",
-                "messages": [{"role": "user", "content": full_prompt}]
-            },
-            timeout=120
-        )
+        img_response = None
+        download_headers = {"User-Agent": "Mozilla/5.0 (compatible; Sugarclass/1.0)"}
+        for attempt in range(2):
+            try:
+                img_response = http_requests.get(image_url, timeout=15, headers=download_headers)
+                if img_response.status_code == 200:
+                    break
+            except Exception:
+                pass
+            import time
+            time.sleep(2)
 
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Image API returned status {response.status_code}: {response.text[:200]}"
-            )
+        if img_response and img_response.status_code == 200:
+            gen_images_dir = BASE_DIR / "generated_images"
+            gen_images_dir.mkdir(parents=True, exist_ok=True)
 
-        result = response.json()
-        content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+            filename = f"content_{uuid.uuid4().hex[:12]}.jpg"
+            img_path = gen_images_dir / filename
 
-        # Extract image URL from markdown format: ![...](https://...)
-        match = re.search(r'!\[.*?\]\((https://[^)]+)\)', content)
-        if not match:
-            raise HTTPException(
-                status_code=502,
-                detail="Image generation did not return an image URL"
-            )
+            img = Image.open(BytesIO(img_response.content))
+            if img.mode in ('RGBA', 'LA'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[-1])
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
 
-        image_url = match.group(1)
+            img.save(img_path, 'JPEG', quality=90)
+            served_url = f"/generated_images/{filename}"
+    except Exception:
+        pass  # Fallback to remote URL
 
-        # Try downloading and saving locally; fall back to external URL if container can't reach proxy
-        served_url = image_url  # fallback: use external URL directly
-        filename = None
+    return {
+        "success": True,
+        "image_url": served_url,
+        "filename": filename or image_url.split("/")[-1],
+        "prompt": prompt
+    }
 
+def _generate_images_for_content(html_content: str, subtopic_id: str, conn, add_log):
+    """Parses HTML for headings and inserts generated images after them."""
+    import re
+    
+    # 1. Find all headings (h1, h2, h3)
+    headings = re.findall(r'<(h[1-3])[^>]*>(.*?)</\1>', html_content, re.IGNORECASE | re.DOTALL)
+    if not headings:
+        add_log("No headings found in content, skipping image generation.")
+        return html_content
+
+    new_html = html_content
+    # To keep things efficient and not overload the API/slow down too much, 
+    # we'll limit to first 3 headings
+    headings_to_process = headings[:3]
+    add_log(f"Found {len(headings)} headings, processing first {len(headings_to_process)} for images...")
+
+    for tag, content in headings_to_process:
+        # Clean heading content (strip HTML tags if any)
+        clean_heading = re.sub(r'<[^>]+>', '', content).strip()
+        if len(clean_heading) < 5:
+            continue
+            
         try:
-            img_response = None
-            download_headers = {"User-Agent": "Mozilla/5.0 (compatible; Sugarclass/1.0)"}
-            for attempt in range(2):
-                try:
-                    img_response = http_requests.get(image_url, timeout=15, headers=download_headers)
-                    if img_response.status_code == 200:
-                        break
-                except Exception:
-                    pass
-                import time
-                time.sleep(2)
+            add_log(f"Generating image for heading: '{clean_heading}'...")
+            res = _generate_single_image_internal(clean_heading)
+            
+            if res["success"]:
+                img_url = res["image_url"]
+                # Determine base URL for image
+                # In background task we use relative if possible, but for the saved HTML 
+                # we usually want it to be served relative
+                image_html = f'<figure style="text-align:center;margin:20px 0;"><img src="{img_url}" alt="{clean_heading}" style="max-width:100%;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);"/><figcaption style="margin-top:8px;font-size:0.85rem;color:#64748b;font-style:italic;">{clean_heading}</figcaption></figure>'
+                
+                # Insert after the heading
+                # We search for the specific heading tag + content to ensure we insert in the right place
+                pattern = re.escape(f'<{tag}') + r'[^>]*>' + re.escape(content) + re.escape(f'</{tag}>')
+                # Replace only the first occurrence to avoid duplicates if headings are identical
+                new_html = re.sub(pattern, f'<{tag}>{content}</{tag}>\n{image_html}', new_html, count=1, flags=re.IGNORECASE | re.DOTALL)
+                add_log(f"✅ Image generated and inserted for section: {clean_heading}")
+        except Exception as e:
+            add_log(f"⚠️ Failed to generate image for '{clean_heading}': {str(e)}")
 
-            if img_response and img_response.status_code == 200:
-                gen_images_dir = BASE_DIR / "generated_images"
-                gen_images_dir.mkdir(parents=True, exist_ok=True)
+    # Update database with the new HTML containing images
+    if new_html != html_content:
+        add_log("Updating database with content containing images...")
+        conn.execute("UPDATE content_processed SET html_content = ? WHERE subtopic_id = ?", (new_html, subtopic_id))
+        conn.commit()
+    
+    return new_html
 
-                filename = f"content_{uuid.uuid4().hex[:12]}.jpg"
-                img_path = gen_images_dir / filename
-
-                img = Image.open(BytesIO(img_response.content))
-                if img.mode in ('RGBA', 'LA'):
-                    background = Image.new('RGB', img.size, (255, 255, 255))
-                    background.paste(img, mask=img.split()[-1])
-                    img = background
-                elif img.mode != 'RGB':
-                    img = img.convert('RGB')
-
-                img.save(img_path, 'JPEG', quality=90)
-                served_url = f"/generated_images/{filename}"
-        except Exception:
-            pass  # Download failed — we'll use the external URL
-
-        return {
-            "success": True,
-            "image_url": served_url,
-            "filename": filename or image_url.split("/")[-1],
-            "prompt": request.prompt
-        }
-
-    except HTTPException:
-        raise
+@router.post("/generate-content-image", response_model=Dict[str, Any])
+async def generate_content_image(request: ContentImageRequest):
+    """Generate an image using grok-image-1.0 and return its URL."""
+    try:
+        res = _generate_single_image_internal(request.prompt)
+        return res
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Image generation failed: {str(e)}")
+        if "not configured" in str(e):
+            raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e))
 
 # ============================================================================
 # Content CRUD Operations
@@ -827,6 +873,8 @@ class ContentRegenerateRequest(BaseModel):
     include_key_terms: bool = True
     include_summary: bool = True
     include_think_about_it: bool = True
+    generate_images: bool = False
+    generate_videos: bool = False  # placeholder for future
 
 class ChunkRegenerateRequest(BaseModel):
     """Request model for regenerating a specific chunk."""
@@ -1177,7 +1225,8 @@ def run_content_regenerate_task(
     temperature: float,
     include_key_terms: bool,
     include_summary: bool,
-    include_think_about_it: bool
+    include_think_about_it: bool,
+    generate_images: bool = False
 ):
     """Background task for content regeneration with options."""
     from .main import DB_PATH, get_db_connection
@@ -1317,6 +1366,15 @@ Original HTML content:
 
                 conn.commit()
                 add_log("Content regeneration completed successfully!")
+
+                # --- Generate images for headings if requested ---
+                if generate_images:
+                    add_log("Generating images for content sections...")
+                    try:
+                        _generate_images_for_content(enhanced_html, subtopic_id, conn, add_log)
+                    except Exception as img_err:
+                        add_log(f"Image generation had errors (content still saved): {str(img_err)}")
+
                 tasks[task_id]["status"] = "completed"
                 tasks[task_id]["message"] = "Content regenerated successfully"
             else:
@@ -1354,7 +1412,8 @@ async def regenerate_content(
         request.temperature or 0.7,
         request.include_key_terms,
         request.include_summary,
-        request.include_think_about_it
+        request.include_think_about_it,
+        request.generate_images
     )
 
     return {"task_id": task_id, "status": "pending", "message": "Content regeneration started"}
