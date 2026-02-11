@@ -36,7 +36,7 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
         // Changed: Get topics (chapters) instead of all subtopics
         const res = await axios.get(`/api/db/subjects/${subjectId}/topics`);
         const topicList = res.data || [];
-        
+
         // Convert topics to chapter format
         const chapters = topicList.map((t, index) => ({
           id: t.id,
@@ -46,7 +46,7 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
           subtopic_count: t.subtopic_count || 0,
           processed_count: t.processed_count || 0,
         })).sort((a, b) => (a.chapter_num || 0) - (b.chapter_num || 0));
-        
+
         setChapters(chapters);
 
         if (!selectedChapter && chapters.length > 0) {

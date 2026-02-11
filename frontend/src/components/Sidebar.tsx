@@ -16,8 +16,10 @@ import {
     Menu,
     X,
     Library,
-    ShieldCheck
+    ShieldCheck,
+    Loader2
 } from "lucide-react";
+import { auth } from "@/lib/api";
 import styles from "./Sidebar.module.css";
 
 const Sidebar = () => {
@@ -25,6 +27,20 @@ const Sidebar = () => {
     const router = useRouter();
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    useEffect(() => {
+        const checkAdminStatus = async () => {
+            try {
+                const user = await auth.me();
+                setIsAdmin(user.is_superuser);
+            } catch (err) {
+                console.error("Failed to fetch user status in sidebar", err);
+                setIsAdmin(false);
+            }
+        };
+        checkAdminStatus();
+    }, []);
 
     const menuItems = [
         { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -33,8 +49,8 @@ const Sidebar = () => {
         { name: "AI Examiner", icon: FileSearch, path: "/services/examiner" },
         { name: "AI Materials", icon: Library, path: "/services/materials" },
         { name: "Settings", icon: Settings, path: "/settings" },
-        { name: "Admin", icon: ShieldCheck, path: "/admin" },
-    ];
+        { name: "Command Center", icon: ShieldCheck, path: "/admin", adminOnly: true },
+    ].filter(item => !item.adminOnly || isAdmin);
 
     const handleLogout = () => {
         localStorage.removeItem("token");

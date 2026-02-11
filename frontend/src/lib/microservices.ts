@@ -9,11 +9,15 @@ export const SERVICE_URLS = {
 
 export async function serviceFetch(service: keyof typeof SERVICE_URLS, endpoint: string, options: RequestInit = {}) {
     const baseUrl = SERVICE_URLS[service];
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
     // For file uploads, don't set Content-Type header manually
     const headers: Record<string, string> = {};
     if (!(options.body instanceof FormData)) {
         headers['Content-Type'] = 'application/json';
+    }
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
 
     const response = await fetch(`${baseUrl}${endpoint}`, {

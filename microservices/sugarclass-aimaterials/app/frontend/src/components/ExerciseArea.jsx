@@ -40,16 +40,16 @@ function ExerciseArea({ exercise, index, total }) {
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Box display="flex" gap={1} alignItems="center">
-            <Chip label={`Exercise ${index + 1}`} color="secondary" size="small" />
-            <Typography variant="caption" color="text.secondary">
-                {exerciseId}
-            </Typography>
+          <Chip label={`Exercise ${index + 1}`} color="secondary" size="small" />
+          <Typography variant="caption" color="text.secondary">
+            {exerciseId}
+          </Typography>
         </Box>
-        <Chip 
-            label={isGeneratedExercise ? "AI Generated" : "Textbook"} 
-            size="small" 
-            variant="outlined"
-            sx={{ borderColor: '#8b5cf6', color: '#8b5cf6' }}
+        <Chip
+          label={isGeneratedExercise ? "AI Generated" : "Textbook"}
+          size="small"
+          variant="outlined"
+          sx={{ borderColor: '#8b5cf6', color: '#8b5cf6' }}
         />
       </Box>
 
@@ -61,10 +61,10 @@ function ExerciseArea({ exercise, index, total }) {
       {/* Exercise Image */}
       {imagePath && (
         <Box sx={{ mb: 3, p: 2, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: '#f8fafc', display: 'inline-block' }}>
-          <img 
-            src={`/exercise_images/${imagePath}`} 
-            alt="Exercise diagram" 
-            style={{ maxHeight: 250, maxWidth: '100%', borderRadius: 4 }} 
+          <img
+            src={`/exercise_images/${imagePath}`}
+            alt="Exercise diagram"
+            style={{ maxHeight: 250, maxWidth: '100%', borderRadius: 4 }}
           />
         </Box>
       )}
@@ -73,15 +73,15 @@ function ExerciseArea({ exercise, index, total }) {
       {isGeneratedExercise && options && (Array.isArray(options) ? options.length > 0 : Object.keys(options).length > 0) && (
         <Box sx={{ display: 'grid', gridTemplateColumns: { md: '1fr 1fr', xs: '1fr' }, gap: 2, mb: 4 }}>
           {/* Handle both array format [{text, is_correct}] and object format {A: text, B: text} */}
-          {(Array.isArray(options) 
+          {(Array.isArray(options)
             ? options.map((opt, idx) => ({ letter: String.fromCharCode(65 + idx), text: opt.text || opt, isCorrectOption: opt.is_correct }))
             : Object.entries(options).map(([letter, text]) => ({ letter, text, isCorrectOption: letter === correctAnswer }))
           ).map(({ letter, text, isCorrectOption }) => {
             const isSelected = selectedAnswer === letter;
-            
+
             let borderColor = 'divider';
             let bgcolor = 'white';
-            
+
             if (showAnswer) {
               if (isCorrectOption) {
                 borderColor = '#22c55e';
@@ -94,35 +94,35 @@ function ExerciseArea({ exercise, index, total }) {
               borderColor = '#8b5cf6';
               bgcolor = '#faf5ff';
             }
-            
+
             return (
-              <Box 
+              <Box
                 key={letter}
                 onClick={() => handleOptionClick(letter)}
-                sx={{ 
-                  p: 2, 
-                  border: 2, 
+                sx={{
+                  p: 2,
+                  border: 2,
                   borderColor,
                   bgcolor,
-                  borderRadius: 1, 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                  borderRadius: 1,
+                  display: 'flex',
+                  alignItems: 'center',
                   gap: 2,
                   cursor: showAnswer ? 'default' : 'pointer',
                   transition: 'all 0.2s',
                   '&:hover': showAnswer ? {} : { bgcolor: '#faf5ff', borderColor: '#8b5cf6' }
                 }}
               >
-                <Box sx={{ 
-                  width: 28, 
-                  height: 28, 
-                  borderRadius: '50%', 
-                  bgcolor: isSelected ? '#8b5cf6' : '#e2e8f0', 
+                <Box sx={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  bgcolor: isSelected ? '#8b5cf6' : '#e2e8f0',
                   color: isSelected ? 'white' : '#64748b',
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  fontSize: '0.85rem', 
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.85rem',
                   fontWeight: 'bold',
                   flexShrink: 0
                 }}>
@@ -146,8 +146,8 @@ function ExerciseArea({ exercise, index, total }) {
         {isGeneratedExercise ? (
           <>
             {!showAnswer && selectedAnswer && (
-              <Button 
-                startIcon={<CheckCircle />} 
+              <Button
+                startIcon={<CheckCircle />}
                 onClick={handleCheckAnswer}
                 color="primary"
                 variant="contained"
@@ -163,8 +163,8 @@ function ExerciseArea({ exercise, index, total }) {
             )}
           </>
         ) : (
-          <Button 
-            startIcon={<Visibility />} 
+          <Button
+            startIcon={<Visibility />}
             onClick={() => setShowAnswer(!showAnswer)}
             sx={{ textTransform: 'none' }}
             variant="outlined"
@@ -176,28 +176,28 @@ function ExerciseArea({ exercise, index, total }) {
 
       {/* Answer Explanation */}
       <Collapse in={showAnswer} sx={{ mt: 2 }}>
-        <Alert 
-          severity={isCorrect ? "success" : "error"} 
-          icon={false} 
-          sx={{ 
-            border: 1, 
-            borderColor: isCorrect ? 'success.light' : 'error.light', 
-            bgcolor: isCorrect ? '#f0fdf4' : '#fef2f2' 
+        <Alert
+          severity={isCorrect ? "success" : "error"}
+          icon={false}
+          sx={{
+            border: 1,
+            borderColor: isCorrect ? 'success.light' : 'error.light',
+            bgcolor: isCorrect ? '#f0fdf4' : '#fef2f2'
           }}
         >
           <Box display="flex" gap={2}>
-            <Box sx={{ 
-              width: 40, 
-              height: 40, 
-              borderRadius: '50%', 
-              bgcolor: isCorrect ? 'success.main' : 'error.main', 
-              color: 'white', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              fontWeight: 'bold', 
-              fontSize: '1.2rem', 
-              flexShrink: 0 
+            <Box sx={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              bgcolor: isCorrect ? 'success.main' : 'error.main',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              fontSize: '1.2rem',
+              flexShrink: 0
             }}>
               {correctAnswer}
             </Box>

@@ -1,0 +1,121 @@
+.card {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 24px;
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--card-border);
+    transition: var(--transition-smooth);
+    text-decoration: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.card:hover:not(.disabled) {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--accent-light);
+    background: white;
+}
+
+.iconWrapper {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: var(--primary-light);
+    color: var(--primary);
+    transition: var(--transition-smooth);
+}
+
+.card:hover .iconWrapper {
+    transform: scale(1.1);
+}
+
+.content {
+    flex: 1;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.title {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--primary);
+    letter-spacing: -0.02em;
+}
+
+.description {
+    font-size: 0.9rem;
+    color: #64748b;
+    line-height: 1.4;
+    font-weight: 500;
+}
+
+.badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 100px;
+    background: #f1f5f9;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.arrow {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: all 0.3s ease;
+}
+
+.card:hover .arrow {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
+/* Variants */
+.admin {
+    border-left: 4px solid #927559;
+}
+
+.admin .iconWrapper {
+    background: #92755915;
+    color: #927559;
+}
+
+.primary .iconWrapper {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+
+.secondary .iconWrapper {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.accent .iconWrapper {
+    background: #dcfce7;
+    color: #16a34a;
+}

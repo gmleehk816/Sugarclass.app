@@ -72,8 +72,7 @@ services:
     volumes:
       - aiwriter_db_data:/var/lib/postgresql/data
       - ./microservices/sugarclass-aiwriter/scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
-    ports:
-      - "5602:5432" # Avoid Windows reserved port range
+    # Internal service - No ports exposed to host for security
     networks:
       - sugarclass-network
     healthcheck:
@@ -211,8 +210,7 @@ services:
       - tutor_content_db_data:/var/lib/postgresql/data
       - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/001_content_schema.sql:/docker-entrypoint-initdb.d/001_content_schema.sql:ro
       - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/003_sync_tracking.sql:/docker-entrypoint-initdb.d/003_sync_tracking.sql:ro
-    ports:
-      - "5600:5432" # Avoid Windows reserved port range (5434-5533)
+    # Internal service - No ports exposed to host
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${TUTOR_CONTENT_DB_USER:-tutor} -d ${TUTOR_CONTENT_DB_NAME:-tutor_content}" ]
       interval: 10s
@@ -232,8 +230,7 @@ services:
     volumes:
       - tutor_agent_db_data:/var/lib/postgresql/data
       - ./microservices/sugarclass-aitutor/services/rag_service/database/migrations/002_agent_schema.sql:/docker-entrypoint-initdb.d/001_agent_schema.sql:ro
-    ports:
-      - "5601:5432" # Avoid Windows reserved port range (5434-5533)
+    # Internal service - No ports exposed to host
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${TUTOR_AGENT_DB_USER:-tutor} -d ${TUTOR_AGENT_DB_NAME:-tutor_agent}" ]
       interval: 10s
@@ -246,9 +243,7 @@ services:
   tutor-qdrant:
     image: qdrant/qdrant:latest
     container_name: tutor-qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
+    # Internal service - No ports exposed to host
     volumes:
       - tutor_qdrant_data:/qdrant/storage
     environment:
@@ -265,8 +260,7 @@ services:
   tutor-redis:
     image: redis:7-alpine
     container_name: tutor-redis
-    ports:
-      - "6379:6379"
+    # Internal service - No ports exposed to host
     volumes:
       - tutor_redis_data:/data
     command: redis-server --appendonly yes
@@ -390,6 +384,7 @@ services:
     environment:
       - DB_PATH=/app/database/rag_content.db
       - SUGARCLASS_API_URL=http://backend:8000/api/v1
+      - SECRET_KEY=${SECRET_KEY:-sugarclass-dev-secret-key-change-in-prod}
     ports:
       - "8004:8004"
     volumes:

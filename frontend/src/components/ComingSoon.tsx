@@ -52,7 +52,7 @@ const ComingSoon: React.FC<ComingSoonProps> = ({ title, description }) => {
                     fontSize: '0.9rem',
                     color: '#475569'
                 }}>
-                    <ArrowLeft size={18} /> Back to Dashboard
+                    <ArrowLeft size={18} /> Back to Admin Panel
                 </Link>
                 <div style={{
                     display: 'flex',

@@ -1,7 +1,7 @@
 """
 Exercise CRUD API endpoints
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel
 import sqlite3
 import os
@@ -15,8 +15,13 @@ import json
 import re
 
 from .exercise_builder import build_exercises_for_subtopic
+from .deps import get_current_admin
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/api/admin",
+    tags=["admin"],
+    dependencies=[Depends(get_current_admin)],
+)
 
 # Paths
 BASE_DIR = Path(__file__).parent
