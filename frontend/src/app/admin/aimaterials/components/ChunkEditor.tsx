@@ -184,9 +184,12 @@ const ChunkEditor: React.FC<ChunkEditorProps> = ({ content, onClose, onSave }) =
                 body: JSON.stringify({ prompt: imagePrompt }),
             });
             if (result.success && result.image_url) {
-                const baseUrl = typeof window !== 'undefined' && !window.location.hostname.includes('localhost')
-                    ? '/services/aimaterials' : 'http://localhost:8004';
-                const finalUrl = `${baseUrl}${result.image_url}`;
+                let finalUrl = result.image_url;
+                if (!finalUrl.startsWith('http')) {
+                    const baseUrl = typeof window !== 'undefined' && !window.location.hostname.includes('localhost')
+                        ? '/services/aimaterials' : 'http://localhost:8004';
+                    finalUrl = `${baseUrl}${result.image_url}`;
+                }
                 const imgHtml = `<figure style="text-align:center;margin:20px 0;"><img src="${finalUrl}" alt="${imagePrompt}" style="max-width:100%;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);"/><figcaption style="margin-top:8px;font-size:0.85rem;color:#64748b;font-style:italic;">${imagePrompt}</figcaption></figure>`;
                 addChunkAt('image', insertAfterChunkId, imgHtml);
                 setShowImageModal(false);
