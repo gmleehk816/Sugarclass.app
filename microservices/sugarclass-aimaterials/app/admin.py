@@ -761,50 +761,47 @@ async def generate_content_image(request: ContentImageRequest):
 
         image_url = match.group(1)
 
-        # Download the image (with retries — the proxy can return 5xx intermittently)
-        img_response = None
-        download_headers = {"User-Agent": "Mozilla/5.0 (compatible; Sugarclass/1.0)"}
-        for attempt in range(3):
-            try:
-                img_response = http_requests.get(image_url, timeout=30, headers=download_headers)
-                if img_response.status_code == 200:
-                    break
-            except Exception:
-                pass
-            import time
-            time.sleep(2 * (attempt + 1))  # 2s, 4s, 6s backoff
+        # Try downloading and saving locally; fall back to external URL if container can't reach proxy
+        served_url = image_url  # fallback: use external URL directly
+        filename = None
 
-        if not img_response or img_response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Failed to download generated image (status: {img_response.status_code if img_response else 'no response'}). The image was generated but the download proxy is unavailable. URL: {image_url}"
-            )
+        try:
+            img_response = None
+            download_headers = {"User-Agent": "Mozilla/5.0 (compatible; Sugarclass/1.0)"}
+            for attempt in range(2):
+                try:
+                    img_response = http_requests.get(image_url, timeout=15, headers=download_headers)
+                    if img_response.status_code == 200:
+                        break
+                except Exception:
+                    pass
+                import time
+                time.sleep(2)
 
-        # Save to generated_images directory
-        gen_images_dir = BASE_DIR / "generated_images"
-        gen_images_dir.mkdir(parents=True, exist_ok=True)
+            if img_response and img_response.status_code == 200:
+                gen_images_dir = BASE_DIR / "generated_images"
+                gen_images_dir.mkdir(parents=True, exist_ok=True)
 
-        filename = f"content_{uuid.uuid4().hex[:12]}.jpg"
-        img_path = gen_images_dir / filename
+                filename = f"content_{uuid.uuid4().hex[:12]}.jpg"
+                img_path = gen_images_dir / filename
 
-        img = Image.open(BytesIO(img_response.content))
-        if img.mode in ('RGBA', 'LA'):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            background.paste(img, mask=img.split()[-1])
-            img = background
-        elif img.mode != 'RGB':
-            img = img.convert('RGB')
+                img = Image.open(BytesIO(img_response.content))
+                if img.mode in ('RGBA', 'LA'):
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[-1])
+                    img = background
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
 
-        img.save(img_path, 'JPEG', quality=90)
-
-        # Return the relative URL that FastAPI serves via static mounting
-        # generated_images/ is mounted at /generated_images/ in main.py
-        served_url = f"/generated_images/{filename}"
+                img.save(img_path, 'JPEG', quality=90)
+                served_url = f"/generated_images/{filename}"
+        except Exception:
+            pass  # Download failed — we'll use the external URL
 
         return {
             "success": True,
             "image_url": served_url,
-            "filename": filename,
+            "filename": filename or image_url.split("/")[-1],
             "prompt": request.prompt
         }
 
