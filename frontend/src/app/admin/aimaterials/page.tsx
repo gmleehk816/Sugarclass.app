@@ -63,6 +63,14 @@ import {
     MousePointer2,
     Sparkles
 } from "lucide-react";
+import { SERVICE_URLS } from '@/lib/microservices';
+
+const prefixImageUrls = (html: string) => {
+    if (!html) return '';
+    return html
+        .replace(/src="\/generated_images\//g, `src="${SERVICE_URLS.aimaterials}/generated_images/`)
+        .replace(/src="\/exercise_images\//g, `src="${SERVICE_URLS.aimaterials}/exercise_images/`);
+};
 
 const inputStyle = {
     width: '100%',
@@ -643,7 +651,7 @@ const ContentRegenerateModal = ({
             }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
-                        Regenerate Content
+                        Regenerate Content v2
                     </h2>
                     <button
                         onClick={onClose}
@@ -657,7 +665,7 @@ const ContentRegenerateModal = ({
                             padding: '4px'
                         }}
                     >
-                        Ã—
+                        x
                     </button>
                 </div>
 
@@ -681,6 +689,33 @@ const ContentRegenerateModal = ({
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                             ))}
                         </select>
+                    </div>
+
+                    {/* Media Generation */}
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '12px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Media Generation
+                        </label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={options.generate_images}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, generate_images: e.target.checked })}
+                                    disabled={regenerating}
+                                />
+                                <span style={{ fontSize: '0.9rem' }}>🖼️ Generate Images for Topics</span>
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'not-allowed', opacity: 0.5 }}>
+                                <input
+                                    type="checkbox"
+                                    checked={options.generate_videos}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, generate_videos: e.target.checked })}
+                                    disabled={true}
+                                />
+                                <span style={{ fontSize: '0.9rem' }}>🎬 Generate Videos <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>(coming soon)</span></span>
+                            </label>
+                        </div>
                     </div>
 
                     {/* Creativity Level */}
@@ -737,33 +772,6 @@ const ContentRegenerateModal = ({
                                     disabled={regenerating}
                                 />
                                 <span style={{ fontSize: '0.9rem' }}>Think About It Questions</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    {/* Media Generation */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '12px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            Media Generation
-                        </label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={options.generate_images}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, generate_images: e.target.checked })}
-                                    disabled={regenerating}
-                                />
-                                <span style={{ fontSize: '0.9rem' }}>🖼️ Generate Images for Topics</span>
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'not-allowed', opacity: 0.5 }}>
-                                <input
-                                    type="checkbox"
-                                    checked={options.generate_videos}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, generate_videos: e.target.checked })}
-                                    disabled={true}
-                                />
-                                <span style={{ fontSize: '0.9rem' }}>🎬 Generate Videos <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>(coming soon)</span></span>
                             </label>
                         </div>
                     </div>
@@ -1112,7 +1120,7 @@ const ContentBrowser = ({
                             overflowX: 'hidden'
                         }}>
                             <div
-                                dangerouslySetInnerHTML={{ __html: selectedContent.html_content }}
+                                dangerouslySetInnerHTML={{ __html: prefixImageUrls(selectedContent.html_content) }}
                                 className="content-html-scope"
                             />
                         </div>
@@ -1142,7 +1150,7 @@ const ContentBrowser = ({
                                 <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginTop: 0, marginBottom: '8px' }}>Key Terms</h4>
                                 <div
                                     className="content-html-scope"
-                                    dangerouslySetInnerHTML={{ __html: selectedContent.key_terms }}
+                                    dangerouslySetInnerHTML={{ __html: prefixImageUrls(selectedContent.key_terms) }}
                                 />
                             </div>
                         )}
@@ -1604,7 +1612,9 @@ const AIMaterialsAdmin = () => {
                 temperature: 0.7,
                 include_key_terms: true,
                 include_summary: true,
-                include_think_about_it: true
+                include_think_about_it: true,
+                generate_images: false,
+                generate_videos: false
             };
 
             const result = await serviceFetch('aimaterials', `/api/admin/contents/regenerate?subtopic_id=${subtopicId}`, {

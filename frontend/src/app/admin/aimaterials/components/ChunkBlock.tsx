@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { ArrowUp, ArrowDown, Trash, RefreshCw, Eye, Edit2, Loader2 } from 'lucide-react';
 import type { ContentChunk } from '../lib/chunkParser';
+import { SERVICE_URLS } from '@/lib/microservices';
 
 // ===========================================================================
 // ChunkBlock — Controlled editing for a single content chunk
@@ -58,6 +59,11 @@ const ChunkBlock: React.FC<ChunkBlockProps> = ({
     React.useEffect(() => {
         setLocalContent(chunk.content);
     }, [chunk.content]);
+
+    // Fix relative image paths to point to the microservice host
+    const processedContent = chunk.content
+        .replace(/src="\/generated_images\//g, `src="${SERVICE_URLS.aimaterials}/generated_images/`)
+        .replace(/src="\/exercise_images\//g, `src="${SERVICE_URLS.aimaterials}/exercise_images/`);
 
     return (
         <div style={{
@@ -155,7 +161,7 @@ const ChunkBlock: React.FC<ChunkBlockProps> = ({
                 </div>
             ) : (
                 <div
-                    dangerouslySetInnerHTML={{ __html: chunk.content }}
+                    dangerouslySetInnerHTML={{ __html: processedContent }}
                     style={{
                         padding: '20px 24px', minHeight: '40px',
                         fontSize: chunk.type === 'heading' ? '1.3rem' : '1rem',
