@@ -263,4 +263,27 @@
     .sidebarColumn {
         position: static;
     }
+
+    .insightsGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 0 4px;
+        gap: 24px;
+    }
+
+    .insightsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .sectionHeader h2 {
+        font-size: 1.2rem;
+    }
+
+    .extraWidgets {
+        flex-direction: column;
+    }
 }

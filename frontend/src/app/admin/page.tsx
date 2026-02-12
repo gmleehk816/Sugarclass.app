@@ -44,12 +44,8 @@ export default function AdminDashboard() {
                 </div>
                 <div style={{ display: 'flex', gap: '24px' }}>
                     <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.8, margin: 0 }}>Active Users</p>
-                        <p style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0 }}>128</p>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: '0.8rem', opacity: 0.8, margin: 0 }}>API Requests (1h)</p>
-                        <p style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0 }}>4.2k</p>
+                        <p style={{ fontSize: '0.8rem', opacity: 0.8, margin: 0 }}>Role</p>
+                        <p style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0 }}>System Admin</p>
                     </div>
                 </div>
             </div>

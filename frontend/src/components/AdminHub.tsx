@@ -11,8 +11,23 @@ import {
 } from 'lucide-react';
 import ShortcutCard from './ShortcutCard';
 import styles from './AdminHub.module.css';
+import { serviceFetch } from '@/lib/microservices';
 
 const AdminHub: React.FC = () => {
+    const [stats, setStats] = React.useState<any>(null);
+
+    React.useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const data = await serviceFetch('aimaterials', '/api/db/stats');
+                setStats(data);
+            } catch (err) {
+                console.error('Error fetching stats:', err);
+            }
+        };
+        fetchStats();
+    }, []);
+
     return (
         <section className={styles.adminSection}>
             <div className={styles.sectionHeader}>
@@ -60,22 +75,22 @@ const AdminHub: React.FC = () => {
                 <div className={styles.infoCard}>
                     <Zap size={18} className={styles.infoIcon} />
                     <div className={styles.infoText}>
-                        <span className={styles.infoLabel}>System Uptime</span>
-                        <span className={styles.infoValue}>99.99%</span>
+                        <span className={styles.infoLabel}>System Status</span>
+                        <span className={styles.infoValue} style={{ color: '#10b981' }}>Healthy</span>
                     </div>
                 </div>
                 <div className={styles.infoCard}>
                     <Database size={18} className={styles.infoIcon} />
                     <div className={styles.infoText}>
                         <span className={styles.infoLabel}>Subjects Ingested</span>
-                        <span className={styles.infoValue}>13 Active</span>
+                        <span className={styles.infoValue}>{stats ? stats.subjects : '...'} Active</span>
                     </div>
                 </div>
                 <div className={styles.infoCard}>
                     <FileText size={18} className={styles.infoIcon} />
                     <div className={styles.infoText}>
-                        <span className={styles.infoLabel}>Pending Requests</span>
-                        <span className={styles.infoValue}>0</span>
+                        <span className={styles.infoLabel}>Total Content</span>
+                        <span className={styles.infoValue}>{stats ? stats.content_processed : '...'}</span>
                     </div>
                 </div>
             </div>

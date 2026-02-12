@@ -26,6 +26,7 @@ function App() {
   const [contentMode, setContentMode] = useState('rewrite');   // rewrite (default) | raw
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Loading & navigation mode
   const [loading, setLoading] = useState(true);
@@ -222,7 +223,12 @@ function App() {
   /* -------------------------------------------------------------------------
      INITIAL LOAD
   ------------------------------------------------------------------------- */
-  useEffect(() => { setLoading(false); }, []);
+  useEffect(() => {
+    setLoading(false);
+    const handleToggle = () => setMobileSidebarOpen(true);
+    window.addEventListener('toggle-sidebar', handleToggle);
+    return () => window.removeEventListener('toggle-sidebar', handleToggle);
+  }, []);
 
   /* -------------------------------------------------------------------------
      RENDER
@@ -238,12 +244,23 @@ function App() {
 
   return (
     <div className="materials-root">
+      {/* MOBILE OVERLAY */}
+      {mobileSidebarOpen && (
+        <div
+          className="materials-mobile-overlay"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* LEFT SIDEBAR */}
-      <div className="materials-sidebar materials-sidebar-left">
+      <div className={`materials-sidebar materials-sidebar-left ${mobileSidebarOpen ? 'mobile-open' : ''}`}>
         {useChapterNavigation ? (
           <ChapterSidebar
             selectedChapter={selectedChapter}
-            onSelectChapter={handleChapterSelect}
+            onSelectChapter={(chapter) => {
+              handleChapterSelect(chapter);
+              setMobileSidebarOpen(false);
+            }}
             viewMode={viewMode}
             onModeChange={setViewMode}
             onSubjectChange={handleSubjectChange}
@@ -252,7 +269,10 @@ function App() {
           <MainSidebar
             topics={topics}
             selectedTopic={selectedTopic}
-            onSelectTopic={handleTopicSelect}
+            onSelectTopic={(topic) => {
+              handleTopicSelect(topic);
+              setMobileSidebarOpen(false);
+            }}
             viewMode={viewMode}
             onModeChange={setViewMode}
             onSubjectChange={handleSubjectChange}
@@ -261,28 +281,26 @@ function App() {
       </div>
 
       {/* MIDDLE CONTENT */}
-      <div className="materials-main">
-        <MiddleArea
-          viewMode={viewMode}
-          selectedTopic={selectedTopic}
+      <MiddleArea
+        viewMode={viewMode}
+        selectedTopic={selectedTopic}
 
-          /* content props */
-          selectedSubtopicId={selectedSubtopicId}
-          subjectId={selectedSubject}
-          contentMode={contentMode}
-          onContentModeChange={setContentMode}
+        /* content props */
+        selectedSubtopicId={selectedSubtopicId}
+        subjectId={selectedSubject}
+        contentMode={contentMode}
+        onContentModeChange={setContentMode}
 
-          /* exercise props */
-          exercises={exercises}
-          currentExerciseIndex={currentExerciseIndex}
-          onExerciseIndexChange={setCurrentExerciseIndex}
+        /* exercise props */
+        exercises={exercises}
+        currentExerciseIndex={currentExerciseIndex}
+        onExerciseIndexChange={setCurrentExerciseIndex}
 
-          /* QA props */
-          questions={questions}
-          currentQuestionIndex={currentQuestionIndex}
-          onQuestionIndexChange={setCurrentQuestionIndex}
-        />
-      </div>
+        /* QA props */
+        questions={questions}
+        currentQuestionIndex={currentQuestionIndex}
+        onQuestionIndexChange={setCurrentQuestionIndex}
+      />
 
       {/* RIGHT SIDEBAR */}
       <div className="materials-sidebar materials-sidebar-right">

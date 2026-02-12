@@ -7,7 +7,6 @@ function ContentArea({ subtopicId, subjectId, contentMode, onContentModeChange }
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [generatingRewrite, setGeneratingRewrite] = useState(false);
 
   // All subjects now support raw/rewrite tabs
   // The API returns both raw and rewritten content for any subject
@@ -40,23 +39,6 @@ function ContentArea({ subtopicId, subjectId, contentMode, onContentModeChange }
     }
   };
 
-  const handleGenerateRewrite = async () => {
-    if (!subtopicId) return;
-
-    setGeneratingRewrite(true);
-    try {
-      const response = await axios.post(`/api/rewrite/${subtopicId}`);
-      alert('Rewrite generated successfully!');
-      // Refetch content to show the rewrite
-      const rewriteResponse = await axios.get(`/api/content/${subtopicId}/with-rewrite`);
-      setContent(rewriteResponse.data);
-    } catch (err) {
-      console.error("Error generating rewrite:", err);
-      alert(err.response?.data?.error || 'Failed to generate rewrite. Check API key.');
-    } finally {
-      setGeneratingRewrite(false);
-    }
-  };
 
   const convertMathScriptToDelimiters = (html) => {
     if (!html) return html;
@@ -148,19 +130,6 @@ function ContentArea({ subtopicId, subjectId, contentMode, onContentModeChange }
             <Tab label="Raw Content" value="raw" />
             <Tab label="Rewritten" value="rewrite" disabled={!content.rewrite?.has_rewrite} />
           </Tabs>
-
-          {/* Generate Rewrite Button */}
-          {contentMode === 'rewrite' && !content.rewrite?.has_rewrite && (
-            <Tooltip title="Generate AI-Enhanced Version">
-              <IconButton
-                onClick={handleGenerateRewrite}
-                disabled={generatingRewrite}
-                sx={{ ml: 2, bgcolor: '#8b5cf6', color: 'white', '&:hover': { bgcolor: '#7c3aed' } }}
-              >
-                {generatingRewrite ? <CircularProgress size={24} sx={{ color: 'white' }} /> : <AutoFixHigh />}
-              </IconButton>
-            </Tooltip>
-          )}
         </Box>
       </Box>
 
@@ -246,16 +215,9 @@ function ContentArea({ subtopicId, subjectId, contentMode, onContentModeChange }
             <Typography variant="h6" sx={{ color: '#9ca3af', mb: 1 }}>
               No Rewritten Content Available
             </Typography>
-            <Typography variant="body2" sx={{ color: '#9ca3af', mb: 2 }}>
-              Generate an AI-enhanced version of this content for better learning experience
+            <Typography variant="body2" sx={{ color: '#9ca3af' }}>
+              Select "Raw Content" to view the original textbook material
             </Typography>
-            <IconButton
-              onClick={handleGenerateRewrite}
-              disabled={generatingRewrite}
-              sx={{ bgcolor: '#8b5cf6', color: 'white', '&:hover': { bgcolor: '#7c3aed' } }}
-            >
-              {generatingRewrite ? <CircularProgress size={24} sx={{ color: 'white' }} /> : <AutoFixHigh />}
-            </IconButton>
           </Box>
         )}
       </Paper>

@@ -16,7 +16,7 @@
 
 .collapsed {
     width: var(--sidebar-collapsed-width);
-    padding: 40px 16px;
+    padding: 40px 12px;
 }
 
 .hidden {
@@ -195,6 +195,11 @@
 
     .sidebar.collapsed {
         width: var(--sidebar-collapsed-width);
+    }
+
+    .navItem {
+        padding: 12px 14px;
+        margin: 0 6px;
     }
 }
 

@@ -96,13 +96,32 @@
     }
 }
 
+@media (max-width: 1024px) {
+    .shortcutGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 768px) {
     .adminSection {
         padding: 20px;
     }
 
+    .shortcutGrid {
+        grid-template-columns: 1fr;
+    }
+
     .quickInfoRow {
         flex-direction: column;
         gap: 16px;
+    }
+
+    .adminBadge {
+        display: none;
+        /* Hide badge on mobile to save space */
+    }
+
+    .sectionTitle {
+        font-size: 1.2rem;
     }
 }

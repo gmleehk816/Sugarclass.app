@@ -55,6 +55,21 @@ function MiddleArea({
   if (viewMode === 'content') {
     return (
       <div className="materials-main">
+        {/* Mobile Header Toggle */}
+        <div className="materials-mobile-header" style={{ display: 'flex' }}>
+          <button
+            className="materials-menu-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('toggle-sidebar'))}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+            <span>Menu</span>
+          </button>
+        </div>
+
         {/* Header */}
         <div className="content-header">
           <h1>{selectedTopic?.name || 'AI Materials'}</h1>
@@ -117,9 +132,26 @@ function MiddleArea({
      EXERCISE MODE
      ------------------------------------------------------------------------- */
   if (viewMode === 'exercise') {
+    const mobileHeader = (
+      <div className="materials-mobile-header" style={{ display: 'flex' }}>
+        <button
+          className="materials-menu-btn"
+          onClick={() => window.dispatchEvent(new CustomEvent('toggle-sidebar'))}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+          <span>Menu</span>
+        </button>
+      </div>
+    );
+
     if (!currentExercise) {
       return (
         <div className="materials-main">
+          {mobileHeader}
           <div className="content-header">
             <h1>Exercises</h1>
           </div>
@@ -139,6 +171,7 @@ function MiddleArea({
 
     return (
       <div className="materials-main">
+        {mobileHeader}
         <div className="content-header">
           <h1>Exercise {currentExerciseIndex + 1}</h1>
           <p>Question {currentExerciseIndex + 1} of {exercises.length}</p>
@@ -233,9 +266,26 @@ function MiddleArea({
      QA MODE
      ------------------------------------------------------------------------- */
   if (viewMode === 'qa') {
+    const mobileHeader = (
+      <div className="materials-mobile-header" style={{ display: 'flex' }}>
+        <button
+          className="materials-menu-btn"
+          onClick={() => window.dispatchEvent(new CustomEvent('toggle-sidebar'))}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+          <span>Menu</span>
+        </button>
+      </div>
+    );
+
     if (!currentQuestion) {
       return (
         <div className="materials-main">
+          {mobileHeader}
           <div className="content-header">
             <h1>Past Questions</h1>
           </div>
@@ -251,6 +301,7 @@ function MiddleArea({
 
     return (
       <div className="materials-main">
+        {mobileHeader}
         <div className="content-header">
           <h1>Past Question {currentQuestionIndex + 1}</h1>
           <p>Question {currentQuestionIndex + 1} of {questions.length}</p>

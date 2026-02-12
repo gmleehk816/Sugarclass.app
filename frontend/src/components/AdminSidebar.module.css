@@ -1,7 +1,8 @@
 .sidebar {
     width: var(--sidebar-width);
     height: 100vh;
-    background: #1e293b; /* Darker Slate for Admin */
+    background: #1e293b;
+    /* Darker Slate for Admin */
     color: white;
     display: flex;
     flex-direction: column;
@@ -191,11 +192,19 @@
 
 @media (max-width: 1024px) {
     .sidebar {
+        width: 260px;
         transform: translateX(-100%);
     }
 
-    .mobileOpen {
+    .collapsed {
+        width: var(--sidebar-collapsed-width);
         transform: translateX(0);
+        /* On iPad, show collapsed sidebar by default */
+    }
+
+    .mobileOpen {
+        transform: translateX(0) !important;
+        width: 280px;
     }
 
     .mobileHeader {
@@ -208,5 +217,25 @@
         background: rgba(0, 0, 0, 0.4);
         backdrop-filter: blur(4px);
         z-index: 99;
+    }
+
+    .nav {
+        padding: 20px 12px;
+    }
+
+    .navItem {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%) !important;
+        width: 280px;
+    }
+
+    .mobileOpen {
+        transform: translateX(0) !important;
     }
 }

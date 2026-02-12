@@ -872,7 +872,9 @@ const ContentBrowser = ({
     onRegenerate,
     onDelete,
     regeneratingContent,
-    onShowAdvancedOptions
+    onShowAdvancedOptions,
+    isMobile,
+    isTablet
 }: {
     subjects: any[];
     loadingSubjects: boolean;
@@ -888,6 +890,8 @@ const ContentBrowser = ({
     onDelete: (contentId: number) => void;
     regeneratingContent: Record<string, boolean>;
     onShowAdvancedOptions?: (subtopicId: string) => void;
+    isMobile: boolean;
+    isTablet: boolean;
 }) => {
     const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
     const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
@@ -953,9 +957,14 @@ const ContentBrowser = ({
     };
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr)', gap: '24px', minWidth: 0 }}>
+        <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : (isTablet ? '220px minmax(0, 1fr)' : '280px minmax(0, 1fr)'),
+            gap: '24px',
+            minWidth: 0
+        }}>
             {/* Left: Tree View */}
-            <div style={cardStyle}>
+            <div style={cardStyle(isMobile)}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Browse Content</h3>
                     <button
@@ -1055,7 +1064,7 @@ const ContentBrowser = ({
             </div>
 
             {/* Right: Content Display */}
-            <div style={{ ...cardStyle, minWidth: 0, overflow: 'hidden' }}>
+            <div style={{ ...cardStyle(isMobile), minWidth: 0, overflow: 'hidden' }}>
                 {selectedContent ? (
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -1301,7 +1310,18 @@ const AIMaterialsAdmin = () => {
     const [editingContent, setEditingContent] = useState<any | null>(null);
     const [showContentEditModal, setShowContentEditModal] = useState(false);
     const [showRegenerateModal, setShowRegenerateModal] = useState(false);
-    const [regeneratingContent, setRegeneratingContent] = useState<Record<string, boolean>>({});
+    const [regeneratingContent, setRegeneratingContent] = useState<{ [key: string]: boolean }>({});
+    const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+    const [prevTasks, setPrevTasks] = useState<Record<string, any>>({});
+
+    useEffect(() => {
+        const handleResize = () => setWindowWidth(window.innerWidth);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const isTablet = windowWidth <= 1024;
+    const isMobile = windowWidth <= 768;
     const [regenerateOptions, setRegenerateOptions] = useState({
         focus: '',
         temperature: 0.7,
@@ -1357,6 +1377,30 @@ const AIMaterialsAdmin = () => {
         const interval = setInterval(fetchTasks, 5000);
         return () => clearInterval(interval);
     }, []);
+
+    // Task Completion Auto-Refresh
+    useEffect(() => {
+        Object.entries(tasks).forEach(([id, currentTask]) => {
+            const prevTask = prevTasks[id];
+            // Check if task just finished (running -> completed/failed)
+            if (prevTask && prevTask.status === 'running' && (currentTask.status === 'completed' || currentTask.status === 'failed')) {
+                console.log(`Task ${id} finished with status: ${currentTask.status}, auto-refreshing data...`);
+
+                // Always refresh subjects/database tree as most tasks affect it
+                fetchSubjects();
+
+                // Refresh specific views based on active tab
+                if (activeTab === 'contents' && selectedContentSubtopicId) {
+                    fetchContents(selectedContentSubtopicId);
+                }
+                if (activeTab === 'exercises' && selectedSubtopicId) {
+                    fetchExercises(selectedSubtopicId);
+                }
+            }
+        });
+        // Update prevTasks for next comparison
+        setPrevTasks(tasks);
+    }, [tasks]);
 
     useEffect(() => {
         if (activeTab === 'database') {
@@ -1738,10 +1782,25 @@ const AIMaterialsAdmin = () => {
                 Back to Admin Dashboard
             </Link>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: '24px', alignItems: 'start' }}>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: isTablet ? '1fr' : 'minmax(0, 1fr) 300px',
+                gap: '24px',
+                alignItems: 'start'
+            }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', minWidth: 0 }}>
                     {/* Tab Navigation */}
-                    <div style={{ display: 'flex', gap: '8px', background: '#f1f5f9', padding: '6px', borderRadius: '12px', width: 'fit-content' }}>
+                    <div style={{
+                        display: 'flex',
+                        gap: '8px',
+                        background: '#f1f5f9',
+                        padding: '6px',
+                        borderRadius: '12px',
+                        width: isMobile ? '100%' : 'fit-content',
+                        overflowX: 'auto',
+                        whiteSpace: 'nowrap',
+                        WebkitOverflowScrolling: 'touch'
+                    }}>
                         <button
                             onClick={() => setActiveTab('uploader')}
                             style={{
@@ -1791,7 +1850,7 @@ const AIMaterialsAdmin = () => {
                     {activeTab === 'uploader' ? (
                         <>
                             {/* Upload & Ingest Section */}
-                            <div style={cardStyle}>
+                            <div style={cardStyle(isMobile)}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
                                     <div style={{ background: '#fef3c7', padding: '8px', borderRadius: '8px' }}>
                                         <Book size={20} color="#d97706" />
@@ -1801,7 +1860,12 @@ const AIMaterialsAdmin = () => {
 
                                 {!manualEntry ? (
                                     <div style={{ marginBottom: '24px' }}>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '12px' }}>
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: isMobile ? '1fr' : (isTablet ? '1fr 1fr' : '1fr 1fr 1fr'),
+                                            gap: '16px',
+                                            marginBottom: '12px'
+                                        }}>
                                             {/* Level dropdown */}
                                             <div style={inputGroupStyle}>
                                                 <label style={labelStyle}>Level</label>
@@ -1914,7 +1978,12 @@ const AIMaterialsAdmin = () => {
                                     </div>
                                 ) : (
                                     <div style={{ marginBottom: '24px' }}>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '8px' }}>
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                                            gap: '20px',
+                                            marginBottom: '8px'
+                                        }}>
                                             <div style={inputGroupStyle}>
                                                 <label style={labelStyle}>Subject Name</label>
                                                 <input
@@ -2006,11 +2075,17 @@ const AIMaterialsAdmin = () => {
                             onRefresh={fetchSubjects}
                             onDeleteSubject={handleDeleteSubject}
                             onRenameSubject={handleRenameSubject}
+                            isMobile={isMobile}
+                            isTablet={isTablet}
                         />
                     ) : activeTab === 'exercises' ? (
-                        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px' }}>
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: isTablet ? '1fr' : '300px 1fr',
+                            gap: '24px'
+                        }}>
                             {/* Subject/Topic/Subtopic Browser */}
-                            <div style={cardStyle}>
+                            <div style={cardStyle(isMobile)}>
                                 <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '16px' }}>Browse Subjects</h3>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     {loadingSubjects ? (
@@ -2024,6 +2099,7 @@ const AIMaterialsAdmin = () => {
                                                 subject={subject}
                                                 onSelectSubtopic={fetchExercises}
                                                 selectedSubtopicId={selectedSubtopicId}
+                                                isMobile={isMobile}
                                             />
                                         ))
                                     )}
@@ -2031,7 +2107,7 @@ const AIMaterialsAdmin = () => {
                             </div>
 
                             {/* Exercise List */}
-                            <div style={cardStyle}>
+                            <div style={cardStyle(isMobile)}>
                                 {selectedSubtopicId ? (
                                     <>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -2145,6 +2221,8 @@ const AIMaterialsAdmin = () => {
                                 setSelectedContent({ subtopic_id: subtopicId });
                                 setShowRegenerateModal(true);
                             }}
+                            isMobile={isMobile}
+                            isTablet={isTablet}
                         />
                     ) : null}
 
@@ -2201,110 +2279,125 @@ const AIMaterialsAdmin = () => {
                     )}
                 </div>
 
-                {/* Task monitor on the right */}
-                <div style={{ ...cardStyle, border: 'none', background: '#f8fafc', position: 'sticky', top: '120px', width: '300px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Task Monitor</h3>
-                        <RefreshCw size={16} color="#64748b" style={{ cursor: 'pointer' }} onClick={fetchTasks} />
-                    </div>
+                {/* Task monitor - Fixed on the right */}
+                {!isMobile && (
+                    <div style={{
+                        ...cardStyle(isMobile),
+                        border: '1px solid #e2e8f0',
+                        background: 'rgba(248, 250, 252, 0.9)',
+                        backdropFilter: 'blur(8px)',
+                        position: 'fixed',
+                        top: '100px',
+                        right: '24px',
+                        width: '320px',
+                        zIndex: 100,
+                        maxHeight: 'calc(100vh - 120px)',
+                        overflowY: 'auto',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Task Monitor</h3>
+                            <RefreshCw size={16} color="#64748b" style={{ cursor: 'pointer' }} onClick={fetchTasks} />
+                        </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {Object.keys(tasks).length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                                <Clock size={32} color="#cbd5e1" style={{ marginBottom: '12px' }} />
-                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>No active tasks</div>
-                            </div>
-                        ) : (
-                            Object.entries(tasks).map(([id, info]: [string, any]) => (
-                                <div key={id} style={{
-                                    background: 'white',
-                                    padding: '16px',
-                                    borderRadius: '12px',
-                                    border: '1px solid #e2e8f0',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px'
-                                }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', color: '#94a3b8' }}>#{id.slice(0, 8)}</span>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            {info.status === 'completed' && <CheckCircle2 size={16} color="#22c55e" />}
-                                            {info.status === 'failed' && <XCircle size={16} color="#ef4444" />}
-                                            {info.status === 'running' && <RefreshCw size={16} color="#3b82f6" className="animate-spin" />}
-                                            <button
-                                                onClick={() => handleDismissTask(id)}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    color: '#94a3b8',
-                                                    cursor: 'pointer',
-                                                    padding: '2px',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    borderRadius: '4px'
-                                                }}
-                                                onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                                                onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                                                title="Dismiss Task"
-                                            >
-                                                <XIcon size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
-                                        {info.status.charAt(0).toUpperCase() + info.status.slice(1)}
-                                    </div>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {info.status === 'running' ? 'Ingesting...' : info.message}
-                                    </div>
-
-                                    {info.logs && info.logs.length > 0 && (
-                                        <div style={{
-                                            marginTop: '12px',
-                                            padding: '12px',
-                                            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                                            borderRadius: '10px',
-                                            minHeight: '200px',
-                                            maxHeight: '300px',
-                                            overflowY: 'auto',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            gap: '4px',
-                                            boxShadow: info.status === 'running' ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
-                                            border: info.status === 'running' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid #334155'
-                                        }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', borderBottom: '1px solid #334155', paddingBottom: '8px' }}>
-                                                <Terminal size={14} color={info.status === 'running' ? '#3b82f6' : '#94a3b8'} />
-                                                <span style={{ fontSize: '0.75rem', color: info.status === 'running' ? '#3b82f6' : '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>LIVE LOGS</span>
-                                                {info.status === 'running' && (
-                                                    <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', animation: 'pulse 1.5s infinite' }}></span>
-                                                        Processing
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {info.logs.slice(-15).map((log: string, i: number) => (
-                                                <div key={i} style={{
-                                                    fontSize: '0.7rem',
-                                                    fontFamily: 'ui-monospace, monospace',
-                                                    color: i === info.logs.slice(-15).length - 1 ? '#22d3ee' : '#e2e8f0',
-                                                    opacity: i === info.logs.slice(-15).length - 1 ? 1 : 0.75,
-                                                    lineHeight: 1.5,
-                                                    paddingLeft: '8px',
-                                                    borderLeft: i === info.logs.slice(-15).length - 1 ? '2px solid #22d3ee' : '2px solid transparent'
-                                                }}>
-                                                    {log}
-                                                </div>
-                                            ))}
-                                            <div ref={(el) => { if (el) el.scrollIntoView({ behavior: 'smooth' }); }} />
-                                        </div>
-                                    )}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {Object.keys(tasks).length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                                    <Clock size={32} color="#cbd5e1" style={{ marginBottom: '12px' }} />
+                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>No active tasks</div>
                                 </div>
-                            )).reverse()
-                        )}
+                            ) : (
+                                Object.entries(tasks).map(([id, info]: [string, any]) => (
+                                    <div key={id} style={{
+                                        background: 'white',
+                                        padding: '16px',
+                                        borderRadius: '12px',
+                                        border: '1px solid #e2e8f0',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '8px'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', color: '#94a3b8' }}>#{id.slice(0, 8)}</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                {info.status === 'completed' && <CheckCircle2 size={16} color="#22c55e" />}
+                                                {info.status === 'failed' && <XCircle size={16} color="#ef4444" />}
+                                                {info.status === 'running' && <RefreshCw size={16} color="#3b82f6" className="animate-spin" />}
+                                                <button
+                                                    onClick={() => handleDismissTask(id)}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        color: '#94a3b8',
+                                                        cursor: 'pointer',
+                                                        padding: '2px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        borderRadius: '4px'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                                                    title="Dismiss Task"
+                                                >
+                                                    <XIcon size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
+                                            {info.status.charAt(0).toUpperCase() + info.status.slice(1)}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {info.status === 'running' ? 'Ingesting...' : info.message}
+                                        </div>
+
+                                        {info.logs && info.logs.length > 0 && (
+                                            <div style={{
+                                                marginTop: '12px',
+                                                padding: '12px',
+                                                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                                                borderRadius: '10px',
+                                                minHeight: '200px',
+                                                maxHeight: '500px',
+                                                overflowY: 'auto',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '4px',
+                                                boxShadow: info.status === 'running' ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
+                                                border: info.status === 'running' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid #334155'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', borderBottom: '1px solid #334155', paddingBottom: '8px' }}>
+                                                    <Terminal size={14} color={info.status === 'running' ? '#3b82f6' : '#94a3b8'} />
+                                                    <span style={{ fontSize: '0.75rem', color: info.status === 'running' ? '#3b82f6' : '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>LIVE LOGS</span>
+                                                    {info.status === 'running' && (
+                                                        <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', animation: 'pulse 1.5s infinite' }}></span>
+                                                            Processing
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {info.logs.slice(-30).map((log: string, i: number) => (
+                                                    <div key={i} style={{
+                                                        fontSize: '0.7rem',
+                                                        fontFamily: 'ui-monospace, monospace',
+                                                        color: i === info.logs.slice(-30).length - 1 ? '#22d3ee' : '#e2e8f0',
+                                                        opacity: i === info.logs.slice(-30).length - 1 ? 1 : 0.75,
+                                                        lineHeight: 1.5,
+                                                        paddingLeft: '8px',
+                                                        borderLeft: i === info.logs.slice(-30).length - 1 ? '2px solid #22d3ee' : '2px solid transparent'
+                                                    }}>
+                                                        {log}
+                                                    </div>
+                                                ))}
+                                                <div ref={(el) => { if (el && el.parentElement) el.parentElement.scrollTo({ top: el.parentElement.scrollHeight, behavior: 'smooth' }); }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                )).reverse()
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Exercise Modal */}
                 {showExerciseModal && (
@@ -2340,19 +2433,18 @@ const AIMaterialsAdmin = () => {
                         regenerating={regeneratingContent[selectedContent.subtopic_id] || false}
                     />
                 )}
-
             </div>
         </div>
     );
 };
 
-const cardStyle = {
+const cardStyle = (isMobile?: boolean) => ({
     background: 'white',
-    padding: '32px',
+    padding: isMobile ? '20px' : '32px',
     borderRadius: '24px',
     border: '1px solid #e2e8f0',
     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
-};
+});
 
 const inputGroupStyle = {
     display: 'flex',
@@ -2399,12 +2491,14 @@ const tabButtonStyle = {
 // ===========================================================================
 // Database Filesystem Tree Component
 // ===========================================================================
-const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDeleteSubject, onRenameSubject }: {
+const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDeleteSubject, onRenameSubject, isMobile, isTablet }: {
     subjects: any[];
     loadingSubjects: boolean;
     onRefresh: () => void;
     onDeleteSubject: (id: string) => void;
     onRenameSubject: (id: string, newName: string) => void;
+    isMobile: boolean;
+    isTablet: boolean;
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedLevels, setExpandedLevels] = useState<Set<string>>(new Set());
@@ -2456,7 +2550,7 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
     };
 
     return (
-        <div style={cardStyle}>
+        <div style={cardStyle(isMobile)}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -2509,9 +2603,19 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
                         const stats = levelStats(level);
                         const isExpanded = expandedLevels.has(level);
 
-                        // Filter: if searching, only show levels with matching subjects
-                        const visibleSubjects = Object.entries(subjectsMap).filter(([name]) => filterMatches(name));
-                        if (searchQuery && visibleSubjects.length === 0) return null;
+                        // Filter: 
+                        // 1. If searching, only show levels with matching subjects
+                        // 2. If NOT searching, only show levels that have at least one subject with content in DB
+                        const visibleSubjects = Object.entries(subjectsMap).filter(([name, data]) => {
+                            const matchesSearch = filterMatches(name);
+                            if (searchQuery) return matchesSearch;
+
+                            // Check if this subject or any of its boards has content
+                            const hasContent = data.dbSubject || data.boards.some(b => b.dbSubject);
+                            return hasContent;
+                        });
+
+                        if (visibleSubjects.length === 0) return null;
 
                         return (
                             <div key={level} style={{ marginBottom: '4px' }}>
@@ -2821,7 +2925,7 @@ const DatabaseFilesystemTree = ({ subjects, loadingSubjects, onRefresh, onDelete
 // ===========================================================================
 // Subject/Topic/Subtopic Browser Component (for Exercises tab)
 // ===========================================================================
-const SubjectExerciseBrowser = ({ subject, onSelectSubtopic, selectedSubtopicId }: any) => {
+const SubjectExerciseBrowser = ({ subject, onSelectSubtopic, selectedSubtopicId, isMobile }: any) => {
     const [expanded, setExpanded] = useState(false);
     const [topics, setTopics] = useState<any[]>([]);
     const [loadingTopics, setLoadingTopics] = useState(false);
