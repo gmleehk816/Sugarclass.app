@@ -408,6 +408,8 @@ services:
       - ./microservices/sugarclass-aimaterials/.env
     environment:
       - DB_PATH=/app/database/rag_content.db
+      - SECRET_KEY=${SECRET_KEY:-sugarclass-prod-secret-key}
+      - SUGARCLASS_API_URL=http://backend:8000/api/v1
     volumes:
       - ./microservices/sugarclass-aitutor/database:/app/database
     networks:
