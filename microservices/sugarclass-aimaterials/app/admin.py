@@ -43,6 +43,7 @@ class IngestRequest(BaseModel):
     filename: str
     subject_name: str
     syllabus: str = "IB Diploma"
+    skip_rewrite: bool = False
 
 class ExerciseRequest(BaseModel):
     subtopic_id: str
@@ -155,7 +156,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
 # Ingestion \u0026 Exercise Generation
 # ============================================================================
 
-def run_ingestion_task(task_id: str, file_path: str, subject_name: str, syllabus: str):
+def run_ingestion_task(task_id: str, file_path: str, subject_name: str, syllabus: str, skip_rewrite: bool = False):
     """Background task for ingestion."""
     tasks[task_id]["status"] = "running"
     tasks[task_id]["logs"] = []
@@ -164,8 +165,12 @@ def run_ingestion_task(task_id: str, file_path: str, subject_name: str, syllabus
         # Call the ingestion script
         script_path = SCRIPTS_DIR / "auto_process_textbook.py"
         
+        cmd = ["python", str(script_path), file_path, "--subject-name", subject_name, "--syllabus", syllabus]
+        if skip_rewrite:
+            cmd.append("--skip-rewrite")
+            
         process = subprocess.Popen(
-            ["python", str(script_path), file_path, "--subject-name", subject_name, "--syllabus", syllabus],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -215,7 +220,8 @@ async def trigger_ingestion(request: IngestRequest, background_tasks: Background
         task_id, 
         str(file_path), 
         request.subject_name, 
-        request.syllabus
+        request.syllabus,
+        request.skip_rewrite
     )
     
     return {"task_id": task_id, "status": "pending", "message": "Ingestion started"}
@@ -1029,7 +1035,7 @@ async def get_contents(
     try:
         if subtopic_id:
             query = """
-                SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+                SELECT cp.*, s.name as subtopic_name, t.id as topic_id, t.name as topic_name, sub.id as subject_id, sub.name as subject_name
                 FROM content_processed cp
                 JOIN subtopics s ON cp.subtopic_id = s.id
                 JOIN topics t ON s.topic_id = t.id
@@ -1040,7 +1046,7 @@ async def get_contents(
             rows = conn.execute(query, (subtopic_id,)).fetchall()
         elif topic_id:
             query = """
-                SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+                SELECT cp.*, s.name as subtopic_name, t.id as topic_id, t.name as topic_name, sub.id as subject_id, sub.name as subject_name
                 FROM content_processed cp
                 JOIN subtopics s ON cp.subtopic_id = s.id
                 JOIN topics t ON s.topic_id = t.id
@@ -1051,7 +1057,7 @@ async def get_contents(
             rows = conn.execute(query, (topic_id,)).fetchall()
         elif subject_id:
             query = """
-                SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+                SELECT cp.*, s.name as subtopic_name, t.id as topic_id, t.name as topic_name, sub.id as subject_id, sub.name as subject_name
                 FROM content_processed cp
                 JOIN subtopics s ON cp.subtopic_id = s.id
                 JOIN topics t ON s.topic_id = t.id
@@ -1062,7 +1068,7 @@ async def get_contents(
             rows = conn.execute(query, (subject_id,)).fetchall()
         else:
             query = """
-                SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+                SELECT cp.*, s.name as subtopic_name, t.id as topic_id, t.name as topic_name, sub.id as subject_id, sub.name as subject_name
                 FROM content_processed cp
                 JOIN subtopics s ON cp.subtopic_id = s.id
                 JOIN topics t ON s.topic_id = t.id
@@ -1096,7 +1102,7 @@ async def get_content(content_id: int, include_raw: bool = False):
 
     try:
         row = conn.execute("""
-            SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+            SELECT cp.*, s.name as subtopic_name, t.id as topic_id, t.name as topic_name, sub.id as subject_id, sub.name as subject_name
             FROM content_processed cp
             JOIN subtopics s ON cp.subtopic_id = s.id
             JOIN topics t ON s.topic_id = t.id
@@ -1131,7 +1137,7 @@ async def get_content_by_subtopic(subtopic_id: str, include_raw: bool = False):
 
     try:
         row = conn.execute("""
-            SELECT cp.*, s.name as subtopic_name, t.name as topic_name, sub.name as subject_name
+            SELECT cp.*, s.name as subtopic_name, t.id as topic_id, t.name as topic_name, sub.id as subject_id, sub.name as subject_name
             FROM content_processed cp
             JOIN subtopics s ON cp.subtopic_id = s.id
             JOIN topics t ON s.topic_id = t.id
@@ -1258,7 +1264,8 @@ async def delete_contents_bulk(subtopic_id: str = Query(...)):
 
 def run_content_regenerate_task(
     task_id: str,
-    subtopic_id: str,
+    subtopic_id: Optional[str],
+    subject_id: Optional[str],
     focus: Optional[str],
     temperature: float,
     include_key_terms: bool,
@@ -1267,9 +1274,11 @@ def run_content_regenerate_task(
     generate_images: bool = False,
     custom_prompt: Optional[str] = None
 ):
-    """Background task for content regeneration with options."""
+    """Background task for content regeneration (single subtopic or full subject)."""
     from .main import DB_PATH, get_db_connection
     import markdown
+    from openai import OpenAI
+    from .config_fastapi import settings
 
     tasks[task_id]["status"] = "running"
     tasks[task_id]["logs"] = []
@@ -1283,44 +1292,75 @@ def run_content_regenerate_task(
 
     try:
         conn = get_db_connection()
-
-        # Get raw content
-        add_log("Fetching raw content...")
-        raw_row = conn.execute("""
-            SELECT cr.id, cr.markdown_content, cr.title, cr.subtopic_id
-            FROM content_raw cr
-            WHERE cr.subtopic_id = ?
-            ORDER BY cr.id DESC
-            LIMIT 1
-        """, (subtopic_id,)).fetchone()
-
-        if not raw_row:
+        
+        # Determine list of subtopics to process
+        subtopics_to_process = []
+        if subject_id:
+            add_log(f"Fetching all subtopics for subject {subject_id}...")
+            # Use query like get_all_subtopics_for_subject in main.py but for ids
+            rows = conn.execute("""
+                SELECT s.id, s.name 
+                FROM subtopics s
+                JOIN topics t ON s.topic_id = t.id
+                WHERE t.subject_id = ?
+                ORDER BY t.order_num, s.order_num
+            """, (subject_id,)).fetchall()
+            subtopics_to_process = [{"id": r['id'], "name": r['name']} for r in rows]
+            add_log(f"Found {len(subtopics_to_process)} subtopics to regenerate.")
+        elif subtopic_id:
+            subtopics_to_process = [{"id": subtopic_id, "name": "requested subtopic"}]
+        
+        if not subtopics_to_process:
             tasks[task_id]["status"] = "failed"
-            tasks[task_id]["message"] = f"No raw content found for subtopic {subtopic_id}"
+            tasks[task_id]["message"] = "No subtopics found to process."
             return
 
-        markdown_content = raw_row['markdown_content']
+        if not settings.LLM_API_KEY:
+            tasks[task_id]["status"] = "failed"
+            tasks[task_id]["message"] = "LLM_API_KEY not configured"
+            return
 
-        # Check if there's already a processed entry
-        existing = conn.execute(
-            "SELECT id FROM content_processed WHERE subtopic_id = ?",
-            (subtopic_id,)
-        ).fetchone()
-
-        # Convert markdown to HTML
-        add_log("Converting markdown to HTML...")
-        html_content = markdown.markdown(
-            markdown_content,
-            extensions=['tables', 'fenced_code', 'nl2br', 'sane_lists']
+        client = OpenAI(
+            api_key=settings.LLM_API_KEY,
+            base_url=settings.LLM_API_URL
         )
 
-        # Build system prompt based on focus
-        system_prompt = "You are an expert educational content enhancer."
-        if focus:
-            system_prompt += f" Focus: {focus}."
+        total_count = len(subtopics_to_process)
+        
+        for idx, sub_info in enumerate(subtopics_to_process, 1):
+            curr_sub_id = sub_info["id"]
+            curr_sub_name = sub_info["name"]
+            
+            progress_prefix = f"[{idx}/{total_count}] " if total_count > 1 else ""
+            add_log(f"{progress_prefix}Processing {curr_sub_name} ({curr_sub_id})...")
 
-        # Build user prompt with sections
-        user_prompt = f"""Enhance the following educational content in HTML format.
+            # Get raw content
+            raw_row = conn.execute("""
+                SELECT cr.id, cr.markdown_content, cr.title
+                FROM content_raw cr
+                WHERE cr.subtopic_id = ?
+                ORDER BY cr.id DESC
+                LIMIT 1
+            """, (curr_sub_id,)).fetchone()
+
+            if not raw_row:
+                add_log(f"⚠️ Warning: No raw content found for {curr_sub_id}. Skipping.")
+                continue
+
+            markdown_content = raw_row['markdown_content']
+
+            # Convert markdown to HTML
+            html_content = markdown.markdown(
+                markdown_content,
+                extensions=['tables', 'fenced_code', 'nl2br', 'sane_lists']
+            )
+
+            # Build prompts
+            system_prompt = "You are an expert educational content enhancer."
+            if focus:
+                system_prompt += f" Focus: {focus}."
+
+            user_prompt = f"""Enhance the following educational content in HTML format.
 
 {f"Make it more creative and engaging." if temperature > 0.7 else f"Keep it clear and concise." if temperature < 0.5 else ""}
 
@@ -1342,97 +1382,68 @@ The prompt should be a detailed description of what the image should show to exp
 Original HTML content:
 {html_content}"""
 
-        add_log(f"Calling LLM with temperature={temperature}...")
+            try:
+                response = client.chat.completions.create(
+                    model=settings.LLM_MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=temperature
+                )
 
-        # Use OpenAI client for content generation
-        from openai import OpenAI
-        from .config_fastapi import settings
+                llm_result = response.choices[0].message
 
-        if not settings.LLM_API_KEY:
-            tasks[task_id]["status"] = "failed"
-            tasks[task_id]["message"] = "LLM_API_KEY not configured"
-            return
+                if llm_result and llm_result.content:
+                    enhanced_html = llm_result.content.strip()
+                    
+                    # Clean up HTML structure
+                    body_match = re.search(r'<body[^>]*>(.*?)</body>', enhanced_html, re.DOTALL | re.IGNORECASE)
+                    if body_match:
+                        enhanced_html = body_match.group(1)
+                    
+                    enhanced_html = re.sub(r'<style[^>]*>.*?</style>', '', enhanced_html, flags=re.DOTALL | re.IGNORECASE)
+                    enhanced_html = re.sub(r'<html[^>]*>|</html>|<head[^>]*>.*?</head>|<!DOCTYPE[^>]*>', '', enhanced_html, flags=re.DOTALL | re.IGNORECASE)
+                    enhanced_html = enhanced_html.strip()
 
-        client = OpenAI(
-            api_key=settings.LLM_API_KEY,
-            base_url=settings.LLM_API_URL
-        )
+                    # Save result
+                    existing = conn.execute("SELECT id FROM content_processed WHERE subtopic_id = ?", (curr_sub_id,)).fetchone()
+                    
+                    if existing:
+                        conn.execute("""
+                            UPDATE content_processed
+                            SET html_content = ?,
+                                processor_version = ?,
+                                processed_at = datetime('now')
+                            WHERE id = ?
+                        """, (enhanced_html, f'llm_regenerate_{focus or "default"}', existing['id']))
+                    else:
+                        conn.execute("""
+                            INSERT INTO content_processed (
+                                raw_id, subtopic_id, html_content, processor_version
+                            ) VALUES (?, ?, ?, ?)
+                        """, (raw_row['id'], curr_sub_id, enhanced_html, f'llm_regenerate_{focus or "default"}'))
+                    
+                    conn.commit()
 
-        try:
-            response = client.chat.completions.create(
-                model=settings.LLM_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=temperature
-            )
+                    if generate_images:
+                        add_log(f"{progress_prefix}Generating images for {curr_sub_name}...")
+                        try:
+                            _generate_images_for_content(enhanced_html, curr_sub_id, conn, add_log)
+                        except Exception as img_err:
+                            add_log(f"Image generation error for {curr_sub_id}: {str(img_err)}")
 
-            llm_result = response.choices[0].message
-
-            if llm_result and llm_result.content:
-                # Extract HTML from code blocks if present
-                enhanced_html = llm_result.content
-
-                enhanced_html = enhanced_html.strip()
-
-                # NEW: Clean up HTML to prevent global style leaks
-                # 1. Extract body content if present
-                body_match = re.search(r'<body[^>]*>(.*?)</body>', enhanced_html, re.DOTALL | re.IGNORECASE)
-                if body_match:
-                    enhanced_html = body_match.group(1)
-                
-                # 2. Strip ALL <style> tags (they cause layout issues when inlined)
-                enhanced_html = re.sub(r'<style[^>]*>.*?</style>', '', enhanced_html, flags=re.DOTALL | re.IGNORECASE)
-                
-                # 3. Strip <html> and <head> tags if they still exist
-                enhanced_html = re.sub(r'<html[^>]*>|</html>|<head[^>]*>.*?</head>|<!DOCTYPE[^>]*>', '', enhanced_html, flags=re.DOTALL | re.IGNORECASE)
-                
-                enhanced_html = enhanced_html.strip()
-
-                add_log("Saving enhanced content...")
-
-                if existing:
-                    # Update existing
-                    conn.execute("""
-                        UPDATE content_processed
-                        SET html_content = ?,
-                            processor_version = ?,
-                            processed_at = datetime('now')
-                        WHERE id = ?
-                    """, (enhanced_html, f'llm_regenerate_{focus or "default"}', existing['id']))
                 else:
-                    # Insert new
-                    conn.execute("""
-                        INSERT INTO content_processed (
-                            raw_id, subtopic_id, html_content, processor_version
-                        ) VALUES (?, ?, ?, ?)
-                    """, (raw_row['id'], subtopic_id, enhanced_html, f'llm_regenerate_{focus or "default"}'))
+                    add_log(f"⚠️ Warning: LLM returned no content for {curr_sub_id}.")
 
-                conn.commit()
-                add_log("Content regeneration completed successfully!")
+            except Exception as llm_error:
+                add_log(f"❌ LLM error for {curr_sub_id}: {str(llm_error)}")
 
-                # --- Generate images for headings if requested ---
-                if generate_images:
-                    add_log("Generating images for content sections...")
-                    try:
-                        _generate_images_for_content(enhanced_html, subtopic_id, conn, add_log)
-                    except Exception as img_err:
-                        add_log(f"Image generation had errors (content still saved): {str(img_err)}")
-
-                tasks[task_id]["status"] = "completed"
-                tasks[task_id]["message"] = "Content regenerated successfully"
-            else:
-                tasks[task_id]["status"] = "failed"
-                tasks[task_id]["message"] = "LLM returned no content"
-
-        except Exception as llm_error:
-            add_log(f"LLM API error: {str(llm_error)}")
-            tasks[task_id]["status"] = "failed"
-            tasks[task_id]["message"] = f"LLM API error: {str(llm_error)}"
+        tasks[task_id]["status"] = "completed"
+        tasks[task_id]["message"] = f"Regeneration completed for {total_count} subtopics."
 
     except Exception as e:
-        add_log(f"Error: {str(e)}")
+        add_log(f"Fatal error: {str(e)}")
         tasks[task_id]["status"] = "failed"
         tasks[task_id]["message"] = f"Error: {str(e)}"
     finally:
@@ -1442,10 +1453,13 @@ Original HTML content:
 async def regenerate_content(
     request: ContentRegenerateRequest,
     background_tasks: BackgroundTasks,
-    subtopic_id: str = Query(...)
+    subtopic_id: Optional[str] = Query(None),
+    subject_id: Optional[str] = Query(None)
 ):
-    """Regenerate content with AI using specified options."""
-    # Get the subtopic_id from query parameter
+    """Regenerate content with AI using specified options (single subtopic or full subject)."""
+    if not subtopic_id and not subject_id:
+        raise HTTPException(status_code=400, detail="Either subtopic_id or subject_id must be provided")
+
     task_id = str(uuid.uuid4())
     tasks[task_id] = {"status": "pending", "message": "Regeneration queued", "logs": []}
 
@@ -1453,6 +1467,7 @@ async def regenerate_content(
         run_content_regenerate_task,
         task_id,
         subtopic_id,
+        subject_id,
         request.focus,
         request.temperature or 0.7,
         request.include_key_terms,

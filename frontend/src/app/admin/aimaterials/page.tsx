@@ -62,7 +62,12 @@ import {
     Trash,
     MousePointer2,
     Sparkles,
-    ArrowLeft
+    ArrowLeft,
+    MessageSquare,
+    Activity,
+    Image as ImageIcon,
+    Layers,
+    Info
 } from "lucide-react";
 import { SERVICE_URLS } from '@/lib/microservices';
 
@@ -584,6 +589,10 @@ interface ResourceContent {
     id: number;
     subtopic_id: number;
     subtopic_name?: string;
+    topic_id?: string;
+    topic_name?: string;
+    subject_id?: string;
+    subject_name?: string;
     html_content: string;
     summary?: string;
     key_terms?: string;
@@ -603,6 +612,7 @@ interface RegenerateOptions {
     generate_images: boolean;
     generate_videos: boolean;
     custom_prompt: string;
+    apply_to_full_book: boolean;
 }
 
 // ===========================================================================
@@ -613,14 +623,19 @@ const ContentRegenerateModal = ({
     setOptions,
     onConfirm,
     onClose,
-    regenerating
+    regenerating,
+    subjectName,
+    isMobile
 }: {
     options: RegenerateOptions;
     setOptions: (options: RegenerateOptions) => void;
     onConfirm: () => void;
     onClose: () => void;
     regenerating: boolean;
+    subjectName?: string;
+    isMobile: boolean;
 }) => {
+    const { apply_to_full_book } = options;
     const focusOptions = [
         { value: '', label: 'Standard (balanced)' },
         { value: 'more creative', label: 'More Creative & Engaging' },
@@ -646,186 +661,326 @@ const ContentRegenerateModal = ({
         }}>
             <div style={{
                 background: 'white',
-                borderRadius: '16px',
-                padding: '32px',
-                maxWidth: '500px',
-                width: '100%'
+                borderRadius: '24px',
+                padding: isMobile ? '24px' : '40px',
+                maxWidth: '900px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                position: 'relative'
             }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                    <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
-                        Regenerate Content v2
-                    </h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                    <div>
+                        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: '#1e293b', letterSpacing: '-0.025em' }}>
+                            Regenerate Content v2
+                        </h2>
+                        <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>
+                            Configure AI enhancement for your educational materials
+                        </p>
+                    </div>
                     <button
                         onClick={onClose}
                         disabled={regenerating}
                         style={{
-                            background: 'none',
+                            background: '#f1f5f9',
                             border: 'none',
-                            fontSize: '1.5rem',
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                             cursor: regenerating ? 'not-allowed' : 'pointer',
                             color: '#64748b',
-                            padding: '4px'
+                            transition: 'all 0.2s',
+                            fontSize: '1.2rem'
                         }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#0f172a'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
                     >
-                        x
+                        ✕
                     </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    {/* Focus Option */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            Enhancement Focus
-                        </label>
-                        <select
-                            value={options.focus}
-                            onChange={(e) => setOptions({ ...options, focus: e.target.value })}
-                            disabled={regenerating}
-                            style={{
-                                ...inputStyle,
-                                cursor: regenerating ? 'not-allowed' : 'pointer',
-                                background: regenerating ? '#f8fafc' : 'white'
-                            }}
-                        >
-                            {focusOptions.map(opt => (
-                                <option key={opt.value} value={opt.value}>{opt.label}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Custom Prompt - General AI Instructions */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            Additional AI Instructions (Optional)
-                        </label>
-                        <textarea
-                            value={options.custom_prompt}
-                            onChange={(e) => setOptions({ ...options, custom_prompt: e.target.value })}
-                            disabled={regenerating}
-                            placeholder="e.g. Focus on practical applications, translate to French, add more case studies..."
-                            style={{
-                                ...inputStyle,
-                                minHeight: '100px',
-                                resize: 'vertical',
-                                background: regenerating ? '#f8fafc' : 'white',
-                                cursor: regenerating ? 'not-allowed' : 'pointer',
-                                fontSize: '0.85rem'
-                            }}
-                        />
-                    </div>
-
-                    {/* Media Generation */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '12px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            Media Generation
-                        </label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={options.generate_images}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, generate_images: e.target.checked })}
-                                    disabled={regenerating}
-                                />
-                                <span style={{ fontSize: '0.9rem' }}>🖼️ Generate Images for Topics</span>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr',
+                    gap: isMobile ? '24px' : '40px',
+                    alignItems: 'start'
+                }}>
+                    {/* Left Column: Primary Configurations */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        {/* Focus Option */}
+                        <div style={{
+                            background: '#f8fafc',
+                            padding: '20px',
+                            borderRadius: '16px',
+                            border: '1px solid #e2e8f0'
+                        }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>
+                                <Zap size={18} color="#7c3aed" /> Enhancement Focus
                             </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'not-allowed', opacity: 0.5 }}>
-                                <input
-                                    type="checkbox"
-                                    checked={options.generate_videos}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, generate_videos: e.target.checked })}
-                                    disabled={true}
-                                />
-                                <span style={{ fontSize: '0.9rem' }}>🎬 Generate Videos <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>(coming soon)</span></span>
+                            <select
+                                value={options.focus}
+                                onChange={(e) => setOptions({ ...options, focus: e.target.value })}
+                                disabled={regenerating}
+                                style={{
+                                    ...inputStyle,
+                                    cursor: regenerating ? 'not-allowed' : 'pointer',
+                                    background: regenerating ? '#f1f5f9' : 'white',
+                                    height: '48px',
+                                    borderRadius: '10px',
+                                    fontSize: '0.95rem'
+                                }}
+                            >
+                                {focusOptions.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Custom Prompt */}
+                        <div style={{
+                            background: '#f8fafc',
+                            padding: '20px',
+                            borderRadius: '16px',
+                            border: '1px solid #e2e8f0'
+                        }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>
+                                <MessageSquare size={18} color="#7c3aed" /> Additional Instructions
                             </label>
+                            <textarea
+                                value={options.custom_prompt}
+                                onChange={(e) => setOptions({ ...options, custom_prompt: e.target.value })}
+                                disabled={regenerating}
+                                placeholder="e.g. Focus on practical applications, translate to French, add more case studies..."
+                                style={{
+                                    ...inputStyle,
+                                    minHeight: '130px',
+                                    resize: 'vertical',
+                                    background: regenerating ? '#f1f5f9' : 'white',
+                                    cursor: regenerating ? 'not-allowed' : 'pointer',
+                                    fontSize: '0.9rem',
+                                    borderRadius: '10px',
+                                    lineHeight: '1.5'
+                                }}
+                            />
+                        </div>
+
+                        {/* Creativity Level */}
+                        <div style={{
+                            background: '#f8fafc',
+                            padding: '20px',
+                            borderRadius: '16px',
+                            border: '1px solid #e2e8f0'
+                        }}>
+                            <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Activity size={18} color="#7c3aed" /> Creativity Level
+                                </span>
+                                <span style={{ background: '#7c3aed', color: 'white', padding: '2px 8px', borderRadius: '6px', fontSize: '0.8rem' }}>
+                                    {options.temperature.toFixed(1)}
+                                </span>
+                            </label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.1"
+                                value={options.temperature}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, temperature: parseFloat(e.target.value) })}
+                                disabled={regenerating}
+                                style={{ width: '100%', cursor: regenerating ? 'not-allowed' : 'pointer', accentColor: '#7c3aed' }}
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', marginTop: '8px', fontWeight: 500 }}>
+                                <span>Conservative</span>
+                                <span>Balanced</span>
+                                <span>Creative</span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Creativity Level */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            Creativity Level: {options.temperature.toFixed(1)}
-                        </label>
-                        <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.1"
-                            value={options.temperature}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, temperature: parseFloat(e.target.value) })}
-                            disabled={regenerating}
-                            style={{ width: '100%', cursor: regenerating ? 'not-allowed' : 'pointer' }}
-                        />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
-                            <span>Conservative</span>
-                            <span>Balanced</span>
-                            <span>Creative</span>
+                    {/* Right Column: Scope & Features */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        {/* Scope Selection (Full Book) */}
+                        <div style={{
+                            padding: '20px',
+                            background: apply_to_full_book ? '#fff1f2' : '#f8fafc',
+                            borderRadius: '16px',
+                            border: apply_to_full_book ? '2px solid #fecaca' : '1px solid #e2e8f0',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            boxShadow: apply_to_full_book ? '0 10px 15px -3px rgba(220, 38, 38, 0.1)' : 'none'
+                        }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
+                                <div style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    position: 'relative',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={apply_to_full_book || false}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, apply_to_full_book: e.target.checked })}
+                                        disabled={regenerating}
+                                        style={{
+                                            width: '20px',
+                                            height: '20px',
+                                            cursor: regenerating ? 'not-allowed' : 'pointer',
+                                            accentColor: '#dc2626'
+                                        }}
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <span style={{
+                                        fontWeight: 800,
+                                        fontSize: '1rem',
+                                        color: apply_to_full_book ? '#991b1b' : '#334155',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}>
+                                        Regenerate Full Book {apply_to_full_book && <Zap size={14} fill="#dc2626" />}
+                                    </span>
+                                    {subjectName && (
+                                        <div style={{ fontSize: '0.8rem', color: apply_to_full_book ? '#b91c1c' : '#64748b', marginTop: '2px', fontWeight: 500 }}>
+                                            Subject: <span style={{ textDecoration: 'underline' }}>{subjectName}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </label>
+                            {apply_to_full_book && (
+                                <div style={{
+                                    marginTop: '16px',
+                                    padding: '12px',
+                                    background: 'rgba(255, 255, 255, 0.5)',
+                                    borderRadius: '10px',
+                                    fontSize: '0.8rem',
+                                    color: '#b91c1c',
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: '8px',
+                                    lineHeight: '1.4',
+                                    border: '1px solid rgba(220, 38, 38, 0.1)'
+                                }}>
+                                    <AlertTriangle size={16} style={{ marginTop: '1px', flexShrink: 0 }} />
+                                    <span><strong>Warning:</strong> This will regenerate ALL subtopics for this subject sequentially. Best for final polish.</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Media Generation */}
+                        <div style={{
+                            background: '#f8fafc',
+                            padding: '20px',
+                            borderRadius: '16px',
+                            border: '1px solid #e2e8f0'
+                        }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>
+                                <ImageIcon size={18} color="#7c3aed" /> Media Generation
+                            </label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: regenerating ? 'not-allowed' : 'pointer', padding: '4px' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={options.generate_images}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, generate_images: e.target.checked })}
+                                        disabled={regenerating}
+                                        style={{ width: '18px', height: '18px', accentColor: '#7c3aed' }}
+                                    />
+                                    <span style={{ fontSize: '0.95rem', color: '#475569', fontWeight: 500 }}>🖼️ Generate Section Images</span>
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'not-allowed', opacity: 0.5, padding: '4px' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={options.generate_videos}
+                                        disabled={true}
+                                        style={{ width: '18px', height: '18px' }}
+                                    />
+                                    <span style={{ fontSize: '0.95rem', color: '#475569' }}>🎬 Generate Videos <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic', fontWeight: 400 }}>(Beta)</span></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* Content Sections */}
+                        <div style={{
+                            background: '#f8fafc',
+                            padding: '20px',
+                            borderRadius: '16px',
+                            border: '1px solid #e2e8f0'
+                        }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>
+                                <Layers size={18} color="#7c3aed" /> Include Sections
+                            </label>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+                                {[
+                                    { key: 'include_key_terms', label: 'Key Terms & Definitions', icon: '🔑' },
+                                    { key: 'include_summary', label: 'Summary Section', icon: '📝' },
+                                    { key: 'include_think_about_it', label: 'Think About It Questions', icon: '🤔' }
+                                ].map(section => (
+                                    <label key={section.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: regenerating ? 'not-allowed' : 'pointer', padding: '4px' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={(options as any)[section.key]}
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, [section.key]: e.target.checked })}
+                                            disabled={regenerating}
+                                            style={{ width: '18px', height: '18px', accentColor: '#7c3aed' }}
+                                        />
+                                        <span style={{ fontSize: '0.95rem', color: '#475569', fontWeight: 500 }}>{section.icon} {section.label}</span>
+                                    </label>
+                                ))}
+                            </div>
                         </div>
                     </div>
+                </div>
 
-                    {/* Content Sections */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '12px', fontWeight: 600, fontSize: '0.9rem' }}>
-                            Include Sections
-                        </label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={options.include_key_terms}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, include_key_terms: e.target.checked })}
-                                    disabled={regenerating}
-                                />
-                                <span style={{ fontSize: '0.9rem' }}>Key Terms & Definitions</span>
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={options.include_summary}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, include_summary: e.target.checked })}
-                                    disabled={regenerating}
-                                />
-                                <span style={{ fontSize: '0.9rem' }}>Summary Section</span>
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: regenerating ? 'not-allowed' : 'pointer' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={options.include_think_about_it}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOptions({ ...options, include_think_about_it: e.target.checked })}
-                                    disabled={regenerating}
-                                />
-                                <span style={{ fontSize: '0.9rem' }}>Think About It Questions</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    {/* Info */}
+                {/* Footer Info & Actions */}
+                <div style={{
+                    marginTop: '32px',
+                    paddingTop: '24px',
+                    borderTop: '1px solid #f1f5f9',
+                    display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    alignItems: isMobile ? 'stretch' : 'center',
+                    justifyContent: 'space-between',
+                    gap: '20px'
+                }}>
                     <div style={{
-                        padding: '12px',
+                        padding: '12px 16px',
                         background: '#eff6ff',
-                        borderRadius: '8px',
+                        borderRadius: '12px',
                         fontSize: '0.85rem',
                         color: '#1e40af',
-                        borderLeft: '3px solid #3b82f6'
+                        borderLeft: '4px solid #3b82f6',
+                        maxWidth: isMobile ? 'none' : '450px'
                     }}>
-                        <strong>Note:</strong> Regeneration will create a new enhanced version using AI. This process runs in the background and may take a minute.
+                        <div style={{ fontWeight: 700, marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Info size={14} /> System Notice
+                        </div>
+                        Regeneration runs in the background. You can monitor progress in the Task Panel on the right.
                     </div>
 
-                    {/* Actions */}
-                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                         <button
                             type="button"
                             onClick={onClose}
                             disabled={regenerating}
                             style={{
                                 padding: '12px 24px',
-                                borderRadius: '8px',
+                                borderRadius: '12px',
                                 border: '1px solid #e2e8f0',
                                 background: 'white',
                                 color: '#64748b',
                                 cursor: regenerating ? 'not-allowed' : 'pointer',
-                                fontWeight: 600
+                                fontWeight: 600,
+                                fontSize: '0.95rem',
+                                transition: 'all 0.2s'
                             }}
+                            onMouseEnter={(e) => { if (!regenerating) e.currentTarget.style.background = '#f8fafc'; }}
+                            onMouseLeave={(e) => { if (!regenerating) e.currentTarget.style.background = 'white'; }}
                         >
                             Cancel
                         </button>
@@ -833,20 +988,25 @@ const ContentRegenerateModal = ({
                             onClick={onConfirm}
                             disabled={regenerating}
                             style={{
-                                padding: '12px 24px',
-                                borderRadius: '8px',
+                                padding: '12px 32px',
+                                borderRadius: '12px',
                                 border: 'none',
-                                background: regenerating ? '#94a3b8' : '#7c3aed',
+                                background: regenerating ? '#94a3b8' : 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
                                 color: 'white',
                                 cursor: regenerating ? 'not-allowed' : 'pointer',
-                                fontWeight: 600,
+                                fontWeight: 700,
+                                fontSize: '0.95rem',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '8px'
+                                gap: '10px',
+                                boxShadow: regenerating ? 'none' : '0 10px 15px -3px rgba(124, 58, 237, 0.3)',
+                                transition: 'all 0.2s'
                             }}
+                            onMouseEnter={(e) => { if (!regenerating) e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                            onMouseLeave={(e) => { if (!regenerating) e.currentTarget.style.transform = 'translateY(0)'; }}
                         >
-                            {regenerating ? <RefreshCw size={16} className="animate-spin" /> : <Zap size={16} />}
-                            {regenerating ? 'Starting...' : 'Regenerate'}
+                            {regenerating ? <RefreshCw size={18} className="animate-spin" /> : <Zap size={18} />}
+                            {regenerating ? 'Initialising...' : 'Start Regeneration'}
                         </button>
                     </div>
                 </div>
@@ -1330,7 +1490,8 @@ const AIMaterialsAdmin = () => {
         include_think_about_it: true,
         generate_images: false,
         generate_videos: false,
-        custom_prompt: ''
+        custom_prompt: '',
+        apply_to_full_book: false
     });
 
     const fetchTasks = async () => {
@@ -1474,7 +1635,7 @@ const AIMaterialsAdmin = () => {
         }
     };
 
-    const handleUploadAndIngest = async () => {
+    const handleUploadAndIngest = async (skipRewrite = false) => {
         if (files.length === 0) {
             setStatusMessage('Please select at least one markdown file.');
             return;
@@ -1521,7 +1682,8 @@ const AIMaterialsAdmin = () => {
                     batch_id: uploadRes.batch_id,
                     filename: uploadRes.main_markdown || mdFile.name,
                     subject_name: extractedSubject,
-                    syllabus: extractedSyllabus
+                    syllabus: extractedSyllabus,
+                    skip_rewrite: skipRewrite
                 })
             });
 
@@ -1701,10 +1863,15 @@ const AIMaterialsAdmin = () => {
                 include_think_about_it: true,
                 generate_images: false,
                 generate_videos: false,
-                custom_prompt: ''
+                custom_prompt: '',
+                apply_to_full_book: false
             };
 
-            const result = await serviceFetch('aimaterials', `/api/admin/contents/regenerate?subtopic_id=${subtopicId}`, {
+            const endpoint = options.apply_to_full_book && selectedContent.subject_id
+                ? `/api/admin/contents/regenerate?subject_id=${selectedContent.subject_id}`
+                : `/api/admin/contents/regenerate?subtopic_id=${subtopicId}`;
+
+            const result = await serviceFetch('aimaterials', endpoint, {
                 method: 'POST',
                 body: JSON.stringify(options)
             });
@@ -2050,20 +2217,41 @@ const AIMaterialsAdmin = () => {
                                     </div>
                                 </div>
 
-                                <button
-                                    onClick={handleUploadAndIngest}
-                                    disabled={uploading || files.length === 0}
-                                    style={{
-                                        ...buttonStyle,
-                                        background: uploading || files.length === 0 ? '#94a3b8' : '#1e293b',
-                                    }}
-                                >
-                                    {uploading ? (
-                                        <><RefreshCw size={18} className="animate-spin" /> Processing...</>
-                                    ) : (
-                                        <><Zap size={18} /> Upload & Process Content</>
-                                    )}
-                                </button>
+                                <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
+                                    <button
+                                        onClick={() => handleUploadAndIngest(false)}
+                                        disabled={uploading || files.length === 0}
+                                        style={{
+                                            ...buttonStyle,
+                                            flex: 1,
+                                            background: uploading || files.length === 0 ? '#94a3b8' : '#1e293b',
+                                        }}
+                                    >
+                                        {uploading ? (
+                                            <><RefreshCw size={18} className="animate-spin" /> Processing...</>
+                                        ) : (
+                                            <><Zap size={18} /> Upload & Process Content</>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => handleUploadAndIngest(true)}
+                                        disabled={uploading || files.length === 0}
+                                        style={{
+                                            ...buttonStyle,
+                                            flex: 1,
+                                            background: 'white',
+                                            color: '#1e293b',
+                                            border: '2px solid #e2e8f0',
+                                            opacity: uploading || files.length === 0 ? 0.5 : 1
+                                        }}
+                                    >
+                                        {uploading ? (
+                                            <><RefreshCw size={18} className="animate-spin" /> Ingesting...</>
+                                        ) : (
+                                            <><FileText size={18} /> Upload & Ingest Only</>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
 
                         </>
@@ -2431,6 +2619,8 @@ const AIMaterialsAdmin = () => {
                         onConfirm={handleRegenerateContent}
                         onClose={() => setShowRegenerateModal(false)}
                         regenerating={regeneratingContent[selectedContent.subtopic_id] || false}
+                        subjectName={selectedContent.subject_name || selectedContent.subject_id}
+                        isMobile={isMobile}
                     />
                 )}
             </div>
