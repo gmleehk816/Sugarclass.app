@@ -601,7 +601,7 @@ interface RegenerateOptions {
     include_think_about_it: boolean;
     generate_images: boolean;
     generate_videos: boolean;
-    image_prompt: string;
+    custom_prompt: string;
 }
 
 // ===========================================================================
@@ -692,28 +692,26 @@ const ContentRegenerateModal = ({
                         </select>
                     </div>
 
-                    {/* Image Prompt - Specific to image generation */}
-                    {options.generate_images && (
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
-                                Image Style/Theme Instructions (Optional)
-                            </label>
-                            <textarea
-                                value={options.image_prompt}
-                                onChange={(e) => setOptions({ ...options, image_prompt: e.target.value })}
-                                disabled={regenerating}
-                                placeholder="e.g. Use 3D isometric style, photographic, bright colors, minimalist diagram..."
-                                style={{
-                                    ...inputStyle,
-                                    minHeight: '80px',
-                                    resize: 'vertical',
-                                    background: regenerating ? '#f8fafc' : 'white',
-                                    cursor: regenerating ? 'not-allowed' : 'pointer',
-                                    fontSize: '0.85rem'
-                                }}
-                            />
-                        </div>
-                    )}
+                    {/* Custom Prompt - General AI Instructions */}
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Additional AI Instructions (Optional)
+                        </label>
+                        <textarea
+                            value={options.custom_prompt}
+                            onChange={(e) => setOptions({ ...options, custom_prompt: e.target.value })}
+                            disabled={regenerating}
+                            placeholder="e.g. Focus on practical applications, translate to French, add more case studies..."
+                            style={{
+                                ...inputStyle,
+                                minHeight: '100px',
+                                resize: 'vertical',
+                                background: regenerating ? '#f8fafc' : 'white',
+                                cursor: regenerating ? 'not-allowed' : 'pointer',
+                                fontSize: '0.85rem'
+                            }}
+                        />
+                    </div>
 
                     {/* Media Generation */}
                     <div>
@@ -1311,7 +1309,7 @@ const AIMaterialsAdmin = () => {
         include_think_about_it: true,
         generate_images: false,
         generate_videos: false,
-        image_prompt: ''
+        custom_prompt: ''
     });
 
     const fetchTasks = async () => {
@@ -1658,7 +1656,7 @@ const AIMaterialsAdmin = () => {
                 include_think_about_it: true,
                 generate_images: false,
                 generate_videos: false,
-                image_prompt: ''
+                custom_prompt: ''
             };
 
             const result = await serviceFetch('aimaterials', `/api/admin/contents/regenerate?subtopic_id=${subtopicId}`, {
