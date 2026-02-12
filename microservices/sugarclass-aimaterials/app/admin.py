@@ -158,17 +158,19 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
 def run_ingestion_task(task_id: str, file_path: str, subject_name: str, syllabus: str, skip_rewrite: bool = False):
     """Background task for ingestion."""
-    tasks[task_id]["status"] = "running"
-    tasks[task_id]["logs"] = []
-    
+    # Defensive: task might be deleted by user while running
+    if task_id in tasks:
+        tasks[task_id]["status"] = "running"
+        tasks[task_id]["logs"] = []
+
     try:
         # Call the ingestion script
         script_path = SCRIPTS_DIR / "auto_process_textbook.py"
-        
+
         cmd = ["python", str(script_path), file_path, "--subject-name", subject_name, "--syllabus", syllabus]
         if skip_rewrite:
             cmd.append("--skip-rewrite")
-            
+
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -177,7 +179,7 @@ def run_ingestion_task(task_id: str, file_path: str, subject_name: str, syllabus
             bufsize=1, # Line buffered
             universal_newlines=True
         )
-        
+
         # Read output line by line
         for line in iter(process.stdout.readline, ""):
             if not line:
@@ -185,24 +187,27 @@ def run_ingestion_task(task_id: str, file_path: str, subject_name: str, syllabus
             clean_line = line.strip()
             if clean_line:
                 print(f"[{task_id}] {clean_line}")
-                # Store last 50 lines for the UI
-                tasks[task_id]["logs"].append(clean_line)
-                if len(tasks[task_id]["logs"]) > 50:
-                    tasks[task_id]["logs"].pop(0)
-                tasks[task_id]["message"] = clean_line # Show latest log in status
-        
+                # Store last 50 lines for the UI (defensive against task deletion)
+                if task_id in tasks:
+                    tasks[task_id]["logs"].append(clean_line)
+                    if len(tasks[task_id]["logs"]) > 50:
+                        tasks[task_id]["logs"].pop(0)
+                    tasks[task_id]["message"] = clean_line # Show latest log in status
+
         process.wait()
-        
-        if process.returncode == 0:
-            tasks[task_id]["status"] = "completed"
-            tasks[task_id]["message"] = "Ingestion completed successfully."
-        else:
-            tasks[task_id]["status"] = "failed"
-            tasks[task_id]["message"] = f"Ingestion failed with exit code {process.returncode}."
-            
+
+        if task_id in tasks:
+            if process.returncode == 0:
+                tasks[task_id]["status"] = "completed"
+                tasks[task_id]["message"] = "Ingestion completed successfully."
+            else:
+                tasks[task_id]["status"] = "failed"
+                tasks[task_id]["message"] = f"Ingestion failed with exit code {process.returncode}."
+
     except Exception as e:
-        tasks[task_id]["status"] = "failed"
-        tasks[task_id]["message"] = f"Error during ingestion: {str(e)}"
+        if task_id in tasks:
+            tasks[task_id]["status"] = "failed"
+            tasks[task_id]["message"] = f"Error during ingestion: {str(e)}"
 
 @router.post("/ingest", response_model=TaskResponse)
 async def trigger_ingestion(request: IngestRequest, background_tasks: BackgroundTasks):
@@ -229,23 +234,27 @@ async def trigger_ingestion(request: IngestRequest, background_tasks: Background
 def run_exercise_task(task_id: str, subtopic_id: str, generate_images: bool, count: int = 5):
     """Background task for exercise generation."""
     from .main import DB_PATH
-    tasks[task_id]["status"] = "running"
+    # Defensive: task might be deleted by user while running
+    if task_id in tasks:
+        tasks[task_id]["status"] = "running"
     try:
         success = build_exercises_for_subtopic(
-            subtopic_id, 
-            generate_images=generate_images, 
+            subtopic_id,
+            generate_images=generate_images,
             count=count,
             db_path=DB_PATH
         )
-        if success:
-            tasks[task_id]["status"] = "completed"
-            tasks[task_id]["message"] = f"Exercises generated for {subtopic_id}"
-        else:
-            tasks[task_id]["status"] = "failed"
-            tasks[task_id]["message"] = f"Failed to generate exercises for {subtopic_id}"
+        if task_id in tasks:
+            if success:
+                tasks[task_id]["status"] = "completed"
+                tasks[task_id]["message"] = f"Exercises generated for {subtopic_id}"
+            else:
+                tasks[task_id]["status"] = "failed"
+                tasks[task_id]["message"] = f"Failed to generate exercises for {subtopic_id}"
     except Exception as e:
-        tasks[task_id]["status"] = "failed"
-        tasks[task_id]["message"] = f"Error: {str(e)}"
+        if task_id in tasks:
+            tasks[task_id]["status"] = "failed"
+            tasks[task_id]["message"] = f"Error: {str(e)}"
 
 @router.post("/generate-exercises", response_model=TaskResponse)
 async def generate_exercises(request: ExerciseRequest, background_tasks: BackgroundTasks):
@@ -1280,15 +1289,20 @@ def run_content_regenerate_task(
     from openai import OpenAI
     from .config_fastapi import settings
 
-    tasks[task_id]["status"] = "running"
-    tasks[task_id]["logs"] = []
+    # Initialize task status (defensive check in case task was deleted)
+    if task_id in tasks:
+        tasks[task_id]["status"] = "running"
+        tasks[task_id]["logs"] = []
 
     def add_log(message: str):
+        """Log message to console and task logs (defensive against task deletion)."""
         print(f"[{task_id}] {message}")
-        tasks[task_id]["logs"].append(message)
-        if len(tasks[task_id]["logs"]) > 50:
-            tasks[task_id]["logs"].pop(0)
-        tasks[task_id]["message"] = message
+        # Defensive: task might be deleted by user while background task is running
+        if task_id in tasks:
+            tasks[task_id]["logs"].append(message)
+            if len(tasks[task_id]["logs"]) > 50:
+                tasks[task_id]["logs"].pop(0)
+            tasks[task_id]["message"] = message
 
     try:
         conn = get_db_connection()
@@ -1311,13 +1325,15 @@ def run_content_regenerate_task(
             subtopics_to_process = [{"id": subtopic_id, "name": "requested subtopic"}]
         
         if not subtopics_to_process:
-            tasks[task_id]["status"] = "failed"
-            tasks[task_id]["message"] = "No subtopics found to process."
+            if task_id in tasks:
+                tasks[task_id]["status"] = "failed"
+                tasks[task_id]["message"] = "No subtopics found to process."
             return
 
         if not settings.LLM_API_KEY:
-            tasks[task_id]["status"] = "failed"
-            tasks[task_id]["message"] = "LLM_API_KEY not configured"
+            if task_id in tasks:
+                tasks[task_id]["status"] = "failed"
+                tasks[task_id]["message"] = "LLM_API_KEY not configured"
             return
 
         client = OpenAI(
@@ -1439,13 +1455,15 @@ Original HTML content:
             except Exception as llm_error:
                 add_log(f"❌ LLM error for {curr_sub_id}: {str(llm_error)}")
 
-        tasks[task_id]["status"] = "completed"
-        tasks[task_id]["message"] = f"Regeneration completed for {total_count} subtopics."
+        if task_id in tasks:
+            tasks[task_id]["status"] = "completed"
+            tasks[task_id]["message"] = f"Regeneration completed for {total_count} subtopics."
 
     except Exception as e:
         add_log(f"Fatal error: {str(e)}")
-        tasks[task_id]["status"] = "failed"
-        tasks[task_id]["message"] = f"Error: {str(e)}"
+        if task_id in tasks:
+            tasks[task_id]["status"] = "failed"
+            tasks[task_id]["message"] = f"Error: {str(e)}"
     finally:
         conn.close()
 
