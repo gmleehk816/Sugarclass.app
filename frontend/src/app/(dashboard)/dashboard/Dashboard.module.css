@@ -1,49 +1,21 @@
 .container {
     display: flex;
     flex-direction: column;
-    gap: 40px;
+    gap: 32px;
     animation: fadeIn 0.8s ease-out;
 }
 
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
+.mainGrid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 32px;
+    align-items: start;
 }
 
-.title {
-    font-size: clamp(2rem, 5vw, 3.2rem);
-    font-weight: 800;
-    color: var(--primary);
-    margin-bottom: 8px;
-    letter-spacing: -0.05em;
-    line-height: 1;
-}
-
-.subtitle {
-    color: #64748b;
-    font-size: 1.1rem;
-    font-weight: 500;
-}
-
-.headerAccents {
-    display: flex;
-    gap: 12px;
-    opacity: 0.8;
-}
-
-.statsGrid {
+.insightsGrid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 24px;
-}
-
-/* Dashboard Layout Grid - 3 Columns */
-.contentGrid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 32px;
-    align-items: start;
 }
 
 .sectionHeader {
@@ -51,106 +23,83 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    min-height: 40px;
 }
 
 .sectionHeader h2 {
-    font-size: 1.3rem;
+    font-size: 1.4rem;
     font-weight: 800;
     color: var(--primary);
     letter-spacing: -0.02em;
 }
 
-.subSectionTitle {
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: var(--primary);
-    margin-bottom: 12px;
-    margin-top: 24px;
+/* Shortcuts Column */
+.shortcutsColumn {
+    display: flex;
+    flex-direction: column;
+}
+
+.shortcutList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100%, 1fr));
+    gap: 16px;
+}
+
+/* Sidebar Column */
+.sidebarColumn {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    position: sticky;
+    top: 32px;
 }
 
 .seeAll {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 700;
     color: var(--accent);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
+    padding: 4px 12px;
     background: var(--accent-muted);
     border-radius: 100px;
-    transition: var(--transition-fast);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s ease;
 }
 
 .seeAll:hover {
     background: var(--accent);
     color: white;
-    transform: translateX(4px);
 }
 
-/* Column 1: Activity Overview */
-.activityOverview {
-    display: flex;
-    flex-direction: column;
-}
-
-.streakSection {
-    margin-bottom: 20px;
-}
-
-.chartCard {
-    padding: 24px;
+/* Activity Feed */
+.activityFeed {
     background: var(--card-bg);
     backdrop-filter: blur(12px);
     border-radius: var(--radius-lg);
     border: 1px solid var(--card-border);
-    box-shadow: var(--shadow-sm);
-}
-
-.quizSection {
-    margin-top: 8px;
-}
-
-/* Column 2: Middle Column */
-.middleColumn {
+    padding: 20px;
     display: flex;
     flex-direction: column;
+    gap: 12px;
 }
 
-.activityCard {
-    padding: 24px;
-    background: var(--card-bg);
-    backdrop-filter: blur(12px);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--card-border);
-    box-shadow: var(--shadow-sm);
-}
-
-.activityList {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.activityItem {
+.feedItem {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 12px;
+    gap: 12px;
+    padding: 10px;
     border-radius: var(--radius-md);
-    transition: var(--transition-fast);
-    border: 1px solid transparent;
+    transition: all 0.2s ease;
 }
 
-.activityItem:hover {
+.feedItem:hover {
     background: white;
-    box-shadow: var(--shadow-sm);
     transform: translateX(4px);
 }
 
-.activityIcon {
-    width: 40px;
-    height: 40px;
+.feedIcon {
+    width: 36px;
+    height: 36px;
     border-radius: 10px;
     display: flex;
     align-items: center;
@@ -158,236 +107,160 @@
     flex-shrink: 0;
 }
 
-.activityInfo {
+.feedContent {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 2px;
 }
 
-.activityName {
+.feedTitle {
+    font-size: 0.85rem;
     font-weight: 700;
-    font-size: 0.9rem;
     color: var(--primary);
 }
 
-.activityMeta {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+.feedTime {
+    font-size: 0.75rem;
+    color: #94a3b8;
 }
 
-.activityScore {
-    font-size: 0.75rem;
-    font-weight: 600;
+.feedScore {
+    font-size: 0.8rem;
+    font-weight: 800;
     color: #16a34a;
     background: #dcfce7;
-    padding: 2px 8px;
-    border-radius: 100px;
+    padding: 2px 6px;
+    border-radius: 6px;
 }
 
-.activityTime {
+.emptyFeed {
+    padding: 32px 0;
+    text-align: center;
     color: #94a3b8;
-    font-size: 0.8rem;
+}
+
+/* Widgets */
+.extraWidgets {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.tipWidget {
+    padding: 20px;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border-radius: var(--radius-lg);
+    border: 1px solid #bae6fd;
+}
+
+.tipHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #0284c7;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.tipWidget p {
+    font-size: 0.85rem;
+    color: #0369a1;
+    line-height: 1.5;
     font-weight: 500;
 }
 
-.emptyActivity {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 40px 20px;
-    color: #94a3b8;
-    text-align: center;
-}
-
-.emptyActivity p {
-    font-size: 0.85rem;
-}
-
-.serviceSection {
-    margin-top: 8px;
-}
-
-/* Column 3: Quick Launch */
-.quickLaunch {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.launchCard {
+/* Learning Focus Widget */
+.focusWidget {
     padding: 24px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    background: var(--card-bg);
-    backdrop-filter: blur(12px);
+    background: white;
     border-radius: var(--radius-lg);
     border: 1px solid var(--card-border);
-    transition: var(--transition-smooth);
-    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: var(--shadow-sm);
 }
 
-.launchCard:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
-    border-color: var(--accent-light);
+.focusHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--accent);
+    text-transform: uppercase;
 }
 
-.launchCard:hover .launchArrow {
-    opacity: 1;
-    transform: translateX(4px);
+.focusContent {
+    display: flex;
+    align-items: center;
+    gap: 16px;
 }
 
-.launchIconSquare {
+.focusIcon {
     width: 48px;
     height: 48px;
-    border-radius: 12px;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
 }
 
-.launchText {
-    flex: 1;
-}
-
-.launchText h3 {
+.focusInfo h3 {
     font-size: 1.1rem;
     font-weight: 800;
     color: var(--primary);
-    margin-bottom: 4px;
+    margin: 0;
 }
 
-.launchText p {
-    color: #64748b;
-    font-size: 0.85rem;
-    line-height: 1.4;
-}
-
-.launchArrow {
-    color: var(--accent);
-    opacity: 0;
-    transition: all 0.2s ease;
-}
-
-.tutorIcon {
-    background: #e0f2fe;
-    color: #0284c7;
-}
-
-.writerIcon {
-    background: #fef3c7;
-    color: #d97706;
-}
-
-/* Tips Card */
-.tipsCard {
-    padding: 20px;
-    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-    border-radius: var(--radius-md);
-    border: 1px solid #bae6fd;
-    margin-top: 8px;
-}
-
-.tipsHeader {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.focusInfo p {
     font-size: 0.8rem;
-    font-weight: 700;
-    color: #0284c7;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 8px;
+    color: #94a3b8;
+    margin: 0;
 }
 
-.tipsCard p {
-    font-size: 0.9rem;
-    color: #0369a1;
-    line-height: 1.5;
+.focusBarBg {
+    height: 8px;
+    background: #f1f5f9;
+    border-radius: 100px;
+    overflow: hidden;
 }
 
-/* Responsive: Large screens */
-@media (max-width: 1400px) {
-    .contentGrid {
-        grid-template-columns: 1fr 1fr;
+.focusBarFill {
+    height: 100%;
+    border-radius: 100px;
+    transition: width 1s ease-out;
+}
+
+.focusQuote {
+    font-size: 0.85rem;
+    color: #64748b;
+    font-style: italic;
+    line-height: 1.4;
+    margin: 0;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
     }
 
-    .quickLaunch {
-        grid-column: span 2;
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 16px;
-    }
-
-    .tipsCard {
-        grid-column: span 3;
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
-/* iPad Responsiveness */
 @media (max-width: 1024px) {
-    .statsGrid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 20px;
-    }
-
-    .contentGrid {
+    .mainGrid {
         grid-template-columns: 1fr;
-        gap: 32px;
     }
 
-    .quickLaunch {
-        grid-column: span 1;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .tipsCard {
-        grid-column: span 1;
-    }
-
-    .header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 16px;
-    }
-}
-
-/* Mobile Responsiveness */
-@media (max-width: 768px) {
-    .title {
-        font-size: 2.2rem;
-    }
-
-    .statsGrid {
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-    }
-
-    .container {
-        gap: 28px;
-    }
-
-    .activityCard,
-    .chartCard,
-    .launchCard {
-        padding: 20px;
-    }
-
-    .sectionHeader h2 {
-        font-size: 1.1rem;
-    }
-}
-
-/* Small Mobile */
-@media (max-width: 480px) {
-    .statsGrid {
-        grid-template-columns: 1fr;
+    .sidebarColumn {
+        position: static;
     }
 }

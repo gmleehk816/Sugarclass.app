@@ -7,3 +7,4 @@ class Token(BaseModel):
 
 class TokenPayload(BaseModel):
     sub: Optional[int] = None
+    is_superuser: Optional[bool] = False

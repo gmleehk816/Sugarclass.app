@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { serviceFetch } from '@/lib/microservices';
 import ChunkEditor from './components/ChunkEditor';
 import {
@@ -48,7 +49,7 @@ import {
     Strikethrough,
     Palette,
     Highlighter,
-    Link,
+    Link as LinkIcon,
     Minus,
     Maximize2,
     Minimize2,
@@ -59,9 +60,9 @@ import {
     ArrowDown,
     Move,
     Trash,
-    CornerDownLeft,
     MousePointer2,
-    Sparkles
+    Sparkles,
+    ArrowLeft
 } from "lucide-react";
 import { SERVICE_URLS } from '@/lib/microservices';
 
@@ -1706,609 +1707,641 @@ const AIMaterialsAdmin = () => {
     };
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: '24px', alignItems: 'start' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', minWidth: 0 }}>
-                {/* Tab Navigation */}
-                <div style={{ display: 'flex', gap: '8px', background: '#f1f5f9', padding: '6px', borderRadius: '12px', width: 'fit-content' }}>
-                    <button
-                        onClick={() => setActiveTab('uploader')}
-                        style={{
-                            ...tabButtonStyle,
-                            background: activeTab === 'uploader' ? 'white' : 'transparent',
-                            boxShadow: activeTab === 'uploader' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                            color: activeTab === 'uploader' ? '#1e293b' : '#64748b'
-                        }}
-                    >
-                        <Upload size={16} /> Uploader
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('database')}
-                        style={{
-                            ...tabButtonStyle,
-                            background: activeTab === 'database' ? 'white' : 'transparent',
-                            boxShadow: activeTab === 'database' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                            color: activeTab === 'database' ? '#1e293b' : '#64748b'
-                        }}
-                    >
-                        <Database size={16} /> Database
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('exercises')}
-                        style={{
-                            ...tabButtonStyle,
-                            background: activeTab === 'exercises' ? 'white' : 'transparent',
-                            boxShadow: activeTab === 'exercises' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                            color: activeTab === 'exercises' ? '#1e293b' : '#64748b'
-                        }}
-                    >
-                        <ListOrdered size={16} /> Exercises
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('contents')}
-                        style={{
-                            ...tabButtonStyle,
-                            background: activeTab === 'contents' ? 'white' : 'transparent',
-                            boxShadow: activeTab === 'contents' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                            color: activeTab === 'contents' ? '#1e293b' : '#64748b'
-                        }}
-                    >
-                        <FileText size={16} /> Contents
-                    </button>
-                </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <Link
+                href="/admin"
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    color: '#64748b',
+                    textDecoration: 'none',
+                    fontSize: '0.9rem',
+                    fontWeight: 600,
+                    width: 'fit-content',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    transition: 'all 0.2s',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0'
+                }}
+                onMouseOver={(e) => {
+                    e.currentTarget.style.background = '#f1f5f9';
+                    e.currentTarget.style.color = '#1e293b';
+                }}
+                onMouseOut={(e) => {
+                    e.currentTarget.style.background = '#f8fafc';
+                    e.currentTarget.style.color = '#64748b';
+                }}
+            >
+                <ArrowLeft size={16} />
+                Back to Admin Dashboard
+            </Link>
 
-                {activeTab === 'uploader' ? (
-                    <>
-                        {/* Upload & Ingest Section */}
-                        <div style={cardStyle}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                                <div style={{ background: '#fef3c7', padding: '8px', borderRadius: '8px' }}>
-                                    <Book size={20} color="#d97706" />
-                                </div>
-                                <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Ingest New Textbook</h2>
-                            </div>
-
-                            {!manualEntry ? (
-                                <div style={{ marginBottom: '24px' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '12px' }}>
-                                        {/* Level dropdown */}
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>Level</label>
-                                            <select
-                                                style={{ ...inputStyle, cursor: 'pointer', background: 'white' }}
-                                                value={selectedLevel}
-                                                onChange={(e) => {
-                                                    setSelectedLevel(e.target.value);
-                                                    setSelectedSubject('');
-                                                    setSelectedBoard('');
-                                                    if (e.target.value) {
-                                                        setSyllabus(e.target.value);
-                                                        setSubjectName('');
-                                                    }
-                                                }}
-                                            >
-                                                <option value="">Select level...</option>
-                                                {Object.keys(DATATREE).map(level => (
-                                                    <option key={level} value={level}>{level}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        {/* Subject dropdown */}
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>Subject</label>
-                                            <select
-                                                style={{ ...inputStyle, cursor: selectedLevel ? 'pointer' : 'not-allowed', background: selectedLevel ? 'white' : '#f8fafc' }}
-                                                value={selectedSubject}
-                                                disabled={!selectedLevel}
-                                                onChange={(e) => {
-                                                    setSelectedSubject(e.target.value);
-                                                    setSelectedBoard('');
-                                                    if (e.target.value) {
-                                                        const boards = selectedLevel ? DATATREE[selectedLevel]?.[e.target.value] : [];
-                                                        if (!boards || boards.length === 0) {
-                                                            // No board variants (IB, HKDSE) â€” use subject name directly
-                                                            setSubjectName(e.target.value);
-                                                        } else {
-                                                            setSubjectName('');
-                                                        }
-                                                    }
-                                                }}
-                                            >
-                                                <option value="">Select subject...</option>
-                                                {selectedLevel && DATATREE[selectedLevel] && Object.keys(DATATREE[selectedLevel]).sort().map(subject => (
-                                                    <option key={subject} value={subject}>{subject}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        {/* Board variant dropdown â€” only show if boards exist */}
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>Board / Exam</label>
-                                            <select
-                                                style={{
-                                                    ...inputStyle,
-                                                    cursor: (selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length > 0) ? 'pointer' : 'not-allowed',
-                                                    background: (selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length > 0) ? 'white' : '#f8fafc'
-                                                }}
-                                                value={selectedBoard}
-                                                disabled={!selectedSubject || !selectedLevel || !(DATATREE[selectedLevel]?.[selectedSubject]?.length > 0)}
-                                                onChange={(e) => {
-                                                    setSelectedBoard(e.target.value);
-                                                    if (e.target.value) {
-                                                        setSubjectName(e.target.value);
-                                                    }
-                                                }}
-                                            >
-                                                <option value="">
-                                                    {selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length === 0
-                                                        ? 'N/A (no variants)'
-                                                        : 'Select board...'}
-                                                </option>
-                                                {selectedLevel && selectedSubject && DATATREE[selectedLevel]?.[selectedSubject]?.map(board => (
-                                                    <option key={board} value={board}>{board}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {/* Breadcrumb showing selected path */}
-                                    {(selectedLevel || subjectName) && (
-                                        <div style={{
-                                            padding: '8px 14px',
-                                            background: '#f0f9ff',
-                                            borderRadius: '8px',
-                                            fontSize: '0.85rem',
-                                            color: '#0369a1',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '6px',
-                                            marginBottom: '4px'
-                                        }}>
-                                            <FileText size={14} />
-                                            <span>
-                                                {selectedLevel}
-                                                {selectedSubject && <> â€º {selectedSubject}</>}
-                                                {selectedBoard && <> â€º {selectedBoard}</>}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    <button
-                                        onClick={() => setManualEntry(true)}
-                                        style={{ background: 'none', border: 'none', fontSize: '0.8rem', color: '#94a3b8', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline' }}
-                                    >
-                                        or enter manually
-                                    </button>
-                                </div>
-                            ) : (
-                                <div style={{ marginBottom: '24px' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '8px' }}>
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>Subject Name</label>
-                                            <input
-                                                style={inputStyle}
-                                                type="text"
-                                                value={subjectName}
-                                                onChange={(e) => setSubjectName(e.target.value)}
-                                                placeholder="e.g. AQA Chemistry (7405)"
-                                            />
-                                        </div>
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>Syllabus</label>
-                                            <input
-                                                style={inputStyle}
-                                                type="text"
-                                                value={syllabus}
-                                                onChange={(e) => setSyllabus(e.target.value)}
-                                                placeholder="e.g. A-Level"
-                                            />
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => setManualEntry(false)}
-                                        style={{ background: 'none', border: 'none', fontSize: '0.8rem', color: '#94a3b8', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline' }}
-                                    >
-                                        â† back to tree selector
-                                    </button>
-                                </div>
-                            )}
-
-                            <div style={{ marginBottom: '24px' }}>
-                                <label style={labelStyle}>Textbook Markdown (.md)</label>
-                                <div style={{
-                                    border: '2px dashed #e2e8f0',
-                                    borderRadius: '12px',
-                                    padding: '32px',
-                                    textAlign: 'center',
-                                    cursor: 'pointer',
-                                    transition: 'border-color 0.2s',
-                                }}>
-                                    <input
-                                        type="file"
-                                        accept=".md,.json"
-                                        multiple
-                                        onChange={handleFileChange}
-                                        style={{ display: 'none' }}
-                                        id="file-upload"
-                                    />
-                                    <label htmlFor="file-upload" style={{ cursor: 'pointer' }}>
-                                        <Upload size={40} color="#94a3b8" style={{ marginBottom: '12px' }} />
-                                        <div style={{ fontWeight: 600, color: '#475569' }}>
-                                            {files.length > 0 ? (
-                                                <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
-                                                    {files.map((f, i) => (
-                                                        <li key={i} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
-                                                            {f.name.endsWith('.md') ? 'ðŸ“– ' : 'âš™ï¸ '} {f.name}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            ) : "Click to select markdown & structure JSON"}
-                                        </div>
-                                        <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Select textbook (.md) and optionally .structure.json</div>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={handleUploadAndIngest}
-                                disabled={uploading || files.length === 0}
-                                style={{
-                                    ...buttonStyle,
-                                    background: uploading || files.length === 0 ? '#94a3b8' : '#1e293b',
-                                }}
-                            >
-                                {uploading ? (
-                                    <><RefreshCw size={18} className="animate-spin" /> Processing...</>
-                                ) : (
-                                    <><Zap size={18} /> Upload & Process Content</>
-                                )}
-                            </button>
-                        </div>
-
-                    </>
-                ) : activeTab === 'database' ? (
-                    /* Database Filesystem Tree */
-                    <DatabaseFilesystemTree
-                        subjects={subjects}
-                        loadingSubjects={loadingSubjects}
-                        onRefresh={fetchSubjects}
-                        onDeleteSubject={handleDeleteSubject}
-                        onRenameSubject={handleRenameSubject}
-                    />
-                ) : activeTab === 'exercises' ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px' }}>
-                        {/* Subject/Topic/Subtopic Browser */}
-                        <div style={cardStyle}>
-                            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '16px' }}>Browse Subjects</h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {loadingSubjects ? (
-                                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
-                                ) : subjects.length === 0 ? (
-                                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No subjects found</div>
-                                ) : (
-                                    subjects.map((subject: any) => (
-                                        <SubjectExerciseBrowser
-                                            key={subject.id}
-                                            subject={subject}
-                                            onSelectSubtopic={fetchExercises}
-                                            selectedSubtopicId={selectedSubtopicId}
-                                        />
-                                    ))
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Exercise List */}
-                        <div style={cardStyle}>
-                            {selectedSubtopicId ? (
-                                <>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                                        <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Questions ({exercises.length})</h3>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button
-                                                onClick={() => handleGenerateExercises(selectedSubtopicId, true, 1)}
-                                                disabled={generatingExercises[selectedSubtopicId]}
-                                                style={{
-                                                    padding: '8px 16px',
-                                                    borderRadius: '8px',
-                                                    border: 'none',
-                                                    background: generatingExercises[selectedSubtopicId] ? '#94a3b8' : '#7c3aed',
-                                                    color: 'white',
-                                                    cursor: generatingExercises[selectedSubtopicId] ? 'not-allowed' : 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    fontSize: '0.9rem',
-                                                    fontWeight: 600,
-                                                    opacity: generatingExercises[selectedSubtopicId] ? 0.6 : 1
-                                                }}
-                                            >
-                                                <Zap size={16} /> {generatingExercises[selectedSubtopicId] && generationTasks[selectedSubtopicId] ? 'Generating...' : 'Generate One'}
-                                            </button>
-                                            <button
-                                                onClick={() => handleGenerateExercises(selectedSubtopicId, true, 5)}
-                                                disabled={generatingExercises[selectedSubtopicId]}
-                                                style={{
-                                                    padding: '8px 16px',
-                                                    borderRadius: '8px',
-                                                    border: 'none',
-                                                    background: generatingExercises[selectedSubtopicId] ? '#94a3b8' : '#4f46e5',
-                                                    color: 'white',
-                                                    cursor: generatingExercises[selectedSubtopicId] ? 'not-allowed' : 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    fontSize: '0.9rem',
-                                                    fontWeight: 600,
-                                                    opacity: generatingExercises[selectedSubtopicId] ? 0.6 : 1
-                                                }}
-                                            >
-                                                <Zap size={16} /> {generatingExercises[selectedSubtopicId] && generationTasks[selectedSubtopicId] ? 'Generating...' : 'Generate 5 with AI'}
-                                            </button>
-                                            <button
-                                                onClick={() => { setEditingExercise(null); setShowExerciseModal(true); }}
-                                                style={{
-                                                    padding: '8px 16px',
-                                                    borderRadius: '8px',
-                                                    border: 'none',
-                                                    background: '#10b981',
-                                                    color: 'white',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    fontSize: '0.9rem',
-                                                    fontWeight: 600
-                                                }}
-                                            >
-                                                <Plus size={16} /> Add Question
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {loadingExercises ? (
-                                        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading exercises...</div>
-                                    ) : exercises.length === 0 ? (
-                                        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-                                            No exercises yet. Click "Add Question" to create one.
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                            {exercises.map((ex: any) => (
-                                                <QuestionCard
-                                                    key={ex.id}
-                                                    exercise={ex}
-                                                    onEdit={() => { setEditingExercise(ex); setShowExerciseModal(true); }}
-                                                    onDelete={() => handleDeleteExercise(ex.id)}
-                                                    onRegenerate={() => handleRegenerateExercise(ex.id, selectedSubtopicId)}
-                                                />
-                                            ))}
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
-                                    <ListOrdered size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-                                    <div style={{ fontSize: '1rem' }}>Select a subtopic to view exercises</div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ) : activeTab === 'contents' ? (
-                    <ContentBrowser
-                        subjects={subjects}
-                        loadingSubjects={loadingSubjects}
-                        onRefresh={fetchSubjects}
-                        selectedSubtopicId={selectedContentSubtopicId}
-                        onSelectSubtopic={fetchContents}
-                        contents={contents}
-                        loadingContents={loadingContents}
-                        selectedContent={selectedContent}
-                        onSelectContent={setSelectedContent}
-                        onEdit={(content) => { setEditingContent(content); setShowContentEditModal(true); }}
-                        onRegenerate={(content) => { setSelectedContent(content); setShowRegenerateModal(true); }}
-                        onDelete={handleDeleteContent}
-                        regeneratingContent={regeneratingContent}
-                        onShowAdvancedOptions={(subtopicId) => {
-                            setSelectedContent({ subtopic_id: subtopicId });
-                            setShowRegenerateModal(true);
-                        }}
-                    />
-                ) : null}
-
-                {/* Status Message â€” visible on all tabs */}
-                {statusMessage && (
-                    <div style={{
-                        padding: '14px 20px',
-                        background: statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#fef2f2' : statusMessage.includes('âœ…') ? '#f0fdf4' : '#f0f9ff',
-                        borderLeft: `5px solid ${statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#ef4444' : statusMessage.includes('âœ…') ? '#22c55e' : '#0ea5e9'}`,
-                        borderRadius: '12px',
-                        fontSize: '0.95rem',
-                        fontWeight: 600,
-                        color: statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#991b1b' : statusMessage.includes('âœ…') ? '#166534' : '#0369a1',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '16px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
-                        animation: 'fadeIn 0.3s ease-out'
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {statusMessage.includes('âœ…') ? <CheckCircle2 size={18} /> :
-                                (statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? <AlertTriangle size={18} /> : <Clock size={18} />)}
-                            <span>{statusMessage}</span>
-                        </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: '24px', alignItems: 'start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', minWidth: 0 }}>
+                    {/* Tab Navigation */}
+                    <div style={{ display: 'flex', gap: '8px', background: '#f1f5f9', padding: '6px', borderRadius: '12px', width: 'fit-content' }}>
                         <button
-                            onClick={() => setStatusMessage('')}
+                            onClick={() => setActiveTab('uploader')}
                             style={{
-                                background: statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#fee2e2' : statusMessage.includes('âœ…') ? '#dcfce7' : '#e0f2fe',
-                                border: 'none',
-                                color: 'inherit',
-                                cursor: 'pointer',
-                                padding: '6px',
-                                borderRadius: '50%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.2s',
-                                flexShrink: 0
+                                ...tabButtonStyle,
+                                background: activeTab === 'uploader' ? 'white' : 'transparent',
+                                boxShadow: activeTab === 'uploader' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                color: activeTab === 'uploader' ? '#1e293b' : '#64748b'
                             }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.1)';
-                                e.currentTarget.style.background = 'white';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.background = statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#fee2e2' : statusMessage.includes('âœ…') ? '#dcfce7' : '#e0f2fe';
-                            }}
-                            title="Dismiss"
                         >
-                            <XIcon size={18} strokeWidth={2.5} />
+                            <Upload size={16} /> Uploader
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('database')}
+                            style={{
+                                ...tabButtonStyle,
+                                background: activeTab === 'database' ? 'white' : 'transparent',
+                                boxShadow: activeTab === 'database' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                color: activeTab === 'database' ? '#1e293b' : '#64748b'
+                            }}
+                        >
+                            <Database size={16} /> Database
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('exercises')}
+                            style={{
+                                ...tabButtonStyle,
+                                background: activeTab === 'exercises' ? 'white' : 'transparent',
+                                boxShadow: activeTab === 'exercises' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                color: activeTab === 'exercises' ? '#1e293b' : '#64748b'
+                            }}
+                        >
+                            <ListOrdered size={16} /> Exercises
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('contents')}
+                            style={{
+                                ...tabButtonStyle,
+                                background: activeTab === 'contents' ? 'white' : 'transparent',
+                                boxShadow: activeTab === 'contents' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                color: activeTab === 'contents' ? '#1e293b' : '#64748b'
+                            }}
+                        >
+                            <FileText size={16} /> Contents
                         </button>
                     </div>
-                )}
-            </div>
 
-            {/* Task monitor on the right */}
-            <div style={{ ...cardStyle, border: 'none', background: '#f8fafc', position: 'sticky', top: '120px', width: '300px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Task Monitor</h3>
-                    <RefreshCw size={16} color="#64748b" style={{ cursor: 'pointer' }} onClick={fetchTasks} />
-                </div>
+                    {activeTab === 'uploader' ? (
+                        <>
+                            {/* Upload & Ingest Section */}
+                            <div style={cardStyle}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                                    <div style={{ background: '#fef3c7', padding: '8px', borderRadius: '8px' }}>
+                                        <Book size={20} color="#d97706" />
+                                    </div>
+                                    <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Ingest New Textbook</h2>
+                                </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {Object.keys(tasks).length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                            <Clock size={32} color="#cbd5e1" style={{ marginBottom: '12px' }} />
-                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>No active tasks</div>
-                        </div>
-                    ) : (
-                        Object.entries(tasks).map(([id, info]: [string, any]) => (
-                            <div key={id} style={{
-                                background: 'white',
-                                padding: '16px',
-                                borderRadius: '12px',
-                                border: '1px solid #e2e8f0',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '8px'
-                            }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', color: '#94a3b8' }}>#{id.slice(0, 8)}</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        {info.status === 'completed' && <CheckCircle2 size={16} color="#22c55e" />}
-                                        {info.status === 'failed' && <XCircle size={16} color="#ef4444" />}
-                                        {info.status === 'running' && <RefreshCw size={16} color="#3b82f6" className="animate-spin" />}
-                                        <button
-                                            onClick={() => handleDismissTask(id)}
-                                            style={{
-                                                background: 'none',
-                                                border: 'none',
-                                                color: '#94a3b8',
-                                                cursor: 'pointer',
-                                                padding: '2px',
+                                {!manualEntry ? (
+                                    <div style={{ marginBottom: '24px' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '12px' }}>
+                                            {/* Level dropdown */}
+                                            <div style={inputGroupStyle}>
+                                                <label style={labelStyle}>Level</label>
+                                                <select
+                                                    style={{ ...inputStyle, cursor: 'pointer', background: 'white' }}
+                                                    value={selectedLevel}
+                                                    onChange={(e) => {
+                                                        setSelectedLevel(e.target.value);
+                                                        setSelectedSubject('');
+                                                        setSelectedBoard('');
+                                                        if (e.target.value) {
+                                                            setSyllabus(e.target.value);
+                                                            setSubjectName('');
+                                                        }
+                                                    }}
+                                                >
+                                                    <option value="">Select level...</option>
+                                                    {Object.keys(DATATREE).map(level => (
+                                                        <option key={level} value={level}>{level}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Subject dropdown */}
+                                            <div style={inputGroupStyle}>
+                                                <label style={labelStyle}>Subject</label>
+                                                <select
+                                                    style={{ ...inputStyle, cursor: selectedLevel ? 'pointer' : 'not-allowed', background: selectedLevel ? 'white' : '#f8fafc' }}
+                                                    value={selectedSubject}
+                                                    disabled={!selectedLevel}
+                                                    onChange={(e) => {
+                                                        setSelectedSubject(e.target.value);
+                                                        setSelectedBoard('');
+                                                        if (e.target.value) {
+                                                            const boards = selectedLevel ? DATATREE[selectedLevel]?.[e.target.value] : [];
+                                                            if (!boards || boards.length === 0) {
+                                                                // No board variants (IB, HKDSE) â€” use subject name directly
+                                                                setSubjectName(e.target.value);
+                                                            } else {
+                                                                setSubjectName('');
+                                                            }
+                                                        }
+                                                    }}
+                                                >
+                                                    <option value="">Select subject...</option>
+                                                    {selectedLevel && DATATREE[selectedLevel] && Object.keys(DATATREE[selectedLevel]).sort().map(subject => (
+                                                        <option key={subject} value={subject}>{subject}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Board variant dropdown â€” only show if boards exist */}
+                                            <div style={inputGroupStyle}>
+                                                <label style={labelStyle}>Board / Exam</label>
+                                                <select
+                                                    style={{
+                                                        ...inputStyle,
+                                                        cursor: (selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length > 0) ? 'pointer' : 'not-allowed',
+                                                        background: (selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length > 0) ? 'white' : '#f8fafc'
+                                                    }}
+                                                    value={selectedBoard}
+                                                    disabled={!selectedSubject || !selectedLevel || !(DATATREE[selectedLevel]?.[selectedSubject]?.length > 0)}
+                                                    onChange={(e) => {
+                                                        setSelectedBoard(e.target.value);
+                                                        if (e.target.value) {
+                                                            setSubjectName(e.target.value);
+                                                        }
+                                                    }}
+                                                >
+                                                    <option value="">
+                                                        {selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length === 0
+                                                            ? 'N/A (no variants)'
+                                                            : 'Select board...'}
+                                                    </option>
+                                                    {selectedLevel && selectedSubject && DATATREE[selectedLevel]?.[selectedSubject]?.map(board => (
+                                                        <option key={board} value={board}>{board}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* Breadcrumb showing selected path */}
+                                        {(selectedLevel || subjectName) && (
+                                            <div style={{
+                                                padding: '8px 14px',
+                                                background: '#f0f9ff',
+                                                borderRadius: '8px',
+                                                fontSize: '0.85rem',
+                                                color: '#0369a1',
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                justifyContent: 'center',
-                                                borderRadius: '4px'
-                                            }}
-                                            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                                            onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                                            title="Dismiss Task"
+                                                gap: '6px',
+                                                marginBottom: '4px'
+                                            }}>
+                                                <FileText size={14} />
+                                                <span>
+                                                    {selectedLevel}
+                                                    {selectedSubject && <> â€º {selectedSubject}</>}
+                                                    {selectedBoard && <> â€º {selectedBoard}</>}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        <button
+                                            onClick={() => setManualEntry(true)}
+                                            style={{ background: 'none', border: 'none', fontSize: '0.8rem', color: '#94a3b8', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline' }}
                                         >
-                                            <XIcon size={14} />
+                                            or enter manually
                                         </button>
                                     </div>
-                                </div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
-                                    {info.status.charAt(0).toUpperCase() + info.status.slice(1)}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {info.status === 'running' ? 'Ingesting...' : info.message}
+                                ) : (
+                                    <div style={{ marginBottom: '24px' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '8px' }}>
+                                            <div style={inputGroupStyle}>
+                                                <label style={labelStyle}>Subject Name</label>
+                                                <input
+                                                    style={inputStyle}
+                                                    type="text"
+                                                    value={subjectName}
+                                                    onChange={(e) => setSubjectName(e.target.value)}
+                                                    placeholder="e.g. AQA Chemistry (7405)"
+                                                />
+                                            </div>
+                                            <div style={inputGroupStyle}>
+                                                <label style={labelStyle}>Syllabus</label>
+                                                <input
+                                                    style={inputStyle}
+                                                    type="text"
+                                                    value={syllabus}
+                                                    onChange={(e) => setSyllabus(e.target.value)}
+                                                    placeholder="e.g. A-Level"
+                                                />
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setManualEntry(false)}
+                                            style={{ background: 'none', border: 'none', fontSize: '0.8rem', color: '#94a3b8', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline' }}
+                                        >
+                                            â† back to tree selector
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div style={{ marginBottom: '24px' }}>
+                                    <label style={labelStyle}>Textbook Markdown (.md)</label>
+                                    <div style={{
+                                        border: '2px dashed #e2e8f0',
+                                        borderRadius: '12px',
+                                        padding: '32px',
+                                        textAlign: 'center',
+                                        cursor: 'pointer',
+                                        transition: 'border-color 0.2s',
+                                    }}>
+                                        <input
+                                            type="file"
+                                            accept=".md,.json"
+                                            multiple
+                                            onChange={handleFileChange}
+                                            style={{ display: 'none' }}
+                                            id="file-upload"
+                                        />
+                                        <label htmlFor="file-upload" style={{ cursor: 'pointer' }}>
+                                            <Upload size={40} color="#94a3b8" style={{ marginBottom: '12px' }} />
+                                            <div style={{ fontWeight: 600, color: '#475569' }}>
+                                                {files.length > 0 ? (
+                                                    <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
+                                                        {files.map((f, i) => (
+                                                            <li key={i} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
+                                                                {f.name.endsWith('.md') ? 'ðŸ“– ' : 'âš™ï¸ '} {f.name}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                ) : "Click to select markdown & structure JSON"}
+                                            </div>
+                                            <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Select textbook (.md) and optionally .structure.json</div>
+                                        </label>
+                                    </div>
                                 </div>
 
-                                {info.logs && info.logs.length > 0 && (
-                                    <div style={{
-                                        marginTop: '12px',
-                                        padding: '12px',
-                                        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                                        borderRadius: '10px',
-                                        minHeight: '200px',
-                                        maxHeight: '300px',
-                                        overflowY: 'auto',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '4px',
-                                        boxShadow: info.status === 'running' ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
-                                        border: info.status === 'running' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid #334155'
-                                    }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', borderBottom: '1px solid #334155', paddingBottom: '8px' }}>
-                                            <Terminal size={14} color={info.status === 'running' ? '#3b82f6' : '#94a3b8'} />
-                                            <span style={{ fontSize: '0.75rem', color: info.status === 'running' ? '#3b82f6' : '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>LIVE LOGS</span>
-                                            {info.status === 'running' && (
-                                                <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', animation: 'pulse 1.5s infinite' }}></span>
-                                                    Processing
-                                                </span>
-                                            )}
-                                        </div>
-                                        {info.logs.slice(-15).map((log: string, i: number) => (
-                                            <div key={i} style={{
-                                                fontSize: '0.7rem',
-                                                fontFamily: 'ui-monospace, monospace',
-                                                color: i === info.logs.slice(-15).length - 1 ? '#22d3ee' : '#e2e8f0',
-                                                opacity: i === info.logs.slice(-15).length - 1 ? 1 : 0.75,
-                                                lineHeight: 1.5,
-                                                paddingLeft: '8px',
-                                                borderLeft: i === info.logs.slice(-15).length - 1 ? '2px solid #22d3ee' : '2px solid transparent'
-                                            }}>
-                                                {log}
+                                <button
+                                    onClick={handleUploadAndIngest}
+                                    disabled={uploading || files.length === 0}
+                                    style={{
+                                        ...buttonStyle,
+                                        background: uploading || files.length === 0 ? '#94a3b8' : '#1e293b',
+                                    }}
+                                >
+                                    {uploading ? (
+                                        <><RefreshCw size={18} className="animate-spin" /> Processing...</>
+                                    ) : (
+                                        <><Zap size={18} /> Upload & Process Content</>
+                                    )}
+                                </button>
+                            </div>
+
+                        </>
+                    ) : activeTab === 'database' ? (
+                        /* Database Filesystem Tree */
+                        <DatabaseFilesystemTree
+                            subjects={subjects}
+                            loadingSubjects={loadingSubjects}
+                            onRefresh={fetchSubjects}
+                            onDeleteSubject={handleDeleteSubject}
+                            onRenameSubject={handleRenameSubject}
+                        />
+                    ) : activeTab === 'exercises' ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '24px' }}>
+                            {/* Subject/Topic/Subtopic Browser */}
+                            <div style={cardStyle}>
+                                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '16px' }}>Browse Subjects</h3>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {loadingSubjects ? (
+                                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
+                                    ) : subjects.length === 0 ? (
+                                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No subjects found</div>
+                                    ) : (
+                                        subjects.map((subject: any) => (
+                                            <SubjectExerciseBrowser
+                                                key={subject.id}
+                                                subject={subject}
+                                                onSelectSubtopic={fetchExercises}
+                                                selectedSubtopicId={selectedSubtopicId}
+                                            />
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Exercise List */}
+                            <div style={cardStyle}>
+                                {selectedSubtopicId ? (
+                                    <>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Questions ({exercises.length})</h3>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button
+                                                    onClick={() => handleGenerateExercises(selectedSubtopicId, true, 1)}
+                                                    disabled={generatingExercises[selectedSubtopicId]}
+                                                    style={{
+                                                        padding: '8px 16px',
+                                                        borderRadius: '8px',
+                                                        border: 'none',
+                                                        background: generatingExercises[selectedSubtopicId] ? '#94a3b8' : '#7c3aed',
+                                                        color: 'white',
+                                                        cursor: generatingExercises[selectedSubtopicId] ? 'not-allowed' : 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        fontSize: '0.9rem',
+                                                        fontWeight: 600,
+                                                        opacity: generatingExercises[selectedSubtopicId] ? 0.6 : 1
+                                                    }}
+                                                >
+                                                    <Zap size={16} /> {generatingExercises[selectedSubtopicId] && generationTasks[selectedSubtopicId] ? 'Generating...' : 'Generate One'}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleGenerateExercises(selectedSubtopicId, true, 5)}
+                                                    disabled={generatingExercises[selectedSubtopicId]}
+                                                    style={{
+                                                        padding: '8px 16px',
+                                                        borderRadius: '8px',
+                                                        border: 'none',
+                                                        background: generatingExercises[selectedSubtopicId] ? '#94a3b8' : '#4f46e5',
+                                                        color: 'white',
+                                                        cursor: generatingExercises[selectedSubtopicId] ? 'not-allowed' : 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        fontSize: '0.9rem',
+                                                        fontWeight: 600,
+                                                        opacity: generatingExercises[selectedSubtopicId] ? 0.6 : 1
+                                                    }}
+                                                >
+                                                    <Zap size={16} /> {generatingExercises[selectedSubtopicId] && generationTasks[selectedSubtopicId] ? 'Generating...' : 'Generate 5 with AI'}
+                                                </button>
+                                                <button
+                                                    onClick={() => { setEditingExercise(null); setShowExerciseModal(true); }}
+                                                    style={{
+                                                        padding: '8px 16px',
+                                                        borderRadius: '8px',
+                                                        border: 'none',
+                                                        background: '#10b981',
+                                                        color: 'white',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        fontSize: '0.9rem',
+                                                        fontWeight: 600
+                                                    }}
+                                                >
+                                                    <Plus size={16} /> Add Question
+                                                </button>
                                             </div>
-                                        ))}
-                                        <div ref={(el) => { if (el) el.scrollIntoView({ behavior: 'smooth' }); }} />
+                                        </div>
+
+                                        {loadingExercises ? (
+                                            <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading exercises...</div>
+                                        ) : exercises.length === 0 ? (
+                                            <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                                                No exercises yet. Click "Add Question" to create one.
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                                {exercises.map((ex: any) => (
+                                                    <QuestionCard
+                                                        key={ex.id}
+                                                        exercise={ex}
+                                                        onEdit={() => { setEditingExercise(ex); setShowExerciseModal(true); }}
+                                                        onDelete={() => handleDeleteExercise(ex.id)}
+                                                        onRegenerate={() => handleRegenerateExercise(ex.id, selectedSubtopicId)}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
+                                        <ListOrdered size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                                        <div style={{ fontSize: '1rem' }}>Select a subtopic to view exercises</div>
                                     </div>
                                 )}
                             </div>
-                        )).reverse()
+                        </div>
+                    ) : activeTab === 'contents' ? (
+                        <ContentBrowser
+                            subjects={subjects}
+                            loadingSubjects={loadingSubjects}
+                            onRefresh={fetchSubjects}
+                            selectedSubtopicId={selectedContentSubtopicId}
+                            onSelectSubtopic={fetchContents}
+                            contents={contents}
+                            loadingContents={loadingContents}
+                            selectedContent={selectedContent}
+                            onSelectContent={setSelectedContent}
+                            onEdit={(content) => { setEditingContent(content); setShowContentEditModal(true); }}
+                            onRegenerate={(content) => { setSelectedContent(content); setShowRegenerateModal(true); }}
+                            onDelete={handleDeleteContent}
+                            regeneratingContent={regeneratingContent}
+                            onShowAdvancedOptions={(subtopicId) => {
+                                setSelectedContent({ subtopic_id: subtopicId });
+                                setShowRegenerateModal(true);
+                            }}
+                        />
+                    ) : null}
+
+                    {/* Status Message â€” visible on all tabs */}
+                    {statusMessage && (
+                        <div style={{
+                            padding: '14px 20px',
+                            background: statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#fef2f2' : statusMessage.includes('âœ…') ? '#f0fdf4' : '#f0f9ff',
+                            borderLeft: `5px solid ${statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#ef4444' : statusMessage.includes('âœ…') ? '#22c55e' : '#0ea5e9'}`,
+                            borderRadius: '12px',
+                            fontSize: '0.95rem',
+                            fontWeight: 600,
+                            color: statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#991b1b' : statusMessage.includes('âœ…') ? '#166534' : '#0369a1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '16px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                            animation: 'fadeIn 0.3s ease-out'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {statusMessage.includes('âœ…') ? <CheckCircle2 size={18} /> :
+                                    (statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? <AlertTriangle size={18} /> : <Clock size={18} />)}
+                                <span>{statusMessage}</span>
+                            </div>
+                            <button
+                                onClick={() => setStatusMessage('')}
+                                style={{
+                                    background: statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#fee2e2' : statusMessage.includes('âœ…') ? '#dcfce7' : '#e0f2fe',
+                                    border: 'none',
+                                    color: 'inherit',
+                                    cursor: 'pointer',
+                                    padding: '6px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'all 0.2s',
+                                    flexShrink: 0
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1.1)';
+                                    e.currentTarget.style.background = 'white';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                    e.currentTarget.style.background = statusMessage.startsWith('Error') || statusMessage.includes('âŒ') ? '#fee2e2' : statusMessage.includes('âœ…') ? '#dcfce7' : '#e0f2fe';
+                                }}
+                                title="Dismiss"
+                            >
+                                <XIcon size={18} strokeWidth={2.5} />
+                            </button>
+                        </div>
                     )}
                 </div>
+
+                {/* Task monitor on the right */}
+                <div style={{ ...cardStyle, border: 'none', background: '#f8fafc', position: 'sticky', top: '120px', width: '300px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Task Monitor</h3>
+                        <RefreshCw size={16} color="#64748b" style={{ cursor: 'pointer' }} onClick={fetchTasks} />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {Object.keys(tasks).length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                                <Clock size={32} color="#cbd5e1" style={{ marginBottom: '12px' }} />
+                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>No active tasks</div>
+                            </div>
+                        ) : (
+                            Object.entries(tasks).map(([id, info]: [string, any]) => (
+                                <div key={id} style={{
+                                    background: 'white',
+                                    padding: '16px',
+                                    borderRadius: '12px',
+                                    border: '1px solid #e2e8f0',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', color: '#94a3b8' }}>#{id.slice(0, 8)}</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {info.status === 'completed' && <CheckCircle2 size={16} color="#22c55e" />}
+                                            {info.status === 'failed' && <XCircle size={16} color="#ef4444" />}
+                                            {info.status === 'running' && <RefreshCw size={16} color="#3b82f6" className="animate-spin" />}
+                                            <button
+                                                onClick={() => handleDismissTask(id)}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: '#94a3b8',
+                                                    cursor: 'pointer',
+                                                    padding: '2px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    borderRadius: '4px'
+                                                }}
+                                                onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                                                onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                                                title="Dismiss Task"
+                                            >
+                                                <XIcon size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
+                                        {info.status.charAt(0).toUpperCase() + info.status.slice(1)}
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {info.status === 'running' ? 'Ingesting...' : info.message}
+                                    </div>
+
+                                    {info.logs && info.logs.length > 0 && (
+                                        <div style={{
+                                            marginTop: '12px',
+                                            padding: '12px',
+                                            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                                            borderRadius: '10px',
+                                            minHeight: '200px',
+                                            maxHeight: '300px',
+                                            overflowY: 'auto',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '4px',
+                                            boxShadow: info.status === 'running' ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
+                                            border: info.status === 'running' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid #334155'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', borderBottom: '1px solid #334155', paddingBottom: '8px' }}>
+                                                <Terminal size={14} color={info.status === 'running' ? '#3b82f6' : '#94a3b8'} />
+                                                <span style={{ fontSize: '0.75rem', color: info.status === 'running' ? '#3b82f6' : '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>LIVE LOGS</span>
+                                                {info.status === 'running' && (
+                                                    <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', animation: 'pulse 1.5s infinite' }}></span>
+                                                        Processing
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {info.logs.slice(-15).map((log: string, i: number) => (
+                                                <div key={i} style={{
+                                                    fontSize: '0.7rem',
+                                                    fontFamily: 'ui-monospace, monospace',
+                                                    color: i === info.logs.slice(-15).length - 1 ? '#22d3ee' : '#e2e8f0',
+                                                    opacity: i === info.logs.slice(-15).length - 1 ? 1 : 0.75,
+                                                    lineHeight: 1.5,
+                                                    paddingLeft: '8px',
+                                                    borderLeft: i === info.logs.slice(-15).length - 1 ? '2px solid #22d3ee' : '2px solid transparent'
+                                                }}>
+                                                    {log}
+                                                </div>
+                                            ))}
+                                            <div ref={(el) => { if (el) el.scrollIntoView({ behavior: 'smooth' }); }} />
+                                        </div>
+                                    )}
+                                </div>
+                            )).reverse()
+                        )}
+                    </div>
+                </div>
+
+                {/* Exercise Modal */}
+                {showExerciseModal && (
+                    <ExerciseModal
+                        exercise={editingExercise}
+                        onClose={() => {
+                            setShowExerciseModal(false);
+                            setEditingExercise(null);
+                        }}
+                        onSave={handleSaveExercise}
+                    />
+                )}
+
+                {/* Content Edit Modal */}
+                {showContentEditModal && editingContent && (
+                    <ChunkEditor
+                        content={editingContent}
+                        onClose={() => {
+                            setShowContentEditModal(false);
+                            setEditingContent(null);
+                        }}
+                        onSave={handleSaveContent}
+                    />
+                )}
+
+                {/* Content Regenerate Modal */}
+                {showRegenerateModal && selectedContent && (
+                    <ContentRegenerateModal
+                        options={regenerateOptions}
+                        setOptions={setRegenerateOptions}
+                        onConfirm={handleRegenerateContent}
+                        onClose={() => setShowRegenerateModal(false)}
+                        regenerating={regeneratingContent[selectedContent.subtopic_id] || false}
+                    />
+                )}
+
             </div>
-
-            {/* Exercise Modal */}
-            {showExerciseModal && (
-                <ExerciseModal
-                    exercise={editingExercise}
-                    onClose={() => {
-                        setShowExerciseModal(false);
-                        setEditingExercise(null);
-                    }}
-                    onSave={handleSaveExercise}
-                />
-            )}
-
-            {/* Content Edit Modal */}
-            {showContentEditModal && editingContent && (
-                <ChunkEditor
-                    content={editingContent}
-                    onClose={() => {
-                        setShowContentEditModal(false);
-                        setEditingContent(null);
-                    }}
-                    onSave={handleSaveContent}
-                />
-            )}
-
-            {/* Content Regenerate Modal */}
-            {showRegenerateModal && selectedContent && (
-                <ContentRegenerateModal
-                    options={regenerateOptions}
-                    setOptions={setRegenerateOptions}
-                    onConfirm={handleRegenerateContent}
-                    onClose={() => setShowRegenerateModal(false)}
-                    regenerating={regeneratingContent[selectedContent.subtopic_id] || false}
-                />
-            )}
-
         </div>
     );
 };

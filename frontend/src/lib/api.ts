@@ -44,7 +44,14 @@ export const auth = {
         method: 'POST',
         body: JSON.stringify(data),
     }),
-    me: () => apiFetch('/auth/me'),
+    me: () => apiFetch('/auth/me') as Promise<{
+        id: number;
+        email: string;
+        full_name: string | null;
+        is_active: boolean;
+        is_superuser: boolean;
+        created_at: string;
+    }>,
 };
 
 export const progress = {

@@ -2,7 +2,7 @@ from typing import Any, List
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, cast, Date
+from sqlalchemy import select, func, cast, Date, String
 
 from app.api import deps
 from app.db.session import get_db
@@ -200,6 +200,30 @@ async def get_dashboard_summary(
     )
     best_quiz_score = best_quiz_result.scalar()
 
+    # Calculate specific counters from activity types
+    total_articles = sum(t.count for t in activity_types if t.service == 'writer')
+    total_questions = sum(t.count for t in activity_types if t.service == 'examiner')
+    tutor_sessions = sum(t.count for t in activity_types if t.service == 'tutor')
+
+    # Calculate unique subjects from metadata_json
+    # We fetch all metadata records for the user and process in Python for maximum compatibility
+    all_metadata_result = await db.execute(
+        select(Progress.metadata_json)
+        .filter(Progress.user_id == current_user.id)
+    )
+    all_metadata = all_metadata_result.scalars().all()
+    
+    unique_subjects_set = set()
+    for meta in all_metadata:
+        if not meta:
+            continue
+        # Check common keys for subject
+        subject = meta.get("subject") or meta.get("subject_name") or meta.get("topic")
+        if subject:
+            unique_subjects_set.add(str(subject).lower().strip())
+    
+    unique_subjects = len(unique_subjects_set)
+
     return {
         "total_activities": total_count,
         "last_activity": last_activity,
@@ -214,6 +238,10 @@ async def get_dashboard_summary(
         "total_quizzes": total_quizzes,
         "avg_quiz_score": round(avg_quiz_score, 1) if avg_quiz_score else None,
         "best_quiz_score": best_quiz_score,
+        "total_articles": total_articles,
+        "total_questions": total_questions,
+        "tutor_sessions": tutor_sessions,
+        "unique_subjects": unique_subjects,
         "recent_history": recent_history
     }
 

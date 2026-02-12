@@ -16,6 +16,7 @@ class UserUpdate(UserBase):
 
 class User(UserBase):
     id: int
+    is_superuser: bool = False
     created_at: datetime
 
     class Config:
@@ -82,10 +83,16 @@ class DashboardSummary(BaseModel):
     # Streak information
     streak: StreakInfo
 
-    # Quiz/Examiner specific stats
+    # Performance metrics
     total_quizzes: int
     avg_quiz_score: Optional[float] = None
     best_quiz_score: Optional[int] = None
+    
+    # Specific metric counters
+    total_articles: int = 0
+    total_questions: int = 0
+    tutor_sessions: int = 0
+    unique_subjects: int = 0
 
     # Recent history
     recent_history: List[Progress]

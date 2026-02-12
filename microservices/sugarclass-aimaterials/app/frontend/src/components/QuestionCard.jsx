@@ -30,7 +30,7 @@ function QuestionCard({ question, index, total }) {
 
   const options = parseOptions(question.options);
   const questionText = question.question_text || question.text || '';
-  
+
   // Parse images - can be comma-separated list
   const imagePaths = (question.image_path || question.image || '').split(',').filter(p => p.trim());
 
@@ -39,10 +39,10 @@ function QuestionCard({ question, index, total }) {
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Box display="flex" gap={1} alignItems="center">
-            <Chip label={`Q${index + 1}`} color="primary" size="small" />
-            <Typography variant="caption" color="text.secondary">
-                {question.year} {question.paper} • {question.source_file}
-            </Typography>
+          <Chip label={`Q${index + 1}`} color="primary" size="small" />
+          <Typography variant="caption" color="text.secondary">
+            {question.year} {question.paper} • {question.source_file}
+          </Typography>
         </Box>
         <BookmarkBorder color="action" sx={{ cursor: 'pointer' }} />
       </Box>
@@ -54,70 +54,70 @@ function QuestionCard({ question, index, total }) {
 
       {/* Images from Q&A past papers */}
       {imagePaths.length > 0 && (
-          <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-              {imagePaths.map((imgPath, idx) => (
-                  <Box key={idx} sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: '#f8fafc' }}>
-                      <img 
-                          src={`/qa_images/${imgPath.trim()}`} 
-                          alt={`Question Diagram ${idx + 1}`} 
-                          style={{ maxHeight: 250, maxWidth: '100%', borderRadius: 4 }} 
-                      />
-                  </Box>
-              ))}
-          </Box>
+        <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+          {imagePaths.map((imgPath, idx) => (
+            <Box key={idx} sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: '#f8fafc' }}>
+              <img
+                src={`/qa_images/${imgPath.trim()}`}
+                alt={`Question Diagram ${idx + 1}`}
+                style={{ maxHeight: 250, maxWidth: '100%', borderRadius: 4 }}
+              />
+            </Box>
+          ))}
+        </Box>
       )}
 
       {/* Options */}
       {options && (
         <Box sx={{ display: 'grid', gridTemplateColumns: { md: '1fr 1fr', xs: '1fr' }, gap: 2, mb: 4 }}>
-            {Object.entries(options).map(([key, val]) => (
-                <Box 
-                    key={key} 
-                    sx={{ 
-                        p: 2, 
-                        border: 1, 
-                        borderColor: 'divider', 
-                        borderRadius: 1, 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 2,
-                        cursor: 'pointer',
-                        '&:hover': { bgcolor: '#f1f5f9' }
-                    }}
-                >
-                    <Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b' }}>
-                        {key}
-                    </Box>
-                    <Typography variant="body2">{val}</Typography>
-                </Box>
-            ))}
+          {Object.entries(options).map(([key, val]) => (
+            <Box
+              key={key}
+              sx={{
+                p: 2,
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+                cursor: 'pointer',
+                '&:hover': { bgcolor: '#f1f5f9' }
+              }}
+            >
+              <Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b' }}>
+                {key}
+              </Box>
+              <Typography variant="body2">{val}</Typography>
+            </Box>
+          ))}
         </Box>
       )}
 
       {/* Show Answer Button */}
       <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
-        <Button 
-            startIcon={<Visibility />} 
-            onClick={() => setShowAnswer(!showAnswer)}
-            sx={{ textTransform: 'none' }}
+        <Button
+          startIcon={<Visibility />}
+          onClick={() => setShowAnswer(!showAnswer)}
+          sx={{ textTransform: 'none' }}
         >
-            {showAnswer ? 'Hide Answer' : 'Show Answer'}
+          {showAnswer ? 'Hide Answer' : 'Show Answer'}
         </Button>
 
         <Collapse in={showAnswer} sx={{ mt: 2 }}>
-            <Alert severity="success" icon={false} sx={{ border: 1, borderColor: 'success.light', bgcolor: '#f0fdf4' }}>
-                <Box display="flex" gap={2}>
-                    <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: 'success.main', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem', flexShrink: 0 }}>
-                        {question.answer}
-                    </Box>
-                    <Box>
-                        <Typography variant="subtitle2" color="success.dark" fontWeight="bold" gutterBottom>Correct Answer</Typography>
-                        <Typography variant="body2" color="success.dark">
-                            {question.explanation}
-                        </Typography>
-                    </Box>
-                </Box>
-            </Alert>
+          <Alert severity="success" icon={false} sx={{ border: 1, borderColor: 'success.light', bgcolor: '#f0fdf4' }}>
+            <Box display="flex" gap={2}>
+              <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: 'success.main', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem', flexShrink: 0 }}>
+                {question.answer}
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" color="success.dark" fontWeight="bold" gutterBottom>Correct Answer</Typography>
+                <Typography variant="body2" color="success.dark">
+                  {question.explanation}
+                </Typography>
+              </Box>
+            </Box>
+          </Alert>
         </Collapse>
       </Box>
     </Paper>
