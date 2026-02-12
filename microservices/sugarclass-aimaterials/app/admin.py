@@ -907,6 +907,7 @@ class ContentRegenerateRequest(BaseModel):
     include_think_about_it: bool = True
     generate_images: bool = False
     generate_videos: bool = False  # placeholder for future
+    image_prompt: Optional[str] = None # Instructions specific to image generation
 
 class ChunkRegenerateRequest(BaseModel):
     """Request model for regenerating a specific chunk."""
@@ -1258,7 +1259,8 @@ def run_content_regenerate_task(
     include_key_terms: bool,
     include_summary: bool,
     include_think_about_it: bool,
-    generate_images: bool = False
+    generate_images: bool = False,
+    image_prompt: Optional[str] = None
 ):
     """Background task for content regeneration with options."""
     from .main import DB_PATH, get_db_connection
@@ -1329,6 +1331,7 @@ Do NOT include the original markdown - return only the enhanced HTML.
 IMPORTANT (IMAGE PLACEMENT):
 If "Generate Images" is requested, you MUST identify 2-3 optimal locations in the content where an illustrative image would be helpful. At these locations, insert the marker [GENERATE_IMAGE: descriptive prompt for the image].
 The prompt should be a detailed description of what the image should show to explain the surrounding text. Do NOT place images too close together.
+{f"IMAGE STYLE/THEME INSTRUCTIONS: {image_prompt}" if image_prompt else ""}
 
 Original HTML content:
 {html_content}"""
@@ -1449,7 +1452,8 @@ async def regenerate_content(
         request.include_key_terms,
         request.include_summary,
         request.include_think_about_it,
-        request.generate_images
+        request.generate_images,
+        request.image_prompt
     )
 
     return {"task_id": task_id, "status": "pending", "message": "Content regeneration started"}
