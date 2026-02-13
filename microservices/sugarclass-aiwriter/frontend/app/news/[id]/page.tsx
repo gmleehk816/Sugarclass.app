@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ArrowLeft, BookOpen, Clock, Sparkles } from 'lucide-react'
+import { ArrowLeft, BookOpen, Clock, Printer, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -65,15 +65,34 @@ export default function ArticlePage() {
         Health: 'bg-health',
     }
 
+    const handlePrint = () => {
+        window.print()
+    }
+
     return (
-        <div className="min-h-screen bg-background pt-4">
-            {/* Article Content */}
-            <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <>
+            <style jsx global>{`
+                @media print {
+                    .no-print {
+                        display: none !important;
+                    }
+                    body {
+                        background: white !important;
+                    }
+                    article {
+                        max-width: 100% !important;
+                        padding: 0 !important;
+                    }
+                }
+            `}</style>
+            <div className="min-h-screen bg-background pt-4">
+                {/* Article Content */}
+                <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Article Meta Bar */}
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-between mb-6"
+                    className="flex items-center justify-between mb-6 no-print"
                 >
                     <Link href="/news">
                         <motion.button
@@ -85,11 +104,23 @@ export default function ArticlePage() {
                             <span className="text-sm font-semibold">Back to Feed</span>
                         </motion.button>
                     </Link>
-                    <div className="flex items-center gap-2 px-4 py-2 bg-surface rounded-lg border border-border">
-                        <Clock className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-semibold text-text-primary">
-                            {readingTime} min read
-                        </span>
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-surface rounded-lg border border-border">
+                            <Clock className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-semibold text-text-primary">
+                                {readingTime} min read
+                            </span>
+                        </div>
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handlePrint}
+                            className="flex items-center gap-2 px-4 py-2 bg-surface rounded-lg border border-border hover:border-primary hover:text-primary transition-colors text-text-secondary"
+                            aria-label="Print article"
+                        >
+                            <Printer className="w-4 h-4" />
+                            <span className="text-sm font-semibold">Print</span>
+                        </motion.button>
                     </div>
                 </motion.div>
                 {/* Hero Image */}
@@ -173,7 +204,7 @@ export default function ArticlePage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="mt-12 bg-gradient-to-br from-ai-purple/10 to-sky-blue/10 rounded-2xl p-8 text-center border-2 border-ai-purple/20"
+                    className="mt-12 bg-gradient-to-br from-ai-purple/10 to-sky-blue/10 rounded-2xl p-8 text-center border-2 border-ai-purple/20 no-print"
                 >
                     <div className="flex justify-center mb-4">
                         <div className="w-16 h-16 bg-ai-purple rounded-full flex items-center justify-center">
@@ -199,7 +230,7 @@ export default function ArticlePage() {
 
                 {/* Source Link */}
                 {article.url && (
-                    <div className="mt-8 text-center">
+                    <div className="mt-8 text-center no-print">
                         <a
                             href={article.url}
                             target="_blank"
@@ -212,5 +243,6 @@ export default function ArticlePage() {
                 )}
             </article>
         </div>
+        </>
     )
 }
