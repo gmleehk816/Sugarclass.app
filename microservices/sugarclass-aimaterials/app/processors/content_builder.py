@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API Configuration
-API_KEY = os.getenv("NANO_BANANA_API_KEY", "sk-puvdcYfbp2Wu0Zyswmv6JiVOWEchC8Lr8K19LzbRqFr4ZuOp")
+API_KEY = os.getenv("NANO_BANANA_API_KEY", "")
 API_URL = os.getenv("NANO_BANANA_API_URL", "https://newapi.aisonnet.org/v1/chat/completions")
 MODEL = os.getenv("NANO_BANANA_MODEL", "nano-banana")
 

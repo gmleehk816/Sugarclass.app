@@ -26,7 +26,7 @@ GENERATED_IMAGES_DIR = APP_DIR / "generated_images"
 GENERATED_IMAGES_DIR.mkdir(exist_ok=True)
 
 # API Configuration
-API_KEY = os.getenv("NANO_BANANA_API_KEY", "sk-G1dul1YrH5Z7aWubh8rgiv7dodjM3DcpvOuPw6aKNomKt95M")
+API_KEY = os.getenv("NANO_BANANA_API_KEY", "")
 API_URL = os.getenv("NANO_BANANA_API_URL", "https://newapi.aisonnet.org/v1/chat/completions")
 MODEL = os.getenv("NANO_BANANA_MODEL", "nano-banana")
 

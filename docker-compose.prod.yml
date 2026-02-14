@@ -64,7 +64,7 @@ services:
     environment:
       POSTGRES_DB: sugarclass
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${SUGARCLASS_DB_PASSWORD:-sugarclass_secure_pass}
+      POSTGRES_PASSWORD: ${SUGARCLASS_DB_PASSWORD:-your-secure-sugarclass-db-pass}
     volumes:
       - sugarclass_db_data:/var/lib/postgresql/data
     networks:
@@ -81,8 +81,8 @@ services:
     container_name: sugarclass-backend
     # No exposed ports, accessed via gateway
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:${SUGARCLASS_DB_PASSWORD:-sugarclass_secure_pass}@sugarclass-db:5432/sugarclass
-      - SECRET_KEY=${SECRET_KEY:-sugarclass-prod-secret-key}
+      - DATABASE_URL=postgresql+asyncpg://postgres:${SUGARCLASS_DB_PASSWORD:-your-secure-sugarclass-db-pass}@sugarclass-db:5432/sugarclass
+      - SECRET_KEY=${SECRET_KEY:-your-secure-prod-secret-key}
     depends_on:
       sugarclass-db:
         condition: service_healthy
@@ -188,7 +188,7 @@ services:
     container_name: tutor-content-db
     environment:
       POSTGRES_USER: ${TUTOR_CONTENT_DB_USER:-tutor}
-      POSTGRES_PASSWORD: ${TUTOR_CONTENT_DB_PASSWORD:-tutor_content_pass}
+      POSTGRES_PASSWORD: ${TUTOR_CONTENT_DB_PASSWORD:-your-tutor-content-pass-here}
       POSTGRES_DB: ${TUTOR_CONTENT_DB_NAME:-tutor_content}
     volumes:
       - tutor_content_db_data:/var/lib/postgresql/data
@@ -208,7 +208,7 @@ services:
     container_name: tutor-agent-db
     environment:
       POSTGRES_USER: ${TUTOR_AGENT_DB_USER:-tutor}
-      POSTGRES_PASSWORD: ${TUTOR_AGENT_DB_PASSWORD:-tutor_agent_pass}
+      POSTGRES_PASSWORD: ${TUTOR_AGENT_DB_PASSWORD:-your-tutor-agent-pass-here}
       POSTGRES_DB: ${TUTOR_AGENT_DB_NAME:-tutor_agent}
     volumes:
       - tutor_agent_db_data:/var/lib/postgresql/data
@@ -329,7 +329,7 @@ services:
     environment:
       POSTGRES_DB: ${EXAMINER_DB_NAME:-examiner}
       POSTGRES_USER: ${EXAMINER_DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${EXAMINER_DB_PASSWORD:-examiner_secure_pass}
+      POSTGRES_PASSWORD: ${EXAMINER_DB_PASSWORD:-your-secure-examiner-db-pass}
     volumes:
       - aiexaminer_db_data:/var/lib/postgresql/data
     networks:
@@ -354,7 +354,7 @@ services:
       - EXAMINER_DB_PORT=5432
       - EXAMINER_DB_NAME=${EXAMINER_DB_NAME:-examiner}
       - EXAMINER_DB_USER=${EXAMINER_DB_USER:-postgres}
-      - EXAMINER_DB_PASSWORD=${EXAMINER_DB_PASSWORD:-examiner_secure_pass}
+      - EXAMINER_DB_PASSWORD=${EXAMINER_DB_PASSWORD:-your-secure-examiner-db-pass}
       - SUGARCLASS_API_URL=https://sugarclass.app/api/v1
       - CORS_ORIGINS=https://sugarclass.app,https://www.sugarclass.app
       - MOBILE_BASE_URL=https://sugarclass.app/examiner
@@ -408,7 +408,7 @@ services:
       - ./microservices/sugarclass-aimaterials/.env
     environment:
       - DB_PATH=/app/database/rag_content.db
-      - SECRET_KEY=${SECRET_KEY:-sugarclass-prod-secret-key}
+      - SECRET_KEY=${SECRET_KEY:-your-secure-prod-secret-key}
       - SUGARCLASS_API_URL=http://backend:8000/api/v1
     volumes:
       - ./microservices/sugarclass-aitutor/database:/app/database

@@ -13,7 +13,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.ssl_ import create_urllib3_context
 
 # Configuration
-API_KEY = "sk-S8qTUcN4th1J4VVVrBjesjhUp4FiZWKme4nqwHZ1Xtro7iOy"
+import os
+API_KEY = os.getenv("NANO_BANANA_API_KEY", "")
 API_URL = "https://newapi.pockgo.com/v1/chat/completions"
 TEXT_MODEL = "nano-banana"
 

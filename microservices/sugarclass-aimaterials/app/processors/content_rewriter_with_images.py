@@ -49,7 +49,7 @@ GENERATED_IMAGES_DIR = APP_DIR / "static" / "generated_images"
 GENERATED_IMAGES_DIR.mkdir(exist_ok=True)
 
 # API Configuration - Use LLM_API settings from .env, fallback to nano-banana
-API_KEY = os.getenv("LLM_API_KEY") or os.getenv("NANO_BANANA_API_KEY", "sk-G1dul1YrH5Z7aWubh8rgiv7dodjM3DcpvOuPw6aKNomKt95M")
+API_KEY = os.getenv("LLM_API_KEY") or os.getenv("NANO_BANANA_API_KEY", "")
 API_URL = os.getenv("LLM_API_URL") or os.getenv("NANO_BANANA_API_URL", "https://newapi.aisonnet.org/v1/chat/completions")
 if API_URL and not API_URL.endswith('/chat/completions'):
     API_URL = API_URL.rstrip('/') + '/chat/completions'

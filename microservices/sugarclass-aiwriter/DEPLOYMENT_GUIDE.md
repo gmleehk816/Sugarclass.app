@@ -166,7 +166,7 @@ NEXT_PUBLIC_API_URL=https://sugarclass.app/aiwriter/api
 # GEMINI AI CONFIGURATION
 # =============================================================================
 LLM_BASE_URL=https://hb.dockerspeeds.asia/
-LLM_API_KEY=sk-UDVPC6AcYWjDF8S1t4ujs75dmNoVddhnsT3AL3m10NF9kOTm
+LLM_API_KEY=your-api-key-here
 LLM_MODEL=gemini-3-flash-preview
 LLM_MODEL_SUMMARY=gemini-3-flash-preview
 LLM_MODEL_DRAFT=gemini-3-flash-preview

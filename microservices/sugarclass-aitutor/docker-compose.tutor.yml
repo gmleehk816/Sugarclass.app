@@ -10,7 +10,7 @@ services:
     container_name: tutor-content-db
     environment:
       POSTGRES_USER: ${CONTENT_DB_USER:-tutor}
-      POSTGRES_PASSWORD: ${CONTENT_DB_PASSWORD:-tutor_content_pass}
+      POSTGRES_PASSWORD: ${CONTENT_DB_PASSWORD:-your-tutor-content-pass-here}
       POSTGRES_DB: ${CONTENT_DB_NAME:-tutor_content}
     volumes:
       - content_db_data:/var/lib/postgresql/data
@@ -31,7 +31,7 @@ services:
     container_name: tutor-agent-db
     environment:
       POSTGRES_USER: ${AGENT_DB_USER:-tutor}
-      POSTGRES_PASSWORD: ${AGENT_DB_PASSWORD:-tutor_agent_pass}
+      POSTGRES_PASSWORD: ${AGENT_DB_PASSWORD:-your-tutor-agent-pass-here}
       POSTGRES_DB: ${AGENT_DB_NAME:-tutor_agent}
     volumes:
       - agent_db_data:/var/lib/postgresql/data
@@ -90,7 +90,7 @@ services:
     container_name: tutor-sync-agent
     environment:
       # Database connections
-      CONTENT_DB_URL: postgresql://${CONTENT_DB_USER:-tutor}:${CONTENT_DB_PASSWORD:-tutor_content_pass}@content-db:5432/${CONTENT_DB_NAME:-tutor_content}
+      CONTENT_DB_URL: postgresql://${CONTENT_DB_USER:-tutor}:${CONTENT_DB_PASSWORD:-your-tutor-content-pass-here}@content-db:5432/${CONTENT_DB_NAME:-tutor_content}
 
       # Vector store
       QDRANT_URL: http://qdrant:6333
@@ -162,8 +162,8 @@ services:
       - .env.prod
     environment:
       # Database connections
-      CONTENT_DB_URL: postgresql://${CONTENT_DB_USER:-tutor}:${CONTENT_DB_PASSWORD:-tutor_content_pass}@content-db:5432/${CONTENT_DB_NAME:-tutor_content}
-      AGENT_DB_URL: postgresql://${AGENT_DB_USER:-tutor}:${AGENT_DB_PASSWORD:-tutor_agent_pass}@agent-db:5432/${AGENT_DB_NAME:-tutor_agent}
+      CONTENT_DB_URL: postgresql://${CONTENT_DB_USER:-tutor}:${CONTENT_DB_PASSWORD:-your-tutor-content-pass-here}@content-db:5432/${CONTENT_DB_NAME:-tutor_content}
+      AGENT_DB_URL: postgresql://${AGENT_DB_USER:-tutor}:${AGENT_DB_PASSWORD:-your-tutor-agent-pass-here}@agent-db:5432/${AGENT_DB_NAME:-tutor_agent}
 
       # Vector store
       QDRANT_URL: http://qdrant:6333

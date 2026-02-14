@@ -68,7 +68,7 @@ services:
     environment:
       POSTGRES_DB: newscollect
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${AIWRITER_DB_PASSWORD:-NewsCollect2024!Secure}
+      POSTGRES_PASSWORD: ${AIWRITER_DB_PASSWORD:-your-secure-db-password-here}
     volumes:
       - aiwriter_db_data:/var/lib/postgresql/data
       - ./microservices/sugarclass-aiwriter/scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
@@ -95,6 +95,7 @@ services:
       POSTGRES_HOST: aiwriter-db
       POSTGRES_PORT: 5432
       SUGARCLASS_API_URL: http://backend:8000/api/v1
+      SECRET_KEY: ${SECRET_KEY:-your-secure-aiwriter-secret-key}
     ports:
       - "8001:8000"
     volumes:
@@ -156,6 +157,7 @@ services:
       - SQLITE_DB_PATH=./database/examiner.db
       - SUGARCLASS_API_URL=http://backend:8000/api/v1
       - MOBILE_BASE_URL=http://localhost:3403/examiner
+      - SECRET_KEY=${SECRET_KEY:-your-secure-examiner-secret-key}
     ports:
       - "8003:8000"
     volumes:
@@ -204,7 +206,7 @@ services:
     container_name: tutor-content-db
     environment:
       POSTGRES_USER: ${TUTOR_CONTENT_DB_USER:-tutor}
-      POSTGRES_PASSWORD: ${TUTOR_CONTENT_DB_PASSWORD:-tutor_content_pass}
+      POSTGRES_PASSWORD: ${TUTOR_CONTENT_DB_PASSWORD:-your-tutor-content-pass-here}
       POSTGRES_DB: ${TUTOR_CONTENT_DB_NAME:-tutor_content}
     volumes:
       - tutor_content_db_data:/var/lib/postgresql/data
@@ -225,7 +227,7 @@ services:
     container_name: tutor-agent-db
     environment:
       POSTGRES_USER: ${TUTOR_AGENT_DB_USER:-tutor}
-      POSTGRES_PASSWORD: ${TUTOR_AGENT_DB_PASSWORD:-tutor_agent_pass}
+      POSTGRES_PASSWORD: ${TUTOR_AGENT_DB_PASSWORD:-your-tutor-agent-pass-here}
       POSTGRES_DB: ${TUTOR_AGENT_DB_NAME:-tutor_agent}
     volumes:
       - tutor_agent_db_data:/var/lib/postgresql/data
@@ -281,8 +283,8 @@ services:
     env_file:
       - ./microservices/sugarclass-aitutor/.env.prod
     environment:
-      CONTENT_DB_URL: postgresql://${TUTOR_CONTENT_DB_USER:-tutor}:${TUTOR_CONTENT_DB_PASSWORD:-tutor_content_pass}@tutor-content-db:5432/${TUTOR_CONTENT_DB_NAME:-tutor_content}
-      AGENT_DB_URL: postgresql://${TUTOR_AGENT_DB_USER:-tutor}:${TUTOR_AGENT_DB_PASSWORD:-tutor_agent_pass}@tutor-agent-db:5432/${TUTOR_AGENT_DB_NAME:-tutor_agent}
+      CONTENT_DB_URL: postgresql://${TUTOR_CONTENT_DB_USER:-tutor}:${TUTOR_CONTENT_DB_PASSWORD:-your-tutor-content-pass-here}@tutor-content-db:5432/${TUTOR_CONTENT_DB_NAME:-tutor_content}
+      AGENT_DB_URL: postgresql://${TUTOR_AGENT_DB_USER:-tutor}:${TUTOR_AGENT_DB_PASSWORD:-your-tutor-agent-pass-here}@tutor-agent-db:5432/${TUTOR_AGENT_DB_NAME:-tutor_agent}
       QDRANT_URL: http://tutor-qdrant:6333
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-aitutor_documents}
       REDIS_URL: redis://tutor-redis:6379
@@ -321,7 +323,7 @@ services:
     env_file:
       - ./microservices/sugarclass-aitutor/.env.prod
     environment:
-      CONTENT_DB_URL: postgresql://${TUTOR_CONTENT_DB_USER:-tutor}:${TUTOR_CONTENT_DB_PASSWORD:-tutor_content_pass}@tutor-content-db:5432/${TUTOR_CONTENT_DB_NAME:-tutor_content}
+      CONTENT_DB_URL: postgresql://${TUTOR_CONTENT_DB_USER:-tutor}:${TUTOR_CONTENT_DB_PASSWORD:-your-tutor-content-pass-here}@tutor-content-db:5432/${TUTOR_CONTENT_DB_NAME:-tutor_content}
       QDRANT_URL: http://tutor-qdrant:6333
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-aitutor_documents}
       REDIS_HOST: tutor-redis

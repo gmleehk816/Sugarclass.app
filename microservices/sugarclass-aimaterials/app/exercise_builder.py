@@ -22,7 +22,7 @@ EXERCISE_IMAGES_DIR.mkdir(exist_ok=True)
 from dotenv import load_dotenv
 load_dotenv()
 
-API_KEY = os.environ.get("LLM_API_KEY", os.environ.get("NANO_BANANA_API_KEY", "sk-S8qTUcN4th1J4VVVrBjesjhUp4FiZWKme4nqwHZ1Xtro7iOy"))
+API_KEY = os.environ.get("LLM_API_KEY", os.environ.get("NANO_BANANA_API_KEY", ""))
 API_URL = os.environ.get("LLM_API_URL", os.environ.get("NANO_BANANA_API_URL", "https://newapi.pockgo.com/v1/chat/completions"))
 if API_URL and not API_URL.endswith('/chat/completions'):
     API_URL = API_URL.rstrip('/') + '/chat/completions'

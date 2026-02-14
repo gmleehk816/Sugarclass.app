@@ -36,7 +36,7 @@ The `.env` file contains:
 POSTGRES_PASSWORD=NewsCollect2024!Secure
 SECRET_KEY=NewsCollect2024!SecretKeyHere
 LLM_BASE_URL=https://hb.dockerspeeds.asia/
-LLM_API_KEY=sk-UDVPC6AcYWjDF8S1t4ujs75dmNoVddhnsT3AL3m10NF9kOTm
+LLM_API_KEY=your-api-key-here
 LLM_MODEL=gemini-3-flash-preview
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3002,https://sugarclass.app,https://www.sugarclass.app
 ```
