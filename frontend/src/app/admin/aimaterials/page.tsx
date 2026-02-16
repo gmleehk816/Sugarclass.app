@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { serviceFetch } from '@/lib/microservices';
 import ChunkEditor from './components/ChunkEditor';
+import V8ContentBrowser from './components/V8ContentBrowser';
 import {
     Upload,
     Book,
@@ -1439,7 +1440,6 @@ const AIMaterialsAdmin = () => {
     const [subjectName, setSubjectName] = useState('');
     const [syllabus, setSyllabus] = useState('');
     const [uploading, setUploading] = useState(false);
-    const [tasks, setTasks] = useState<Record<string, any>>({});
     const [statusMessage, setStatusMessage] = useState('');
     const [subtopicId, setSubtopicId] = useState('');
 
@@ -1448,31 +1448,10 @@ const AIMaterialsAdmin = () => {
     const [selectedSubject, setSelectedSubject] = useState('');
     const [selectedBoard, setSelectedBoard] = useState('');
     const [manualEntry, setManualEntry] = useState(false);
-    const [loadingTasks, setLoadingTasks] = useState(false);
-    const [activeTab, setActiveTab] = useState<'uploader' | 'database' | 'exercises' | 'contents'>('uploader');
+    const [activeTab, setActiveTab] = useState<'uploader' | 'database' | 'v8'>('uploader');
     const [subjects, setSubjects] = useState<any[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState(false);
-
-    // Exercise management state
-    const [exercises, setExercises] = useState<any[]>([]);
-    const [selectedSubtopicId, setSelectedSubtopicId] = useState<string>('');
-    const [loadingExercises, setLoadingExercises] = useState(false);
-    const [editingExercise, setEditingExercise] = useState<any | null>(null);
-    const [showExerciseModal, setShowExerciseModal] = useState(false);
-    const [generatingExercises, setGeneratingExercises] = useState<Record<string, boolean>>({});
-    const [generationTasks, setGenerationTasks] = useState<Record<string, string>>({});
-
-    // Content management state
-    const [contents, setContents] = useState<any[]>([]);
-    const [selectedContentSubtopicId, setSelectedContentSubtopicId] = useState<string>('');
-    const [loadingContents, setLoadingContents] = useState(false);
-    const [selectedContent, setSelectedContent] = useState<any | null>(null);
-    const [editingContent, setEditingContent] = useState<any | null>(null);
-    const [showContentEditModal, setShowContentEditModal] = useState(false);
-    const [showRegenerateModal, setShowRegenerateModal] = useState(false);
-    const [regeneratingContent, setRegeneratingContent] = useState<{ [key: string]: boolean }>({});
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
-    const [prevTasks, setPrevTasks] = useState<Record<string, any>>({});
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -1482,44 +1461,6 @@ const AIMaterialsAdmin = () => {
 
     const isTablet = windowWidth <= 1024;
     const isMobile = windowWidth <= 768;
-    const [regenerateOptions, setRegenerateOptions] = useState({
-        focus: '',
-        temperature: 0.7,
-        include_key_terms: true,
-        include_summary: true,
-        include_think_about_it: true,
-        generate_images: false,
-        generate_videos: false,
-        custom_prompt: '',
-        apply_to_full_book: false
-    });
-
-    const fetchTasks = async () => {
-        try {
-            const data = await serviceFetch('aimaterials', '/api/admin/tasks');
-            setTasks(data);
-        } catch (err) {
-            console.error('Error fetching tasks', err);
-        }
-    };
-
-    const handleDismissTask = async (taskId: string) => {
-        try {
-            await serviceFetch('aimaterials', `/api/admin/tasks/${taskId}`, {
-                method: 'DELETE'
-            });
-            // Update local state immediately for snappy feel
-            setTasks(prev => {
-                const next = { ...prev };
-                delete next[taskId];
-                return next;
-            });
-        } catch (err) {
-            console.error('Error dismissing task', err);
-            // Refresh tasks anyway to stay in sync
-            fetchTasks();
-        }
-    };
 
     const fetchSubjects = async () => {
         setLoadingSubjects(true);
@@ -1534,100 +1475,13 @@ const AIMaterialsAdmin = () => {
     };
 
     useEffect(() => {
-        fetchTasks();
-        const interval = setInterval(fetchTasks, 5000);
-        return () => clearInterval(interval);
-    }, []);
-
-    // Task Completion Auto-Refresh
-    useEffect(() => {
-        Object.entries(tasks).forEach(([id, currentTask]) => {
-            const prevTask = prevTasks[id];
-            // Check if task just finished (running -> completed/failed)
-            if (prevTask && prevTask.status === 'running' && (currentTask.status === 'completed' || currentTask.status === 'failed')) {
-                console.log(`Task ${id} finished with status: ${currentTask.status}, auto-refreshing data...`);
-
-                // Always refresh subjects/database tree as most tasks affect it
-                fetchSubjects();
-
-                // Refresh specific views based on active tab
-                if (activeTab === 'contents' && selectedContentSubtopicId) {
-                    fetchContents(selectedContentSubtopicId);
-                }
-                if (activeTab === 'exercises' && selectedSubtopicId) {
-                    fetchExercises(selectedSubtopicId);
-                }
-            }
-        });
-        // Update prevTasks for next comparison
-        setPrevTasks(tasks);
-    }, [tasks]);
-
-    useEffect(() => {
         if (activeTab === 'database') {
             fetchSubjects();
         }
-        if (activeTab === 'exercises') {
-            fetchSubjects(); // Load subjects for exercise browser
-        }
-        if (activeTab === 'contents') {
-            fetchSubjects(); // Load subjects for content browser
+        if (activeTab === 'v8') {
+            fetchSubjects(); // Load subjects for V8 content browser (as fallback)
         }
     }, [activeTab]);
-
-    const fetchExercises = async (subtopicId: string) => {
-        setLoadingExercises(true);
-        try {
-            const data = await serviceFetch('aimaterials', `/api/admin/exercises?subtopic_id=${subtopicId}`);
-            setExercises(data);
-            setSelectedSubtopicId(subtopicId);
-        } catch (err) {
-            console.error('Error fetching exercises', err);
-        } finally {
-            setLoadingExercises(false);
-        }
-    };
-
-    const handleSaveExercise = async (formData: any) => {
-        try {
-            if (editingExercise) {
-                // Update existing
-                await serviceFetch('aimaterials', `/api/admin/exercises/${editingExercise.id}`, {
-                    method: 'PUT',
-                    body: JSON.stringify(formData)
-                });
-                setStatusMessage('Exercise updated successfully');
-            } else {
-                // Create new
-                await serviceFetch('aimaterials', '/api/admin/exercises', {
-                    method: 'POST',
-                    body: JSON.stringify({ ...formData, subtopic_id: selectedSubtopicId })
-                });
-                setStatusMessage('Exercise created successfully');
-            }
-            setShowExerciseModal(false);
-            setEditingExercise(null);
-            fetchExercises(selectedSubtopicId);
-        } catch (err: any) {
-            console.error('Error saving exercise', err);
-            setStatusMessage(`Error: ${err.message}`);
-        }
-    };
-
-    const handleDeleteExercise = async (exerciseId: number) => {
-        if (!confirm('Are you sure you want to delete this question?')) return;
-
-        try {
-            await serviceFetch('aimaterials', `/api/admin/exercises/${exerciseId}`, {
-                method: 'DELETE'
-            });
-            setStatusMessage('Exercise deleted');
-            fetchExercises(selectedSubtopicId);
-        } catch (err: any) {
-            console.error('Error deleting exercise', err);
-            setStatusMessage(`Error: ${err.message}`);
-        }
-    };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -1688,79 +1542,12 @@ const AIMaterialsAdmin = () => {
             });
 
             setStatusMessage(`Ingestion started! Task ID: ${ingestRes.task_id}`);
-            fetchTasks();
             setFiles([]); // Clear after success
         } catch (err: any) {
             console.error('Error in upload/ingest', err);
             setStatusMessage(`Error: ${err.message}`);
         } finally {
             setUploading(false);
-        }
-    };
-
-    const handleGenerateExercises = async (subtopicId: string, generateImages: boolean = true, count: number = 5) => {
-        setGeneratingExercises(prev => ({ ...prev, [subtopicId]: true }));
-        try {
-            const response = await serviceFetch('aimaterials', '/api/admin/generate-exercises', {
-                method: 'POST',
-                body: JSON.stringify({
-                    subtopic_id: subtopicId,
-                    generate_images: generateImages,
-                    count: count
-                }),
-            });
-
-            const taskId = response.task_id;
-            setGenerationTasks(prev => ({ ...prev, [subtopicId]: taskId }));
-
-            // Poll task status
-            const pollInterval = setInterval(async () => {
-                try {
-                    const taskStatus = await serviceFetch('aimaterials', `/api/admin/tasks/${taskId}`);
-
-                    if (taskStatus.status === 'completed') {
-                        clearInterval(pollInterval);
-                        setGeneratingExercises(prev => ({ ...prev, [subtopicId]: false }));
-                        // Refresh exercises if this is the currently selected subtopic
-                        if (selectedSubtopicId === subtopicId) {
-                            await fetchExercises(subtopicId);
-                        }
-                    } else if (taskStatus.status === 'failed') {
-                        clearInterval(pollInterval);
-                        setGeneratingExercises(prev => ({ ...prev, [subtopicId]: false }));
-                        alert(`Generation failed: ${taskStatus.message}`);
-                    }
-                } catch (err) {
-                    console.error('Error polling task status', err);
-                }
-            }, 3000);
-
-            // Stop polling after 5 minutes
-            setTimeout(() => clearInterval(pollInterval), 300000);
-
-        } catch (err) {
-            console.error('Error generating exercises', err);
-            setGeneratingExercises(prev => ({ ...prev, [subtopicId]: false }));
-            alert('Failed to start exercise generation');
-        }
-    };
-
-    const handleRegenerateExercise = async (exerciseId: number, subtopicId: string) => {
-        if (!confirm('Are you sure you want to regenerate this question? The current one will be deleted.')) return;
-
-        try {
-            // 1. Delete the exercise
-            await serviceFetch('aimaterials', `/api/admin/exercises/${exerciseId}`, {
-                method: 'DELETE'
-            });
-
-            // 2. Generate a new one
-            await handleGenerateExercises(subtopicId, true, 1);
-
-            setStatusMessage('Regeneration started...');
-        } catch (err: any) {
-            console.error('Error regenerating exercise', err);
-            setStatusMessage(`Error: ${err.message}`);
         }
     };
 
@@ -1792,128 +1579,6 @@ const AIMaterialsAdmin = () => {
         } catch (err: any) {
             console.error('Error renaming subject', err);
             setStatusMessage(`Error: ${err.message}`);
-        }
-    };
-
-    // Content management handlers
-    const fetchContents = async (subtopicId: string) => {
-        setLoadingContents(true);
-        try {
-            const data = await serviceFetch('aimaterials', `/api/admin/contents?subtopic_id=${subtopicId}`);
-            setContents(data);
-            setSelectedContentSubtopicId(subtopicId);
-            if (data.length > 0) {
-                setSelectedContent(data[0]);
-            } else {
-                setSelectedContent(null);
-            }
-        } catch (err) {
-            console.error('Error fetching contents', err);
-        } finally {
-            setLoadingContents(false);
-        }
-    };
-
-    const handleSaveContent = async (formData: any) => {
-        try {
-            await serviceFetch('aimaterials', `/api/admin/contents/${editingContent.id}`, {
-                method: 'PUT',
-                body: JSON.stringify(formData)
-            });
-            setStatusMessage('Content updated successfully');
-            setShowContentEditModal(false);
-            setEditingContent(null);
-            fetchContents(selectedContentSubtopicId);
-        } catch (err: any) {
-            console.error('Error saving content', err);
-            setStatusMessage(`Error: ${err.message}`);
-        }
-    };
-
-    const handleDeleteContent = async (contentId: number) => {
-        if (!confirm('Are you sure you want to delete this processed content? The raw content will be preserved for re-processing.')) {
-            return;
-        }
-
-        try {
-            await serviceFetch('aimaterials', `/api/admin/contents/${contentId}`, {
-                method: 'DELETE'
-            });
-            setStatusMessage('Content deleted successfully. Raw content preserved.');
-            fetchContents(selectedContentSubtopicId);
-        } catch (err: any) {
-            console.error('Error deleting content', err);
-            setStatusMessage(`Error: ${err.message}`);
-        }
-    };
-
-    const handleRegenerateContent = async () => {
-        if (!selectedContent) return;
-
-        const subtopicId = selectedContent.subtopic_id;
-        setRegeneratingContent(prev => ({ ...prev, [subtopicId]: true }));
-
-        try {
-            // Use default options for quick generation, or modal options if set
-            const options = showRegenerateModal ? regenerateOptions : {
-                focus: '',
-                temperature: 0.7,
-                include_key_terms: true,
-                include_summary: true,
-                include_think_about_it: true,
-                generate_images: false,
-                generate_videos: false,
-                custom_prompt: '',
-                apply_to_full_book: false
-            };
-
-            const endpoint = options.apply_to_full_book && selectedContent.subject_id
-                ? `/api/admin/contents/regenerate?subject_id=${selectedContent.subject_id}`
-                : `/api/admin/contents/regenerate?subtopic_id=${subtopicId}`;
-
-            const result = await serviceFetch('aimaterials', endpoint, {
-                method: 'POST',
-                body: JSON.stringify(options)
-            });
-            setShowRegenerateModal(false);
-            setStatusMessage('Content regeneration started...');
-            fetchTasks(); // Refresh to see the task
-
-            const taskId = result.task_id;
-
-            // Poll for task completion and refresh contents
-            const pollInterval = setInterval(async () => {
-                try {
-                    fetchTasks();
-                    if (taskId) {
-                        const taskStatus = await serviceFetch('aimaterials', `/api/admin/tasks/${taskId}`);
-                        if (taskStatus.status === 'completed') {
-                            clearInterval(pollInterval);
-                            setRegeneratingContent(prev => ({ ...prev, [subtopicId]: false }));
-                            setStatusMessage('âœ… Content regenerated successfully!');
-                            fetchContents(subtopicId);
-                        } else if (taskStatus.status === 'failed') {
-                            clearInterval(pollInterval);
-                            setRegeneratingContent(prev => ({ ...prev, [subtopicId]: false }));
-                            setStatusMessage(`âŒ Regeneration failed: ${taskStatus.message}`);
-                        }
-                    } else {
-                        fetchContents(subtopicId);
-                    }
-                } catch (pollErr) {
-                    console.error('Error polling task', pollErr);
-                }
-            }, 3000);
-
-            // Stop polling after 2 minutes
-            setTimeout(() => {
-                clearInterval(pollInterval);
-                setRegeneratingContent(prev => ({ ...prev, [subtopicId]: false }));
-            }, 120000);
-        } catch (err: any) {
-            console.error('Error regenerating content', err);
-            setStatusMessage(`Error: ${err.message}`);
-            setRegeneratingContent(prev => ({ ...prev, [selectedContent.subtopic_id]: false }));
         }
     };
 
@@ -1991,26 +1656,15 @@ const AIMaterialsAdmin = () => {
                             <Database size={16} /> Database
                         </button>
                         <button
-                            onClick={() => setActiveTab('exercises')}
+                            onClick={() => setActiveTab('v8')}
                             style={{
                                 ...tabButtonStyle,
-                                background: activeTab === 'exercises' ? 'white' : 'transparent',
-                                boxShadow: activeTab === 'exercises' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                color: activeTab === 'exercises' ? '#1e293b' : '#64748b'
+                                background: activeTab === 'v8' ? 'white' : 'transparent',
+                                boxShadow: activeTab === 'v8' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                color: activeTab === 'v8' ? '#1e293b' : '#64748b'
                             }}
                         >
-                            <ListOrdered size={16} /> Exercises
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('contents')}
-                            style={{
-                                ...tabButtonStyle,
-                                background: activeTab === 'contents' ? 'white' : 'transparent',
-                                boxShadow: activeTab === 'contents' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                color: activeTab === 'contents' ? '#1e293b' : '#64748b'
-                            }}
-                        >
-                            <FileText size={16} /> Contents
+                            <Sparkles size={16} /> V8 Content
                         </button>
                     </div>
 
@@ -2266,155 +1920,17 @@ const AIMaterialsAdmin = () => {
                             isMobile={isMobile}
                             isTablet={isTablet}
                         />
-                    ) : activeTab === 'exercises' ? (
-                        <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: isTablet ? '1fr' : '300px 1fr',
-                            gap: '24px'
-                        }}>
-                            {/* Subject/Topic/Subtopic Browser */}
-                            <div style={cardStyle(isMobile)}>
-                                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '16px' }}>Browse Subjects</h3>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    {loadingSubjects ? (
-                                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
-                                    ) : subjects.length === 0 ? (
-                                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No subjects found</div>
-                                    ) : (
-                                        subjects.map((subject: any) => (
-                                            <SubjectExerciseBrowser
-                                                key={subject.id}
-                                                subject={subject}
-                                                onSelectSubtopic={fetchExercises}
-                                                selectedSubtopicId={selectedSubtopicId}
-                                                isMobile={isMobile}
-                                            />
-                                        ))
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Exercise List */}
-                            <div style={cardStyle(isMobile)}>
-                                {selectedSubtopicId ? (
-                                    <>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Questions ({exercises.length})</h3>
-                                            <div style={{ display: 'flex', gap: '8px' }}>
-                                                <button
-                                                    onClick={() => handleGenerateExercises(selectedSubtopicId, true, 1)}
-                                                    disabled={generatingExercises[selectedSubtopicId]}
-                                                    style={{
-                                                        padding: '8px 16px',
-                                                        borderRadius: '8px',
-                                                        border: 'none',
-                                                        background: generatingExercises[selectedSubtopicId] ? '#94a3b8' : '#7c3aed',
-                                                        color: 'white',
-                                                        cursor: generatingExercises[selectedSubtopicId] ? 'not-allowed' : 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        fontSize: '0.9rem',
-                                                        fontWeight: 600,
-                                                        opacity: generatingExercises[selectedSubtopicId] ? 0.6 : 1
-                                                    }}
-                                                >
-                                                    <Zap size={16} /> {generatingExercises[selectedSubtopicId] && generationTasks[selectedSubtopicId] ? 'Generating...' : 'Generate One'}
-                                                </button>
-                                                <button
-                                                    onClick={() => handleGenerateExercises(selectedSubtopicId, true, 5)}
-                                                    disabled={generatingExercises[selectedSubtopicId]}
-                                                    style={{
-                                                        padding: '8px 16px',
-                                                        borderRadius: '8px',
-                                                        border: 'none',
-                                                        background: generatingExercises[selectedSubtopicId] ? '#94a3b8' : '#4f46e5',
-                                                        color: 'white',
-                                                        cursor: generatingExercises[selectedSubtopicId] ? 'not-allowed' : 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        fontSize: '0.9rem',
-                                                        fontWeight: 600,
-                                                        opacity: generatingExercises[selectedSubtopicId] ? 0.6 : 1
-                                                    }}
-                                                >
-                                                    <Zap size={16} /> {generatingExercises[selectedSubtopicId] && generationTasks[selectedSubtopicId] ? 'Generating...' : 'Generate 5 with AI'}
-                                                </button>
-                                                <button
-                                                    onClick={() => { setEditingExercise(null); setShowExerciseModal(true); }}
-                                                    style={{
-                                                        padding: '8px 16px',
-                                                        borderRadius: '8px',
-                                                        border: 'none',
-                                                        background: '#10b981',
-                                                        color: 'white',
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        fontSize: '0.9rem',
-                                                        fontWeight: 600
-                                                    }}
-                                                >
-                                                    <Plus size={16} /> Add Question
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {loadingExercises ? (
-                                            <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading exercises...</div>
-                                        ) : exercises.length === 0 ? (
-                                            <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-                                                No exercises yet. Click "Add Question" to create one.
-                                            </div>
-                                        ) : (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                                {exercises.map((ex: any) => (
-                                                    <QuestionCard
-                                                        key={ex.id}
-                                                        exercise={ex}
-                                                        onEdit={() => { setEditingExercise(ex); setShowExerciseModal(true); }}
-                                                        onDelete={() => handleDeleteExercise(ex.id)}
-                                                        onRegenerate={() => handleRegenerateExercise(ex.id, selectedSubtopicId)}
-                                                    />
-                                                ))}
-                                            </div>
-                                        )}
-                                    </>
-                                ) : (
-                                    <div style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
-                                        <ListOrdered size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-                                        <div style={{ fontSize: '1rem' }}>Select a subtopic to view exercises</div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ) : activeTab === 'contents' ? (
-                        <ContentBrowser
+                    ) : activeTab === 'v8' ? (
+                        <V8ContentBrowser
                             subjects={subjects}
                             loadingSubjects={loadingSubjects}
                             onRefresh={fetchSubjects}
-                            selectedSubtopicId={selectedContentSubtopicId}
-                            onSelectSubtopic={fetchContents}
-                            contents={contents}
-                            loadingContents={loadingContents}
-                            selectedContent={selectedContent}
-                            onSelectContent={setSelectedContent}
-                            onEdit={(content) => { setEditingContent(content); setShowContentEditModal(true); }}
-                            onRegenerate={(content) => { setSelectedContent(content); setShowRegenerateModal(true); }}
-                            onDelete={handleDeleteContent}
-                            regeneratingContent={regeneratingContent}
-                            onShowAdvancedOptions={(subtopicId) => {
-                                setSelectedContent({ subtopic_id: subtopicId });
-                                setShowRegenerateModal(true);
-                            }}
                             isMobile={isMobile}
                             isTablet={isTablet}
                         />
                     ) : null}
 
-                    {/* Status Message â€” visible on all tabs */}
+                    {/* Status Message — visible on all tabs */}
                     {statusMessage && (
                         <div style={{
                             padding: '14px 20px',
@@ -2466,163 +1982,6 @@ const AIMaterialsAdmin = () => {
                         </div>
                     )}
                 </div>
-
-                {/* Task monitor - Fixed on the right */}
-                {!isMobile && (
-                    <div style={{
-                        ...cardStyle(isMobile),
-                        border: '1px solid #e2e8f0',
-                        background: 'rgba(248, 250, 252, 0.9)',
-                        backdropFilter: 'blur(8px)',
-                        position: 'fixed',
-                        top: '100px',
-                        right: '24px',
-                        width: '320px',
-                        zIndex: 100,
-                        maxHeight: 'calc(100vh - 120px)',
-                        overflowY: 'auto',
-                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Task Monitor</h3>
-                            <RefreshCw size={16} color="#64748b" style={{ cursor: 'pointer' }} onClick={fetchTasks} />
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {Object.keys(tasks).length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                                    <Clock size={32} color="#cbd5e1" style={{ marginBottom: '12px' }} />
-                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>No active tasks</div>
-                                </div>
-                            ) : (
-                                Object.entries(tasks).map(([id, info]: [string, any]) => (
-                                    <div key={id} style={{
-                                        background: 'white',
-                                        padding: '16px',
-                                        borderRadius: '12px',
-                                        border: '1px solid #e2e8f0',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '8px'
-                                    }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.75rem', fontWeight: 700, fontFamily: 'monospace', color: '#94a3b8' }}>#{id.slice(0, 8)}</span>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                {info.status === 'completed' && <CheckCircle2 size={16} color="#22c55e" />}
-                                                {info.status === 'failed' && <XCircle size={16} color="#ef4444" />}
-                                                {info.status === 'running' && <RefreshCw size={16} color="#3b82f6" className="animate-spin" />}
-                                                <button
-                                                    onClick={() => handleDismissTask(id)}
-                                                    style={{
-                                                        background: 'none',
-                                                        border: 'none',
-                                                        color: '#94a3b8',
-                                                        cursor: 'pointer',
-                                                        padding: '2px',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        borderRadius: '4px'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                                                    title="Dismiss Task"
-                                                >
-                                                    <XIcon size={14} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
-                                            {info.status.charAt(0).toUpperCase() + info.status.slice(1)}
-                                        </div>
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {info.status === 'running' ? 'Ingesting...' : info.message}
-                                        </div>
-
-                                        {info.logs && info.logs.length > 0 && (
-                                            <div style={{
-                                                marginTop: '12px',
-                                                padding: '12px',
-                                                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                                                borderRadius: '10px',
-                                                minHeight: '200px',
-                                                maxHeight: '500px',
-                                                overflowY: 'auto',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '4px',
-                                                boxShadow: info.status === 'running' ? '0 0 20px rgba(59, 130, 246, 0.3)' : 'none',
-                                                border: info.status === 'running' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid #334155'
-                                            }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', borderBottom: '1px solid #334155', paddingBottom: '8px' }}>
-                                                    <Terminal size={14} color={info.status === 'running' ? '#3b82f6' : '#94a3b8'} />
-                                                    <span style={{ fontSize: '0.75rem', color: info.status === 'running' ? '#3b82f6' : '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>LIVE LOGS</span>
-                                                    {info.status === 'running' && (
-                                                        <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', animation: 'pulse 1.5s infinite' }}></span>
-                                                            Processing
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                {info.logs.slice(-30).map((log: string, i: number) => (
-                                                    <div key={i} style={{
-                                                        fontSize: '0.7rem',
-                                                        fontFamily: 'ui-monospace, monospace',
-                                                        color: i === info.logs.slice(-30).length - 1 ? '#22d3ee' : '#e2e8f0',
-                                                        opacity: i === info.logs.slice(-30).length - 1 ? 1 : 0.75,
-                                                        lineHeight: 1.5,
-                                                        paddingLeft: '8px',
-                                                        borderLeft: i === info.logs.slice(-30).length - 1 ? '2px solid #22d3ee' : '2px solid transparent'
-                                                    }}>
-                                                        {log}
-                                                    </div>
-                                                ))}
-                                                <div ref={(el) => { if (el && el.parentElement) el.parentElement.scrollTo({ top: el.parentElement.scrollHeight, behavior: 'smooth' }); }} />
-                                            </div>
-                                        )}
-                                    </div>
-                                )).reverse()
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Exercise Modal */}
-                {showExerciseModal && (
-                    <ExerciseModal
-                        exercise={editingExercise}
-                        onClose={() => {
-                            setShowExerciseModal(false);
-                            setEditingExercise(null);
-                        }}
-                        onSave={handleSaveExercise}
-                    />
-                )}
-
-                {/* Content Edit Modal */}
-                {showContentEditModal && editingContent && (
-                    <ChunkEditor
-                        content={editingContent}
-                        onClose={() => {
-                            setShowContentEditModal(false);
-                            setEditingContent(null);
-                        }}
-                        onSave={handleSaveContent}
-                    />
-                )}
-
-                {/* Content Regenerate Modal */}
-                {showRegenerateModal && selectedContent && (
-                    <ContentRegenerateModal
-                        options={regenerateOptions}
-                        setOptions={setRegenerateOptions}
-                        onConfirm={handleRegenerateContent}
-                        onClose={() => setShowRegenerateModal(false)}
-                        regenerating={regeneratingContent[selectedContent.subtopic_id] || false}
-                        subjectName={selectedContent.subject_name || selectedContent.subject_id}
-                        isMobile={isMobile}
-                    />
-                )}
             </div>
         </div>
     );

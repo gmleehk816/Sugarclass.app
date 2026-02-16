@@ -8,7 +8,22 @@
       "Bash(npx tsc:*)",
       "Bash(docker ps:*)",
       "Bash(python:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(ls:*)",
+      "Bash(sqlite3:*)",
+      "Bash(git -C /c/Users/gmhome/SynologyDrive/coding/Sugarclass.app show HEAD:microservices/sugarclass-aimaterials/app/admin.py)",
+      "Bash(git -C /c/Users/gmhome/SynologyDrive/coding/Sugarclass.app log --oneline --all -- \"microservices/sugarclass-aimaterials/app/frontend/src/*admin*\" \"microservices/sugarclass-aimaterials/app/frontend/src/*Admin*\")",
+      "Bash(npm run lint)",
+      "Bash(docker-compose exec -T aimaterials-backend python -c \"\nimport sqlite3\nimport os\n\nDB_PATH = ''/app/database/rag_content.db''\nSCHEMA_PATH = ''/app/schema_v8.sql''\n\n# Check if schema file exists\nif not os.path.exists\\(SCHEMA_PATH\\):\n    print\\(f''Schema file not found: {SCHEMA_PATH}''\\)\n    print\\(''Files in /app:'', os.listdir\\(''/app''\\)\\)\nelse:\n    print\\(f''Found schema file: {SCHEMA_PATH}''\\)\n\nconn = sqlite3.connect\\(DB_PATH\\)\ncursor = conn.cursor\\(\\)\n\n# Read and execute schema\nwith open\\(SCHEMA_PATH, ''r''\\) as f:\n    schema_sql = f.read\\(\\)\n\ntry:\n    cursor.executescript\\(schema_sql\\)\n    conn.commit\\(\\)\n    print\\(''V8 schema applied successfully''\\)\n    \n    # Verify V8 tables were created\n    cursor.execute\\(\"\"SELECT name FROM sqlite_master WHERE type=''table'' AND name LIKE ''v8_%''\"\"\\)\n    v8_tables = cursor.fetchall\\(\\)\n    print\\(f''V8 tables created: {[t[0] for t in v8_tables]}''\\)\nexcept Exception as e:\n    print\\(f''Error applying schema: {e}''\\)\nfinally:\n    conn.close\\(\\)\n\")",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(grep:*)"
     ]
   }
 }

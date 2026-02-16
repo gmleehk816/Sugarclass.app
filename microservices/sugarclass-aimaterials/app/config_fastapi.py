@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     LLM_API_KEY: str | None = None
     LLM_MODEL: str = "gemini-3-pro-preview"
 
+    # Gemini API (for V8 content generation)
+    GEMINI_API_KEY: str | None = None
+
     # OpenAI API (for creative rewriting)
     OPENAI_API_KEY: str | None = None
 
@@ -70,4 +73,5 @@ DB_PATH = str(settings.DB_PATH)
 LLM_API_URL = settings.LLM_API_URL
 LLM_API_KEY = settings.LLM_API_KEY
 LLM_MODEL = settings.LLM_MODEL
+GEMINI_API_KEY = settings.GEMINI_API_KEY
 OPENAI_API_KEY = settings.OPENAI_API_KEY
