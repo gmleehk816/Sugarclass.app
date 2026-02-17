@@ -23,7 +23,8 @@
       "Bash(git checkout:*)",
       "Bash(git restore:*)",
       "Bash(docker-compose build:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "WebSearch"
     ]
   }
 }

@@ -16,6 +16,7 @@ import re
 
 from .exercise_builder import build_exercises_for_subtopic
 from .deps import get_current_admin
+from .pdf_converter import convert_pdf_to_markdown, is_pdf_file
 
 router = APIRouter(
     prefix="/api/admin",
@@ -124,31 +125,67 @@ def extract_metadata_from_upload(batch_dir: Path, md_filename: str) -> Dict[str,
 
 @router.post("/upload", response_model=Dict[str, Any])
 async def upload_files(files: List[UploadFile] = File(...)):
-    """Upload multiple files and return batch ID."""
+    """Upload multiple files (PDF or Markdown) and return batch ID."""
     batch_id = str(uuid.uuid4())
     batch_dir = UPLOAD_DIR / batch_id
     batch_dir.mkdir(parents=True, exist_ok=True)
-    
+
     uploaded_files = []
     md_file = None
-    
+    pdf_converted = False
+    conversion_errors = []
+
     for file in files:
         file_path = batch_dir / file.filename
+
+        # Save uploaded file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        uploaded_files.append(file.filename)
-        if file.filename.endswith('.md'):
-            md_file = file.filename
-    
+
+        # Handle PDF files - convert to markdown
+        if is_pdf_file(file_path):
+            try:
+                md_content, md_path = convert_pdf_to_markdown(
+                    file_path,
+                    output_dir=batch_dir
+                )
+                uploaded_files.append(f"{file.filename} (converted to .md)")
+                md_file = md_path.name
+                pdf_converted = True
+            except Exception as e:
+                conversion_errors.append(f"{file.filename}: {str(e)}")
+                uploaded_files.append(f"{file.filename} (conversion failed)")
+        else:
+            uploaded_files.append(file.filename)
+            if file.filename.endswith('.md'):
+                md_file = file.filename
+
+    # Return error if all PDFs failed to convert
+    if conversion_errors and not md_file:
+        return {
+            "batch_id": batch_id,
+            "files": uploaded_files,
+            "error": "All PDF files failed to convert",
+            "conversion_errors": conversion_errors
+        }
+
     # Auto-detect metadata
     metadata = {}
     if md_file:
         metadata = extract_metadata_from_upload(batch_dir, md_file)
-    
+        if pdf_converted:
+            metadata["source_type"] = "pdf"
+
     return {
         "batch_id": batch_id,
         "files": uploaded_files,
-        "metadata": metadata
+        "metadata": metadata,
+        "main_markdown": md_file,
+        "pdf_converted": pdf_converted,
+        "conversion_errors": conversion_errors if conversion_errors else None,
+        # Flatten metadata for frontend convenience
+        "suggested_subject": metadata.get("subject_name"),
+        "suggested_syllabus": metadata.get("syllabus")
     }
 
 

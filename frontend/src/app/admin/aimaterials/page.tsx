@@ -1491,13 +1491,14 @@ const AIMaterialsAdmin = () => {
 
     const handleUploadAndIngest = async (skipRewrite = false) => {
         if (files.length === 0) {
-            setStatusMessage('Please select at least one markdown file.');
+            setStatusMessage('Please select at least one file.');
             return;
         }
 
         const mdFile = files.find(f => f.name.endsWith('.md'));
-        if (!mdFile) {
-            setStatusMessage('At least one .md file is required for ingestion.');
+        const pdfFile = files.find(f => f.name.endsWith('.pdf'));
+        if (!mdFile && !pdfFile) {
+            setStatusMessage('At least one .md or .pdf file is required for ingestion.');
             return;
         }
 
@@ -1519,6 +1520,19 @@ const AIMaterialsAdmin = () => {
             const extractedSubject = uploadRes.suggested_subject || subjectName;
             const extractedSyllabus = uploadRes.suggested_syllabus || syllabus;
 
+            // Check for PDF conversion errors
+            if (uploadRes.error) {
+                setStatusMessage(`Error: ${uploadRes.error}`);
+                return;
+            }
+
+            // Show conversion info if PDF was converted
+            if (uploadRes.pdf_converted) {
+                setStatusMessage('PDF converted to markdown. Starting ingestion...');
+            } else {
+                setStatusMessage('Upload successful. Starting ingestion...');
+            }
+
             // Auto-populate form fields for visual feedback
             if (uploadRes.suggested_subject) {
                 setSubjectName(uploadRes.suggested_subject);
@@ -1527,14 +1541,12 @@ const AIMaterialsAdmin = () => {
                 setSyllabus(uploadRes.suggested_syllabus);
             }
 
-            setStatusMessage('Upload successful. Starting ingestion...');
-
             // Use the extracted values directly (not state, which updates async)
             const ingestRes = await serviceFetch('aimaterials', '/api/admin/ingest', {
                 method: 'POST',
                 body: JSON.stringify({
                     batch_id: uploadRes.batch_id,
-                    filename: uploadRes.main_markdown || mdFile.name,
+                    filename: uploadRes.main_markdown || mdFile?.name,
                     subject_name: extractedSubject,
                     syllabus: extractedSyllabus,
                     skip_rewrite: skipRewrite
@@ -1836,7 +1848,7 @@ const AIMaterialsAdmin = () => {
                                 )}
 
                                 <div style={{ marginBottom: '24px' }}>
-                                    <label style={labelStyle}>Textbook Markdown (.md)</label>
+                                    <label style={labelStyle}>Textbook File (.md or .pdf)</label>
                                     <div style={{
                                         border: '2px dashed #e2e8f0',
                                         borderRadius: '12px',
@@ -1847,7 +1859,7 @@ const AIMaterialsAdmin = () => {
                                     }}>
                                         <input
                                             type="file"
-                                            accept=".md,.json"
+                                            accept=".md,.json,.pdf"
                                             multiple
                                             onChange={handleFileChange}
                                             style={{ display: 'none' }}
@@ -1860,13 +1872,13 @@ const AIMaterialsAdmin = () => {
                                                     <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0' }}>
                                                         {files.map((f, i) => (
                                                             <li key={i} style={{ fontSize: '0.9rem', color: '#1e293b' }}>
-                                                                {f.name.endsWith('.md') ? 'ðŸ“– ' : 'âš™ï¸ '} {f.name}
+                                                                {f.name.endsWith('.md') ? '📖 ' : f.name.endsWith('.pdf') ? '📄 ' : '⚙️ '} {f.name}
                                                             </li>
                                                         ))}
                                                     </ul>
                                                 ) : "Click to select markdown & structure JSON"}
                                             </div>
-                                            <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Select textbook (.md) and optionally .structure.json</div>
+                                            <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Select textbook (.md, .pdf) and optionally .structure.json</div>
                                         </label>
                                     </div>
                                 </div>
