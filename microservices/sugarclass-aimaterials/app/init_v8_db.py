@@ -28,16 +28,6 @@ def migrate_to_v8():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Check existing V8 tables
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'v8_%'")
-    existing = [t[0] for t in cursor.fetchall()]
-    if existing:
-        print(f"[V8 Migration] V8 tables already exist: {existing}")
-        conn.close()
-        return True
-
-    print("[V8 Migration] Creating V8 tables...")
-
     # V8-specific table creation statements
     v8_tables_sql = [
         # V8 Concepts

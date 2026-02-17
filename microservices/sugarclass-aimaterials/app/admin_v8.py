@@ -838,9 +838,34 @@ def _sanitize_code(name: str) -> str:
     return code
 
 
+def ensure_v8_tables():
+    """Defensive check to ensure V8 tables exist before performing operations."""
+    try:
+        from .main import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='v8_processing_tasks'")
+        exists = cursor.fetchone()
+        conn.close()
+        
+        if not exists:
+            import logging
+            logger = logging.getLogger("uvicorn")
+            logger.info("[V8 Admin] v8_processing_tasks table not found, running migration...")
+            from .init_v8_db import migrate_to_v8
+            migrate_to_v8()
+    except Exception as e:
+        import logging
+        logger = logging.getLogger("uvicorn")
+        logger.error(f"[V8 Admin] Error ensuring V8 tables: {e}")
+
 @router.post("/ingest")
 async def v8_ingest(request: V8IngestRequest, background_tasks: BackgroundTasks):
     """Full V8 ingestion: markdown → split → create hierarchy → generate V8 content for ALL subtopics"""
+    
+    # Defensive check for tables
+    ensure_v8_tables()
+    
     file_path = UPLOAD_DIR / request.batch_id / request.filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
