@@ -77,6 +77,7 @@ function ChapterSidebar({
     if (onSelectChapter) {
       onSelectChapter(chapter);
     }
+    setSidebarTab('subtopics');
   };
 
   const currentSubjectName = subjects.find(s => s.id === selectedSubject)?.name || 'Select Subject';
@@ -96,7 +97,7 @@ function ChapterSidebar({
       {/* Header */}
       <div className="sidebar-header">
         <h2>AI Materials</h2>
-        <p style={{ fontSize: '0.8rem', opacity: 0.8, marginTop: '4px' }}>{currentSubjectName}</p>
+        <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary-light)', marginTop: '4px' }}>Contents</h3>
       </div>
 
       {/* Subject Selector */}
@@ -112,6 +113,7 @@ function ChapterSidebar({
           ))}
         </select>
 
+        <label className="list-section-title">Contents</label>
         {/* Chapters / Subtopics Tabs */}
         <div className="mode-tabs">
           <button
