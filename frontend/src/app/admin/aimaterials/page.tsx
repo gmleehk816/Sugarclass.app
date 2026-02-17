@@ -1677,7 +1677,7 @@ const AIMaterialsAdmin = () => {
 
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: isTablet ? '1fr' : 'minmax(0, 1fr) 300px',
+                gridTemplateColumns: '1fr',
                 gap: '24px',
                 alignItems: 'start'
             }}>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { api } from '../api';
 
 function SubtopicSidebar({
   viewMode,
@@ -13,6 +14,31 @@ function SubtopicSidebar({
   currentQuestionIndex,
   onSelectQuestion
 }) {
+  const handleDeleteSubtopic = async (id, name) => {
+    if (window.confirm(`Are you sure you want to delete subtopic "${name}"? This will delete all generated content.`)) {
+      try {
+        await api.delete(`/api/admin/v8/subtopics/${id}`);
+        window.location.reload(); // Quickest way to refresh for now
+      } catch (err) {
+        console.error('Error deleting subtopic:', err);
+        alert('Failed to delete subtopic');
+      }
+    }
+  };
+
+  const handleRenameSubtopic = async (id, currentName) => {
+    const newName = prompt('Enter new subtopic name:', currentName);
+    if (newName && newName !== currentName) {
+      try {
+        await api.patch(`/api/admin/v8/subtopics/${id}`, { name: newName });
+        window.location.reload(); // Quickest way to refresh for now
+      } catch (err) {
+        console.error('Error renaming subtopic:', err);
+        alert('Failed to rename subtopic');
+      }
+    }
+  };
+
   const handleSubtopicClick = (subId) => {
     if (onSelectSubtopic) onSelectSubtopic(subId);
   };
@@ -48,9 +74,33 @@ function SubtopicSidebar({
                 }}>
                   {subtopic.is_processed ? '✓' : '•'}
                 </span>
-                <span style={{ flex: 1, textAlign: 'left', fontSize: '0.9rem' }}>
+                <span style={{ flex: 1, textAlign: 'left', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {subtopic.name}
                 </span>
+                <div className="subtopic-actions" style={{ display: 'flex', gap: '4px', marginLeft: '4px' }}>
+                  <button
+                    className="action-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRenameSubtopic(subtopic.full_id, subtopic.name);
+                    }}
+                    title="Rename"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', padding: '2px', opacity: 0.6 }}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="action-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteSubtopic(subtopic.full_id, subtopic.name);
+                    }}
+                    title="Delete"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', padding: '2px', opacity: 0.6 }}
+                  >
+                    🗑️
+                  </button>
+                </div>
               </button>
             ))
           )}

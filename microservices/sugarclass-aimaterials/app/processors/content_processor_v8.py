@@ -581,7 +581,11 @@ Focus on concepts that are visually representable and core to understanding."""
 
     def generate_svg(self, title: str, description: str) -> Optional[str]:
         """Generate SVG diagram"""
-        prompt = f"""Create an ANIMATED SVG diagram for physics education.
+        # Allow description to be a full prompt override
+        if description.strip().lower().startswith("create an animated svg"):
+            prompt = description
+        else:
+            prompt = f"""Create an ANIMATED SVG diagram for physics education.
 
 **Topic: {title}**
 

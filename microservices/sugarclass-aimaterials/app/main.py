@@ -49,6 +49,7 @@ def get_db_connection() -> sqlite3.Connection:
         raise FileNotFoundError(f"Database not found at: {db_path}")
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 def row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:

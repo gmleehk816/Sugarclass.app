@@ -80,6 +80,18 @@ function ChapterSidebar({
     setSidebarTab('subtopics');
   };
 
+  const handleDeleteChapter = async (chapterId, chapterTitle) => {
+    if (window.confirm(`Are you sure you want to delete chapter "${chapterTitle}"? This will delete all subtopics and generated content under it.`)) {
+      try {
+        await api.delete(`/api/admin/v8/topics/${chapterId}`);
+        window.location.reload(); // Quickest way to refresh for now
+      } catch (err) {
+        console.error('Error deleting chapter:', err);
+        alert('Failed to delete chapter');
+      }
+    }
+  };
+
   const currentSubjectName = subjects.find(s => s.id === selectedSubject)?.name || 'Select Subject';
 
   if (loading) {
@@ -162,6 +174,17 @@ function ChapterSidebar({
                     ✓
                   </span>
                 )}
+                <button
+                  className="action-btn delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteChapter(chapter.id, chapter.title);
+                  }}
+                  title="Delete Chapter"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', opacity: 0.6, marginLeft: '8px' }}
+                >
+                  🗑️
+                </button>
               </button>
             ))}
           </>

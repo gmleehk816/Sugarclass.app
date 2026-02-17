@@ -89,7 +89,56 @@ class ConceptUpdateRequest(BaseModel):
     """Update concept request"""
     title: Optional[str] = None
     description: Optional[str] = None
+    bullets: Optional[str] = None
     icon: Optional[str] = None
+
+
+class SubtopicUpdateRequest(BaseModel):
+    """Update subtopic request"""
+    name: Optional[str] = None
+    order_num: Optional[int] = None
+
+
+class TopicUpdateRequest(BaseModel):
+    """Update topic request"""
+    name: Optional[str] = None
+    order_num: Optional[int] = None
+
+
+class SubjectRenameRequest(BaseModel):
+    """Rename subject request"""
+    name: str
+
+
+class SVGRegenerateRequest(BaseModel):
+    """SVG regeneration request"""
+    prompt: Optional[str] = None
+
+
+class QuizQuestionUpdateRequest(BaseModel):
+    """Update quiz question request"""
+    question_text: Optional[str] = None
+    options: Optional[Dict[str, str]] = None
+    correct_answer: Optional[str] = None
+    explanation: Optional[str] = None
+
+
+class FlashcardUpdateRequest(BaseModel):
+    """Update flashcard request"""
+    front: Optional[str] = None
+    back: Optional[str] = None
+
+
+class RealLifeImageUpdateRequest(BaseModel):
+    """Update real-life image request"""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_type: Optional[str] = None
+
+
+class SubjectListResponse(BaseModel):
+    """List subjects response"""
+    subjects: List[Dict[str, Any]]
 
 
 # ============================================================================
@@ -100,12 +149,54 @@ def get_db_connection():
     """Get database connection"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
 # ============================================================================
 # SUBJECT & TOPIC MANAGEMENT
 # ============================================================================
+
+@router.delete("/subjects/{subject_id}")
+async def delete_subject(subject_id: int):
+    """Recursively delete a subject and all its topics/subtopics (cascading)"""
+    conn = get_db_connection()
+    try:
+        # Check if subject exists
+        subject = conn.execute("SELECT id FROM subjects WHERE id = ?", (subject_id,)).fetchone()
+        if not subject:
+            raise HTTPException(status_code=404, detail="Subject not found")
+
+        # Delete subject (cascading will handle topics, subtopics, and content)
+        conn.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
+        conn.commit()
+        return {"success": True, "message": f"Subject {subject_id} deleted successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete subject: {str(e)}")
+    finally:
+        conn.close()
+
+
+@router.patch("/subjects/{subject_id}")
+async def rename_subject(subject_id: int, request: SubjectRenameRequest):
+    """Rename a subject"""
+    conn = get_db_connection()
+    try:
+        # Check if subject exists
+        subject = conn.execute("SELECT name FROM subjects WHERE id = ?", (subject_id,)).fetchone()
+        if not subject:
+            raise HTTPException(status_code=404, detail="Subject not found")
+
+        conn.execute("UPDATE subjects SET name = ? WHERE id = ?", (request.name, subject_id))
+        conn.commit()
+        return {"success": True, "message": f"Subject {subject_id} renamed to {request.name}"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to rename subject: {str(e)}")
+    finally:
+        conn.close()
+
 
 @router.get("/subjects")
 async def list_subjects():
@@ -200,6 +291,60 @@ async def list_topic_subtopics(
     }
 
 
+@router.delete("/topics/{topic_id}")
+async def delete_topic(topic_id: str):
+    """Delete a topic and all its subtopics (cascading)"""
+    conn = get_db_connection()
+    try:
+        # Check if topic exists
+        topic = conn.execute("SELECT id FROM topics WHERE id = ?", (topic_id,)).fetchone()
+        if not topic:
+            raise HTTPException(status_code=404, detail="Topic not found")
+
+        # Delete topic (cascading will handle subtopics and content)
+        conn.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
+        conn.commit()
+        return {"success": True, "message": f"Topic {topic_id} deleted successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete topic: {str(e)}")
+    finally:
+        conn.close()
+
+
+@router.patch("/topics/{topic_id}")
+async def update_topic(topic_id: str, request: TopicUpdateRequest):
+    """Update a topic (rename or reorder)"""
+    conn = get_db_connection()
+    try:
+        # Check if topic exists
+        topic = conn.execute("SELECT name FROM topics WHERE id = ?", (topic_id,)).fetchone()
+        if not topic:
+            raise HTTPException(status_code=404, detail="Topic not found")
+
+        updates = []
+        params = []
+        if request.name is not None:
+            updates.append("name = ?")
+            params.append(request.name)
+        if request.order_num is not None:
+            updates.append("order_num = ?")
+            params.append(request.order_num)
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        params.append(topic_id)
+        conn.execute(f"UPDATE topics SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        return {"success": True, "message": f"Topic {topic_id} updated successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update topic: {str(e)}")
+    finally:
+        conn.close()
+
+
 # ============================================================================
 # SUBTOPIC MANAGEMENT
 # ============================================================================
@@ -291,7 +436,17 @@ async def get_subtopic(subtopic_id: str):
         WHERE subtopic_id = ?
         ORDER BY question_num
     """, (subtopic_id,)).fetchall()
-    subtopic['quiz'] = [dict(row) for row in quiz]
+    
+    quiz_list = []
+    for row in quiz:
+        q = dict(row)
+        if q.get('options'):
+            try:
+                q['options'] = json.loads(q['options'])
+            except:
+                pass
+        quiz_list.append(q)
+    subtopic['quiz'] = quiz_list
 
     # Get flashcards
     flashcards = conn.execute("""
@@ -312,6 +467,65 @@ async def get_subtopic(subtopic_id: str):
     conn.close()
 
     return subtopic
+
+
+@router.delete("/subtopics/{subtopic_id}")
+async def delete_subtopic(subtopic_id: str):
+    """Delete a subtopic and all its content (cascading)"""
+    conn = get_db_connection()
+    try:
+        # Check if subtopic exists
+        subtopic = conn.execute("SELECT id FROM subtopics WHERE id = ?", (subtopic_id,)).fetchone()
+        if not subtopic:
+            raise HTTPException(status_code=404, detail="Subtopic not found")
+
+        # Delete subtopic (cascading will handle v8 content tables)
+        conn.execute("DELETE FROM subtopics WHERE id = ?", (subtopic_id,))
+        conn.commit()
+        return {"success": True, "message": f"Subtopic {subtopic_id} deleted successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete subtopic: {str(e)}")
+    finally:
+        conn.close()
+
+
+@router.patch("/subtopics/{subtopic_id}")
+async def update_subtopic(subtopic_id: str, request: SubtopicUpdateRequest):
+    """Update a subtopic (rename or reorder)"""
+    conn = get_db_connection()
+    try:
+        # Check if subtopic exists
+        subtopic = conn.execute("SELECT name FROM subtopics WHERE id = ?", (subtopic_id,)).fetchone()
+        if not subtopic:
+            raise HTTPException(status_code=404, detail="Subtopic not found")
+
+        updates = []
+        params = []
+        if request.name is not None:
+            updates.append("name = ?")
+            params.append(request.name)
+            # Update slug if name changes
+            slug = re.sub(r'[^\w\s-]', '', request.name).strip().lower()
+            slug = re.sub(r'[-\s]+', '-', slug)
+            updates.append("slug = ?")
+            params.append(slug)
+        if request.order_num is not None:
+            updates.append("order_num = ?")
+            params.append(request.order_num)
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        params.append(subtopic_id)
+        conn.execute(f"UPDATE subtopics SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+        return {"success": True, "message": f"Subtopic {subtopic_id} updated successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update subtopic: {str(e)}")
+    finally:
+        conn.close()
 
 
 @router.get("/subtopics/{subtopic_id}/status")
@@ -499,6 +713,26 @@ async def update_concept(concept_id: int, request: ConceptUpdateRequest):
 
     query = f"UPDATE v8_concepts SET {', '.join(updates)} WHERE id = ?"
     conn.execute(query, params)
+    
+    # Handle bullets update in generated content table
+    if request.bullets is not None:
+        # Check if record exists
+        existing = conn.execute("""
+            SELECT id FROM v8_generated_content 
+            WHERE concept_id = ? AND content_type = 'bullets'
+        """, (concept_id,)).fetchone()
+        
+        if existing:
+            conn.execute("""
+                UPDATE v8_generated_content SET content = ? 
+                WHERE id = ?
+            """, (request.bullets, existing['id']))
+        else:
+            conn.execute("""
+                INSERT INTO v8_generated_content (concept_id, content_type, content)
+                VALUES (?, 'bullets', ?)
+            """, (concept_id, request.bullets))
+            
     conn.commit()
     conn.close()
 
@@ -508,6 +742,7 @@ async def update_concept(concept_id: int, request: ConceptUpdateRequest):
 @router.post("/concepts/{concept_id}/regenerate-svg")
 async def regenerate_concept_svg(
     concept_id: int,
+    request: SVGRegenerateRequest,
     background_tasks: BackgroundTasks
 ):
     """Regenerate SVG for a concept"""
@@ -539,7 +774,8 @@ async def regenerate_concept_svg(
         run_svg_regeneration,
         task_id,
         concept_id,
-        dict(concept)
+        dict(concept),
+        request.prompt
     )
 
     return TaskResponse(
@@ -556,10 +792,7 @@ async def regenerate_concept_svg(
 @router.put("/quiz/{question_id}")
 async def update_quiz_question(
     question_id: int,
-    question_text: Optional[str] = None,
-    options: Optional[Dict[str, str]] = None,
-    correct_answer: Optional[str] = None,
-    explanation: Optional[str] = None
+    request: QuizQuestionUpdateRequest
 ):
     """Update a quiz question"""
     conn = get_db_connection()
@@ -567,21 +800,21 @@ async def update_quiz_question(
     updates = []
     params = []
 
-    if question_text is not None:
+    if request.question_text is not None:
         updates.append("question_text = ?")
-        params.append(question_text)
+        params.append(request.question_text)
 
-    if options is not None:
+    if request.options is not None:
         updates.append("options = ?")
-        params.append(json.dumps(options))
+        params.append(json.dumps(request.options))
 
-    if correct_answer is not None:
+    if request.correct_answer is not None:
         updates.append("correct_answer = ?")
-        params.append(correct_answer)
+        params.append(request.correct_answer)
 
-    if explanation is not None:
+    if request.explanation is not None:
         updates.append("explanation = ?")
-        params.append(explanation)
+        params.append(request.explanation)
 
     if not updates:
         conn.close()
@@ -595,6 +828,84 @@ async def update_quiz_question(
     conn.close()
 
     return {"message": "Question updated successfully"}
+
+
+# ============================================================================
+# FLASHCARD MANAGEMENT
+# ============================================================================
+
+@router.put("/flashcards/{card_id}")
+async def update_flashcard(
+    card_id: int,
+    request: FlashcardUpdateRequest
+):
+    """Update a flashcard"""
+    conn = get_db_connection()
+
+    updates = []
+    params = []
+
+    if request.front is not None:
+        updates.append("front = ?")
+        params.append(request.front)
+
+    if request.back is not None:
+        updates.append("back = ?")
+        params.append(request.back)
+
+    if not updates:
+        conn.close()
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    params.append(card_id)
+
+    query = f"UPDATE v8_flashcards SET {', '.join(updates)} WHERE id = ?"
+    conn.execute(query, params)
+    conn.commit()
+    conn.close()
+
+    return {"message": "Flashcard updated successfully"}
+
+
+# ============================================================================
+# REAL LIFE IMAGE MANAGEMENT
+# ============================================================================
+
+@router.put("/reallife_images/{image_id}")
+async def update_reallife_image(
+    image_id: int,
+    request: RealLifeImageUpdateRequest
+):
+    """Update a real-life image record"""
+    conn = get_db_connection()
+
+    updates = []
+    params = []
+
+    if request.title is not None:
+        updates.append("title = ?")
+        params.append(request.title)
+
+    if request.description is not None:
+        updates.append("description = ?")
+        params.append(request.description)
+
+    if request.image_type is not None:
+        updates.append("image_type = ?")
+        params.append(request.image_type)
+
+    if not updates:
+        conn.close()
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    params.append(image_id)
+
+    query = f"UPDATE v8_reallife_images SET {', '.join(updates)} WHERE id = ?"
+    conn.execute(query, params)
+    conn.commit()
+    conn.close()
+
+    return {"message": "Real-life image updated successfully"}
 
 
 # ============================================================================
@@ -790,7 +1101,7 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
         update_task('failed', 0, 'Generation failed', error_msg)
 
 
-def run_svg_regeneration(task_id: str, concept_id: int, concept: Dict):
+def run_svg_regeneration(task_id: str, concept_id: int, concept: Dict, custom_prompt: Optional[str] = None):
     """Background task to regenerate SVG"""
 
     def update_task(status: str, message: str):
@@ -809,8 +1120,10 @@ def run_svg_regeneration(task_id: str, concept_id: int, concept: Dict):
         update_task('running', 'Regenerating SVG...')
 
         processor = V8Processor()
-
-        svg = processor.gemini.generate_svg(concept['title'], concept['description'])
+        
+        # Use custom prompt if provided, otherwise default to concept description
+        prompt_to_use = custom_prompt if custom_prompt else concept['description']
+        svg = processor.gemini.generate_svg(concept['title'], prompt_to_use)
 
         if svg:
             processor.db.update_generated_content(concept_id, 'svg', svg)
