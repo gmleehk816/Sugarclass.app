@@ -349,10 +349,11 @@ class ContentSplitter:
 
     # Patterns for different textbook formats
     CHAPTER_PATTERNS = [
-        r'^#\s+(Chapter \d+[:\s].+)$',           # # Chapter 1: Title
+        r'^#\s+(Chapter\s*\d+[:\s].+)$',          # # Chapter 1: Title
         r'^#\s+([A-Z]\d+)\s+(.+)$',              # # P1 Describing Motion
         r'^#\s+(\d+)\.\s+(.+)$',                 # # 1. Title
         r'^\*\*(\d+)\.\s+([^*]+)\*\*$',          # **1. Title**
+        r'^#\s+([^#\n]+)$',                      # # Any Header 1 (Generic Fallback)
     ]
 
     SUBTOPIC_PATTERNS = [
@@ -360,6 +361,7 @@ class ContentSplitter:
         r'^##\s+(\d+\.\d+)\s+(.+)$',             # ## 2.4 Calculating Speed
         r'^(\d+\.\d+)\s+(.+)$',                  # 2.4 Calculating Speed
         r'^([A-Z]\d+\.\d+)\s+(.+)$',             # P1.1 Describing Motion
+        r'^##\s+([^#\n]+)$',                     # ## Any Header 2 (Generic Fallback)
     ]
 
     def __init__(self, markdown_content: str):
@@ -376,13 +378,16 @@ class ContentSplitter:
         current_content = []
 
         for line in lines:
+            line = line.strip()
+            if not line: continue
             # Check for chapter headers
             chapter_match = self._match_chapter(line)
             if chapter_match:
-                # Save previous subtopic
+                # Save previous subtopic if exists
                 if current_subtopic:
                     self._save_subtopic(current_subtopic, current_content)
-
+                
+                # Start new chapter tracking
                 current_chapter = chapter_match
                 current_subtopic = None
                 current_content = []
@@ -402,6 +407,11 @@ class ContentSplitter:
             # Add content line
             if current_subtopic:
                 current_content.append(line)
+            elif current_chapter and not current_subtopic:
+                # If we are in a chapter but haven't hit a subtopic header yet,
+                # we don't save the content as a "subtopic" yet, but we allow
+                # the loop to continue searching.
+                pass
 
         # Save last subtopic
         if current_subtopic:
@@ -412,10 +422,16 @@ class ContentSplitter:
     def _match_chapter(self, line: str) -> Optional[Dict]:
         """Check if line matches chapter pattern"""
         for pattern in self.CHAPTER_PATTERNS:
-            match = re.match(pattern, line, re.MULTILINE)
+            match = re.match(pattern, line)
             if match:
-                num = match.group(1) if len(match.groups()) > 1 else match.group(1)
-                title = match.group(2) if len(match.groups()) > 1 else match.group(1)
+                groups = match.groups()
+                if len(groups) >= 2:
+                    num = groups[0]
+                    title = groups[1]
+                else:
+                    num = "1" # Default
+                    title = groups[0]
+                
                 return {
                     'num': num,
                     'title': title.strip(),
@@ -426,16 +442,24 @@ class ContentSplitter:
     def _match_subtopic(self, line: str) -> Optional[Dict]:
         """Check if line matches subtopic pattern"""
         for pattern in self.SUBTOPIC_PATTERNS:
-            match = re.match(pattern, line, re.MULTILINE)
+            match = re.match(pattern, line)
             if match:
-                num = match.group(1)
-                title = match.group(2).strip() if len(match.groups()) > 1 else ""
+                groups = match.groups()
+                if len(groups) >= 2:
+                    num = groups[0]
+                    title = groups[1]
+                else:
+                    # Generic H2 pattern
+                    num = "" # No number
+                    title = groups[0]
+                
                 # Create slug from title
-                slug = re.sub(r'[^\w\s-]', '', title).strip().lower()
+                slug_base = title if title else (num if num else "subtopic")
+                slug = re.sub(r'[^\w\s-]', '', slug_base).strip().lower()
                 slug = re.sub(r'[-\s]+', '-', slug)
                 return {
                     'num': num,
-                    'title': title,
+                    'title': title.strip(),
                     'slug': slug,
                     'type': 'subtopic'
                 }
