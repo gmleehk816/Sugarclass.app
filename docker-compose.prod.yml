@@ -414,10 +414,7 @@ services:
       - ./microservices/sugarclass-aitutor/database:/app/database
     networks:
       - sugarclass-network
-    command: >
-      sh -c "
-        python -m uvicorn app.main:app --host 0.0.0.0 --port 8004
-      "
+    command: python start.py
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://127.0.0.1:8004/health || exit 1" ]

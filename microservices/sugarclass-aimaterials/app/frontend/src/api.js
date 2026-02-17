@@ -27,7 +27,7 @@ console.log('%c================================', 'background: #0ea5e9; color: w
 
 // Create axios instance
 const api = axios.create({
-  baseURL: isProduction ? BASE_PATH : ''
+  baseURL: ''
 });
 
 // Request interceptor - ALWAYS prepend BASE_PATH for /api/ calls in production
