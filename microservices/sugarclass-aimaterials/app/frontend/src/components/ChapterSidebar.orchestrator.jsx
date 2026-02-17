@@ -1,24 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 
-function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChange, onSubjectChange }) {
+function ChapterSidebar({
+  selectedChapter,
+  onSelectChapter,
+  viewMode,
+  onModeChange,
+  onSubjectChange,
+  subtopics,
+  selectedSubtopicId,
+  onSelectSubtopic
+}) {
   const [subjects, setSubjects] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState('');
   const [loading, setLoading] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState('chapters');
 
   useEffect(() => {
     const fetchSubjects = async () => {
       try {
         const res = await api.get('/api/db/subjects');
-        // Debug logging
-        console.log('Raw res.data:', res.data);
-        console.log('Type of res.data:', typeof res.data);
-        console.log('Is Array?', Array.isArray(res.data));
-
-        // Ensure res.data is an array before setting
         const subjectsData = Array.isArray(res.data) ? res.data : [];
-        console.log('ChapterSidebar: Fetched subjects:', subjectsData);
         setSubjects(subjectsData);
 
         if (subjectsData.length > 0) {
@@ -28,7 +31,7 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
         }
       } catch (err) {
         console.error('Error loading subjects', err);
-        setSubjects([]); // Ensure subjects is always an array
+        setSubjects([]);
       } finally {
         setLoading(false);
       }
@@ -76,10 +79,6 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
     }
   };
 
-  const handleMode = (newMode) => {
-    if (onModeChange) onModeChange(newMode);
-  };
-
   const currentSubjectName = subjects.find(s => s.id === selectedSubject)?.name || 'Select Subject';
 
   if (loading) {
@@ -113,48 +112,101 @@ function ChapterSidebar({ selectedChapter, onSelectChapter, viewMode, onModeChan
           ))}
         </select>
 
-        {/* Mode Tabs */}
+        {/* Chapters / Subtopics Tabs */}
         <div className="mode-tabs">
           <button
-            className={`mode-tab ${viewMode === 'content' ? 'active' : ''}`}
-            onClick={() => handleMode('content')}
+            className={`mode-tab ${sidebarTab === 'chapters' ? 'active' : ''}`}
+            onClick={() => setSidebarTab('chapters')}
           >
-            Content
+            Chapters
           </button>
           <button
-            className={`mode-tab ${viewMode === 'exercise' ? 'active' : ''}`}
-            onClick={() => handleMode('exercise')}
+            className={`mode-tab ${sidebarTab === 'subtopics' ? 'active' : ''}`}
+            onClick={() => setSidebarTab('subtopics')}
           >
-            Exercises
-          </button>
-          <button
-            className={`mode-tab ${viewMode === 'qa' ? 'active' : ''}`}
-            onClick={() => handleMode('qa')}
-          >
-            Q&A
-          </button>
-
-        </div>
-
-        {/* Chapters List */}
-        <label className="list-section-title">Chapters</label>
-        {chapters.map((chapter) => (
-          <button
-            key={chapter.id}
-            className={`sidebar-list-item has-content ${selectedChapter?.id === chapter.id ? 'active' : ''}`}
-            onClick={() => handleChapterClick(chapter)}
-          >
-            <span className="sidebar-list-icon">
-              {String(chapter.chapter_num || '').replace(/\D/g, '').slice(0, 2) || '•'}
-            </span>
-            <span style={{ flex: 1, textAlign: 'left' }}>{chapter.title}</span>
-            {chapter.processed_count > 0 && (
-              <span style={{ fontSize: '0.7rem', color: 'var(--accent)', marginLeft: '8px' }}>
-                ✓
+            Subtopics
+            {subtopics && subtopics.length > 0 && (
+              <span style={{
+                fontSize: '0.65rem',
+                fontWeight: 800,
+                background: sidebarTab === 'subtopics' ? 'var(--accent)' : 'var(--accent-muted)',
+                color: sidebarTab === 'subtopics' ? 'white' : 'var(--accent)',
+                padding: '1px 6px',
+                borderRadius: '6px',
+                marginLeft: '6px'
+              }}>
+                {subtopics.length}
               </span>
             )}
           </button>
-        ))}
+        </div>
+
+        {/* Chapters List */}
+        {sidebarTab === 'chapters' && (
+          <>
+            <label className="list-section-title">Chapters</label>
+            {chapters.map((chapter) => (
+              <button
+                key={chapter.id}
+                className={`sidebar-list-item has-content ${selectedChapter?.id === chapter.id ? 'active' : ''}`}
+                onClick={() => handleChapterClick(chapter)}
+              >
+                <span className="sidebar-list-icon">
+                  {String(chapter.chapter_num || '').replace(/\D/g, '').slice(0, 2) || '•'}
+                </span>
+                <span style={{ flex: 1, textAlign: 'left' }}>{chapter.title}</span>
+                {chapter.processed_count > 0 && (
+                  <span style={{ fontSize: '0.7rem', color: 'var(--accent)', marginLeft: '8px' }}>
+                    ✓
+                  </span>
+                )}
+              </button>
+            ))}
+          </>
+        )}
+
+        {/* Subtopics List */}
+        {sidebarTab === 'subtopics' && (
+          <>
+            <label className="list-section-title">
+              {selectedChapter ? selectedChapter.title : 'Select a chapter first'}
+            </label>
+            {!subtopics || subtopics.length === 0 ? (
+              <div className="empty-state" style={{ padding: '20px', textAlign: 'center' }}>
+                <div className="empty-state-icon">📄</div>
+                <div className="empty-state-text">No subtopics available</div>
+              </div>
+            ) : (
+              subtopics.map((subtopic) => (
+                <button
+                  key={subtopic.full_id}
+                  className={`sidebar-list-item ${subtopic.has_v8_content ? 'has-content' : ''} ${selectedSubtopicId === subtopic.full_id ? 'active' : ''}`}
+                  onClick={() => onSelectSubtopic && onSelectSubtopic(subtopic.full_id)}
+                >
+                  <span className="sidebar-list-icon" style={{
+                    background: subtopic.has_v8_content ? 'rgba(61, 90, 69, 0.1)' : 'rgba(30, 41, 59, 0.05)',
+                    color: subtopic.has_v8_content ? 'var(--success)' : 'var(--primary-light)'
+                  }}>
+                    {subtopic.has_v8_content ? '✓' : '•'}
+                  </span>
+                  <span style={{ flex: 1, textAlign: 'left', fontSize: '0.9rem' }}>
+                    {subtopic.name}
+                  </span>
+                  {subtopic.v8_concepts_count > 0 && (
+                    <span style={{
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      color: 'var(--accent)',
+                      marginLeft: '4px'
+                    }}>
+                      {subtopic.v8_concepts_count}
+                    </span>
+                  )}
+                </button>
+              ))
+            )}
+          </>
+        )}
       </div>
     </div>
   );

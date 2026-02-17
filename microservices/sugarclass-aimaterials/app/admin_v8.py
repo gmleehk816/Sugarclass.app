@@ -11,6 +11,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from pathlib import Path
+import re
+import shutil
 import sqlite3
 import json
 import uuid
@@ -73,6 +75,14 @@ class TaskResponse(BaseModel):
     task_id: str
     status: str
     message: str
+
+
+class V8IngestRequest(BaseModel):
+    """Request to ingest a markdown file with V8 pipeline"""
+    batch_id: str
+    filename: str
+    subject_name: str
+    syllabus: str = "IGCSE"
 
 
 class ConceptUpdateRequest(BaseModel):
@@ -812,6 +822,444 @@ def run_svg_regeneration(task_id: str, concept_id: int, concept: Dict):
 
     except Exception as e:
         update_task('failed', f'Error: {str(e)}')
+
+
+# ============================================================================
+# FULL V8 INGESTION (Upload → Split → Generate)
+# ============================================================================
+
+UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
+
+
+def _sanitize_code(name: str) -> str:
+    """Generate a safe code from a name (e.g. 'Physics 0625' -> 'physics_0625')"""
+    code = re.sub(r'[^\w\s-]', '', name).strip().lower()
+    code = re.sub(r'[-\s]+', '_', code)
+    return code
+
+
+@router.post("/ingest")
+async def v8_ingest(request: V8IngestRequest, background_tasks: BackgroundTasks):
+    """Full V8 ingestion: markdown → split → create hierarchy → generate V8 content for ALL subtopics"""
+    file_path = UPLOAD_DIR / request.batch_id / request.filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
+
+    task_id = str(uuid.uuid4())
+
+    conn = get_db_connection()
+    conn.execute("""
+        INSERT INTO v8_processing_tasks (task_id, task_type, status, progress, message)
+        VALUES (?, 'full_ingestion', 'pending', 0, 'Task created')
+    """, (task_id,))
+    conn.commit()
+    conn.close()
+
+    background_tasks.add_task(
+        run_v8_full_ingestion,
+        task_id,
+        str(file_path),
+        request.subject_name,
+        request.syllabus
+    )
+
+    return {"task_id": task_id, "status": "pending", "message": "V8 full ingestion started"}
+
+
+def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, syllabus: str):
+    """Background task: full V8 pipeline — parse markdown, create hierarchy, generate all V8 content"""
+
+    def update_task(status: str, progress: int, message: str, error: str = None):
+        conn = get_db_connection()
+        conn.execute("""
+            UPDATE v8_processing_tasks
+            SET status = ?, progress = ?, message = ?, error = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
+            WHERE task_id = ?
+        """, (status, progress, message, error, task_id))
+        conn.commit()
+        if status in ['completed', 'failed']:
+            conn.execute("UPDATE v8_processing_tasks SET completed_at = CURRENT_TIMESTAMP WHERE task_id = ?", (task_id,))
+            conn.commit()
+        conn.close()
+
+    def add_log(level: str, message: str):
+        conn = get_db_connection()
+        conn.execute("""
+            INSERT INTO v8_task_logs (task_id, log_level, message)
+            VALUES (?, ?, ?)
+        """, (task_id, level, message))
+        conn.commit()
+        conn.close()
+
+    try:
+        from .processors.content_processor_v8 import ContentSplitter, V8Processor, GeminiClient, ConceptData
+
+        add_log('info', f"Starting V8 full ingestion for: {subject_name}")
+        update_task('running', 5, 'Reading markdown file...')
+
+        # --- Step 1: Read markdown ---
+        md_path = Path(file_path)
+        with open(md_path, 'r', encoding='utf-8', errors='ignore') as f:
+            markdown_content = f.read()
+
+        add_log('info', f"Read {len(markdown_content)} chars from {md_path.name}")
+        update_task('running', 10, 'Splitting content into chapters and subtopics...')
+
+        # --- Step 2: Split into chapters and subtopics ---
+        splitter = ContentSplitter(markdown_content)
+        subtopic_list = splitter.split()
+
+        # Also extract chapters from splitter for topic creation
+        # Re-parse to get chapter→subtopic mapping
+        chapters = _extract_chapters_with_subtopics(markdown_content, subtopic_list)
+
+        if not chapters:
+            # Fallback: put everything under a single "General" topic
+            chapters = [{'num': '1', 'title': subject_name, 'subtopics': subtopic_list}]
+
+        total_subtopics = sum(len(ch['subtopics']) for ch in chapters)
+        add_log('info', f"Found {len(chapters)} chapters, {total_subtopics} subtopics")
+
+        if total_subtopics == 0:
+            raise Exception("No subtopics detected in the markdown file. Check the heading format.")
+
+        update_task('running', 15, f'Creating hierarchy: {len(chapters)} topics, {total_subtopics} subtopics...')
+
+        # --- Step 3: Create/find syllabus and subject ---
+        conn = get_db_connection()
+
+        # Detect schema type: old schema uses TEXT PRIMARY KEY, V8 uses INTEGER AUTOINCREMENT
+        col_info = conn.execute("PRAGMA table_info(syllabuses)").fetchall()
+        col_names = [c['name'] for c in col_info]
+        id_type = next((c['type'] for c in col_info if c['name'] == 'id'), 'TEXT')
+        is_v8_schema = id_type.upper() == 'INTEGER' and 'display_name' in col_names
+
+        add_log('info', f"Schema type: {'V8' if is_v8_schema else 'legacy'} (id type: {id_type})")
+
+        syllabus_code = _sanitize_code(syllabus)
+        subject_code = _sanitize_code(subject_name)
+        subject_text_id = f"{syllabus_code}_{subject_code}"
+
+        if is_v8_schema:
+            # V8 schema: INTEGER AUTOINCREMENT ids
+            conn.execute("INSERT OR IGNORE INTO syllabuses (name, display_name) VALUES (?, ?)", (syllabus, syllabus))
+            conn.commit()
+            syllabus_row = conn.execute("SELECT id FROM syllabuses WHERE name = ?", (syllabus,)).fetchone()
+            syllabus_id = syllabus_row['id']
+
+            conn.execute("""
+                INSERT OR IGNORE INTO subjects (syllabus_id, subject_id, name, code)
+                VALUES (?, ?, ?, ?)
+            """, (syllabus_id, subject_text_id, subject_name, subject_code))
+            conn.commit()
+            subject_row = conn.execute("SELECT id FROM subjects WHERE subject_id = ?", (subject_text_id,)).fetchone()
+        else:
+            # Legacy schema: TEXT PRIMARY KEY ids
+            conn.execute("INSERT OR IGNORE INTO syllabuses (id, name) VALUES (?, ?)", (syllabus_code, syllabus))
+            conn.commit()
+            syllabus_row = conn.execute("SELECT id FROM syllabuses WHERE id = ?", (syllabus_code,)).fetchone()
+            syllabus_id = syllabus_row['id']
+
+            conn.execute("""
+                INSERT OR IGNORE INTO subjects (id, syllabus_id, name)
+                VALUES (?, ?, ?)
+            """, (subject_text_id, syllabus_id, subject_name))
+            conn.commit()
+            subject_row = conn.execute("SELECT id FROM subjects WHERE id = ?", (subject_text_id,)).fetchone()
+
+        subject_db_id = subject_row['id']
+
+        add_log('info', f"Subject: {subject_name} (id={subject_db_id}, code={subject_text_id})")
+
+        # --- Step 4: Create topics and subtopics ---
+        subtopic_db_ids = []  # (db_id, markdown_content) pairs for V8 generation
+
+        for ch_idx, chapter in enumerate(chapters):
+            topic_code = f"T{ch_idx + 1}"
+            topic_name = chapter['title']
+
+            # Insert topic - try V8 schema first, fallback to old schema
+            try:
+                conn.execute("""
+                    INSERT OR IGNORE INTO topics (subject_id, topic_id, name, order_num)
+                    VALUES (?, ?, ?, ?)
+                """, (subject_db_id, topic_code, topic_name, ch_idx + 1))
+                conn.commit()
+                topic_row = conn.execute(
+                    "SELECT id FROM topics WHERE subject_id = ? AND topic_id = ?",
+                    (subject_db_id, topic_code)
+                ).fetchone()
+            except Exception:
+                # Fallback: old schema uses TEXT id as primary key
+                text_topic_id = f"{subject_text_id}_{topic_code}"
+                conn.execute("""
+                    INSERT OR REPLACE INTO topics (id, subject_id, name, order_num)
+                    VALUES (?, ?, ?, ?)
+                """, (text_topic_id, subject_db_id, topic_name, ch_idx + 1))
+                conn.commit()
+                topic_row = conn.execute(
+                    "SELECT id FROM topics WHERE id = ?",
+                    (text_topic_id,)
+                ).fetchone()
+
+            topic_db_id = topic_row['id']
+
+            for st_idx, subtopic in enumerate(chapter['subtopics']):
+                subtopic_text_id = subtopic.get('num', f"{ch_idx+1}.{st_idx+1}")
+                subtopic_slug = subtopic.get('slug', _sanitize_code(subtopic['title']))
+                subtopic_name = subtopic['title']
+                subtopic_content = subtopic.get('content', '')
+
+                # Insert subtopic - try V8 schema first, fallback to old schema
+                try:
+                    conn.execute("""
+                        INSERT OR IGNORE INTO subtopics (topic_id, subtopic_id, slug, name, order_num, markdown_file_path)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (topic_db_id, subtopic_text_id, subtopic_slug, subtopic_name, st_idx + 1, str(md_path)))
+                    conn.commit()
+                    st_row = conn.execute(
+                        "SELECT id FROM subtopics WHERE topic_id = ? AND subtopic_id = ?",
+                        (topic_db_id, subtopic_text_id)
+                    ).fetchone()
+                except Exception:
+                    # Fallback: old schema uses TEXT id, simpler columns
+                    text_subtopic_id = f"{subject_text_id}_{subtopic_text_id}"
+                    conn.execute("""
+                        INSERT OR REPLACE INTO subtopics (id, topic_id, name, order_num)
+                        VALUES (?, ?, ?, ?)
+                    """, (text_subtopic_id, topic_db_id, subtopic_name, st_idx + 1))
+                    conn.commit()
+                    st_row = conn.execute(
+                        "SELECT id FROM subtopics WHERE id = ?",
+                        (text_subtopic_id,)
+                    ).fetchone()
+
+                st_db_id = st_row['id']
+
+                # Store markdown content in content_raw for later use
+                content_saved = False
+                try:
+                    conn.execute("""
+                        INSERT INTO content_raw (subtopic_id, title, markdown_content, source_file, char_count)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (st_db_id, subtopic_name, subtopic_content, str(md_path), len(subtopic_content)))
+                    conn.commit()
+                    content_saved = True
+                except Exception as e1:
+                    try:
+                        conn.execute("""
+                            INSERT INTO content_raw (subtopic_id, markdown_content)
+                            VALUES (?, ?)
+                        """, (st_db_id, subtopic_content))
+                        conn.commit()
+                        content_saved = True
+                    except Exception as e2:
+                        add_log('warning', f"  Could not save content_raw for {subtopic_name}: {e1} / {e2}")
+                
+                if content_saved:
+                    add_log('info', f"  Saved content_raw for {subtopic_name} ({len(subtopic_content)} chars)")
+                else:
+                    add_log('warning', f"  content_raw not saved for {subtopic_name} - V8 generation will use inline content")
+
+                subtopic_db_ids.append((st_db_id, subtopic_name, subtopic_content))
+
+        conn.close()
+
+        add_log('info', f"Created {len(chapters)} topics, {len(subtopic_db_ids)} subtopics in database")
+        update_task('running', 20, f'Starting V8 generation for {len(subtopic_db_ids)} subtopics...')
+
+        # --- Step 5: Generate V8 content for each subtopic ---
+        processor = V8Processor()
+
+        if not processor.gemini:
+            add_log('error', 'LLM API key not configured. Set LLM_API_KEY or GEMINI_API_KEY.')
+            raise Exception("LLM API key not configured. Set LLM_API_KEY or GEMINI_API_KEY environment variable.")
+
+        # Log API configuration for debugging
+        from .processors.content_processor_v8 import API_BASE_URL, API_KEY, MODEL
+        add_log('info', f"LLM Config: model={MODEL}, url={API_BASE_URL[:60]}..., key={'set (' + API_KEY[:8] + '...)' if API_KEY else 'NOT SET'}")
+
+        total_success = 0
+        total_failed = 0
+
+        for i, (st_db_id, st_name, st_content) in enumerate(subtopic_db_ids):
+            subtopic_progress_base = 20 + int(75 * i / len(subtopic_db_ids))
+            subtopic_progress_end = 20 + int(75 * (i + 1) / len(subtopic_db_ids))
+
+            add_log('info', f"[{i+1}/{len(subtopic_db_ids)}] Processing: {st_name}")
+            update_task('running', subtopic_progress_base, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Analyzing...')
+
+            try:
+                # Use the content for this subtopic (or full markdown if content is too short)
+                content_for_analysis = st_content if len(st_content) > 200 else markdown_content[:5000]
+                add_log('info', f"  Content length: {len(content_for_analysis)} chars")
+
+                # Analyze structure
+                add_log('info', f"  Calling LLM: analyze_structure...")
+                concepts = processor.gemini.analyze_structure(content_for_analysis)
+                if not concepts:
+                    add_log('warning', f"  LLM returned no concepts, using fallbacks")
+                    concepts = processor.generator._get_fallback_concepts(st_name)
+                else:
+                    add_log('info', f"  LLM returned {len(concepts)} concepts")
+
+                # Save concepts (clear existing first)
+                conn = get_db_connection()
+                try:
+                    conn.execute("DELETE FROM v8_generated_content WHERE concept_id IN (SELECT id FROM v8_concepts WHERE subtopic_id = ?)", (st_db_id,))
+                    conn.execute("DELETE FROM v8_concepts WHERE subtopic_id = ?", (st_db_id,))
+                    conn.commit()
+                except Exception as e:
+                    add_log('warning', f"  Could not clear old V8 data (tables may not exist yet): {e}")
+                conn.close()
+
+                for ci, concept_data in enumerate(concepts):
+                    concept = ConceptData(
+                        concept_key=concept_data.get('id', f'concept_{ci}'),
+                        title=concept_data.get('title', 'Concept'),
+                        description=concept_data.get('description', ''),
+                        icon=concept_data.get('icon', '📚'),
+                        order_num=ci
+                    )
+                    processor.db.save_concepts(st_db_id, [concept])
+
+                add_log('info', f"  Saved {len(concepts)} concepts to DB")
+                update_task('running', subtopic_progress_base + 1, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating SVGs...')
+
+                # Generate SVGs and bullets for each concept
+                saved_concepts = processor.db.get_concepts(st_db_id)
+                for ci, concept in enumerate(saved_concepts):
+                    add_log('info', f"  Calling LLM: SVG for '{concept['title']}'...")
+                    svg = processor.gemini.generate_svg(concept['title'], concept['description'])
+                    if svg:
+                        processor.db.update_generated_content(concept['id'], 'svg', svg)
+                        add_log('info', f"    ✓ SVG generated ({len(svg)} chars)")
+                    else:
+                        add_log('warning', f"    ✗ SVG generation returned empty")
+
+                    add_log('info', f"  Calling LLM: bullets for '{concept['title']}'...")
+                    bullets = processor.gemini.generate_bullets(concept['title'], concept['description'], content_for_analysis)
+                    if bullets:
+                        processor.db.update_generated_content(concept['id'], 'bullets', bullets)
+                        add_log('info', f"    ✓ Bullets generated ({len(bullets)} chars)")
+                    else:
+                        add_log('warning', f"    ✗ Bullets generation returned empty")
+
+                update_task('running', subtopic_progress_base + 2, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating quiz...')
+
+                # Generate quiz
+                conn = get_db_connection()
+                try:
+                    conn.execute("DELETE FROM v8_quiz_questions WHERE subtopic_id = ?", (st_db_id,))
+                    conn.commit()
+                except Exception:
+                    pass
+                conn.close()
+
+                add_log('info', f"  Calling LLM: quiz generation...")
+                quiz = processor.gemini.generate_quiz(st_name, content_for_analysis, 5)
+                if quiz and quiz.get('questions'):
+                    for qi, q in enumerate(quiz['questions'], 1):
+                        processor.db.save_quiz_question(st_db_id, qi, q)
+                    add_log('info', f"  ✓ Quiz: {len(quiz['questions'])} questions")
+                else:
+                    add_log('warning', f"  ✗ Quiz generation returned empty")
+
+                update_task('running', subtopic_progress_base + 3, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating flashcards...')
+
+                # Generate flashcards
+                conn = get_db_connection()
+                try:
+                    conn.execute("DELETE FROM v8_flashcards WHERE subtopic_id = ?", (st_db_id,))
+                    conn.commit()
+                except Exception:
+                    pass
+                conn.close()
+
+                add_log('info', f"  Calling LLM: flashcard generation...")
+                flashcards = processor.gemini.generate_flashcards(st_name, content_for_analysis, 8)
+                if flashcards and flashcards.get('cards'):
+                    for fi, card in enumerate(flashcards['cards'], 1):
+                        processor.db.save_flashcard(st_db_id, fi, card.get('front', ''), card.get('back', ''))
+                    add_log('info', f"  ✓ Flashcards: {len(flashcards['cards'])} cards")
+                else:
+                    add_log('warning', f"  ✗ Flashcard generation returned empty")
+
+                # Mark as processed
+                processor.db.mark_subtopic_processed(st_db_id)
+                add_log('info', f"  ✓ Completed: {st_name}")
+                total_success += 1
+
+            except Exception as e:
+                import traceback
+                add_log('error', f"  ✗ Failed: {st_name}: {str(e)}")
+                add_log('error', f"  Traceback: {traceback.format_exc()[-500:]}")
+                total_failed += 1
+                # Continue with next subtopic instead of stopping
+                continue
+
+            update_task('running', subtopic_progress_end, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Done')
+
+        add_log('info', f"Generation summary: {total_success} succeeded, {total_failed} failed out of {len(subtopic_db_ids)}")
+
+        processor.close()
+
+        add_log('info', f"V8 full ingestion complete! Processed {len(subtopic_db_ids)} subtopics.")
+        update_task('completed', 100, f'V8 ingestion complete: {len(subtopic_db_ids)} subtopics processed')
+
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        add_log('error', error_msg)
+        add_log('error', traceback.format_exc())
+        update_task('failed', 0, 'Ingestion failed', error_msg)
+
+
+def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list) -> list:
+    """Re-parse markdown to map chapters → subtopics.
+    Returns list of {'num', 'title', 'subtopics': [...]} dicts.
+    """
+    from .processors.content_processor_v8 import ContentSplitter
+
+    lines = markdown_content.split('\n')
+    temp_splitter = ContentSplitter("")  # Just to access _match_chapter
+
+    chapters = []
+    current_chapter = None
+    subtopic_idx = 0
+
+    for line in lines:
+        chapter_match = temp_splitter._match_chapter(line)
+        if chapter_match:
+            current_chapter = {
+                'num': chapter_match['num'],
+                'title': chapter_match['title'],
+                'subtopics': []
+            }
+            chapters.append(current_chapter)
+            continue
+
+        subtopic_match = temp_splitter._match_subtopic(line)
+        if subtopic_match and subtopic_idx < len(subtopic_list):
+            st = subtopic_list[subtopic_idx]
+            if current_chapter:
+                current_chapter['subtopics'].append(st)
+            else:
+                # Subtopic before first chapter — create default chapter
+                if not chapters:
+                    chapters.append({'num': '1', 'title': 'General', 'subtopics': []})
+                chapters[-1]['subtopics'].append(st)
+            subtopic_idx += 1
+
+    # Any remaining subtopics not matched
+    while subtopic_idx < len(subtopic_list):
+        if chapters:
+            chapters[-1]['subtopics'].append(subtopic_list[subtopic_idx])
+        else:
+            chapters.append({'num': '1', 'title': 'General', 'subtopics': [subtopic_list[subtopic_idx]]})
+        subtopic_idx += 1
+
+    return chapters
 
 
 # ============================================================================

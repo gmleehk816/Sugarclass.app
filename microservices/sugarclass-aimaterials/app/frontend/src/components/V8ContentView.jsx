@@ -70,9 +70,9 @@ function V8ContentView({ subtopicId }) {
   }
 
   return (
-    <div className="v8-content-view">
-      {/* V8 Tab Navigation */}
-      <div className="v8-tab-bar">
+    <div className="v8-content-view animate-fade-in">
+      {/* V8 Tab Navigation - Premium Glass Effect */}
+      <div className="v8-tab-bar glass-effect">
         <button
           className={`v8-tab ${activeTab === 'learn' ? 'active' : ''}`}
           onClick={() => setActiveTab('learn')}
@@ -163,12 +163,11 @@ function V8LearnView({ concepts, learningObjectives, keyTerms, formulas }) {
       {learningObjectives && learningObjectives.length > 0 && (
         <div className="v8-section">
           <h2 className="v8-section-title">🎯 Learning Objectives</h2>
-          <div className="v8-card">
-            <ul className="v8-objectives-list">
+          <div className="v8-card glass-effect">
+            <ul className="v8-bullet-list">
               {learningObjectives.map((obj, index) => (
-                <li key={index} className="v8-objective-item">
-                  <span className="objective-bullet">•</span>
-                  <span className="objective-text">{obj.objective_text}</span>
+                <li key={index}>
+                  {obj.objective_text}
                 </li>
               ))}
             </ul>
@@ -189,9 +188,14 @@ function V8LearnView({ concepts, learningObjectives, keyTerms, formulas }) {
             <div className="v8-concept-content">
               <div className="v8-card">
                 {concept.generated && concept.generated.bullets ? (
-                  <ul
+                  <div
                     className="v8-bullet-list"
-                    dangerouslySetInnerHTML={{ __html: concept.generated.bullets }}
+                    dangerouslySetInnerHTML={{
+                      __html: concept.generated.bullets
+                        .replace(/<ul>/g, '<ul class="v8-bullet-list">')
+                        .replace(/\$\$([^$]+)\$\$/g, '<span style="font-family: serif; font-style: italic;">$1</span>')
+                        .replace(/\$([^$]+)\$/g, '<span style="font-family: serif; font-style: italic;">$1</span>')
+                    }}
                   />
                 ) : (
                   <div className="v8-placeholder">
@@ -210,9 +214,9 @@ function V8LearnView({ concepts, learningObjectives, keyTerms, formulas }) {
                     dangerouslySetInnerHTML={{ __html: concept.generated.svg }}
                   />
                 ) : (
-                  <div className="v8-visual-placeholder">
-                    <div className="placeholder-icon">📊</div>
-                    <div className="placeholder-text">Diagram not available</div>
+                  <div className="v8-visual-placeholder flex-center" style={{ flexDirection: 'column', height: '100%' }}>
+                    <div className="placeholder-icon" style={{ fontSize: '3rem', opacity: 0.2 }}>📊</div>
+                    <div className="placeholder-text" style={{ opacity: 0.5 }}>Diagram not available</div>
                   </div>
                 )}
               </div>
@@ -225,12 +229,12 @@ function V8LearnView({ concepts, learningObjectives, keyTerms, formulas }) {
       {keyTerms && keyTerms.length > 0 && (
         <div className="v8-section">
           <h2 className="v8-section-title">🔑 Key Terms</h2>
-          <div className="v8-card">
-            <div className="v8-terms-grid">
+          <div className="v8-card glass-effect">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '24px' }}>
               {keyTerms.map((term, index) => (
-                <div key={index} className="v8-term-item">
-                  <span className="term-name">{term.term}:</span>
-                  <span className="term-definition">{term.definition}</span>
+                <div key={index}>
+                  <div style={{ fontWeight: 800, color: 'var(--accent)', marginBottom: '4px' }}>{term.term}</div>
+                  <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>{term.definition}</div>
                 </div>
               ))}
             </div>
@@ -242,12 +246,12 @@ function V8LearnView({ concepts, learningObjectives, keyTerms, formulas }) {
       {formulas && formulas.length > 0 && (
         <div className="v8-section">
           <h2 className="v8-section-title">📐 Formulas</h2>
-          <div className="v8-formulas-grid">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
             {formulas.map((formula, index) => (
-              <div key={index} className="v8-formula-box">
-                <div className="formula-expression">{formula.formula}</div>
+              <div key={index} className="v8-card" style={{ borderLeft: '4px solid var(--accent)' }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)', marginBottom: '8px', fontFamily: 'serif' }}>{formula.formula}</div>
                 {formula.description && (
-                  <div className="formula-description">{formula.description}</div>
+                  <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>{formula.description}</div>
                 )}
               </div>
             ))}
@@ -299,15 +303,32 @@ function V8QuizView({ quiz, selectedAnswers, onAnswerSelect, showResults, onShow
   return (
     <div className="v8-quiz-view animate-fade-in">
       {showResults && (
-        <div className="v8-quiz-summary">
-          <div className="score-circle">
-            <div className="score-value">{score}%</div>
-            <div className="score-label">
-              {correctCount} of {quiz.length} correct
+        <div className="v8-quiz-summary glass-effect" style={{
+          padding: '40px',
+          borderRadius: 'var(--radius-lg)',
+          textAlign: 'center',
+          marginBottom: '40px',
+          border: '1px solid var(--accent-muted)'
+        }}>
+          <div className="score-circle" style={{
+            width: '120px',
+            height: '120px',
+            borderRadius: '50%',
+            background: 'var(--primary)',
+            color: 'white',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 24px'
+          }}>
+            <div className="score-value" style={{ fontSize: '2rem', fontWeight: 800 }}>{score}%</div>
+            <div className="score-label" style={{ fontSize: '0.75rem', opacity: 0.7 }}>
+              {correctCount}/{quiz.length} Correct
             </div>
           </div>
-          <button className="btn-secondary" onClick={handleReset}>
-            Try Again
+          <button className="btn-primary" onClick={handleReset}>
+            Retry Assessment
           </button>
         </div>
       )}
@@ -320,9 +341,17 @@ function V8QuizView({ quiz, selectedAnswers, onAnswerSelect, showResults, onShow
         return (
           <div key={q.id || questionIndex} className="v8-quiz-question">
             <div className="v8-q-header">
-              <span className="v8-q-number">Question {questionIndex + 1}</span>
+              <span className="v8-q-number">Assessment Item {questionIndex + 1}</span>
               {q.difficulty && (
-                <span className={`v8-q-badge v8-q-badge-${q.difficulty}`}>
+                <span className={`v8-q-badge v8-q-badge-${q.difficulty}`} style={{
+                  background: q.difficulty === 'hard' ? 'var(--error)' : 'var(--primary)',
+                  color: 'white',
+                  padding: '4px 12px',
+                  borderRadius: '20px',
+                  fontSize: '0.7rem',
+                  textTransform: 'uppercase',
+                  fontWeight: 800
+                }}>
                   {q.difficulty}
                 </span>
               )}
@@ -352,7 +381,7 @@ function V8QuizView({ quiz, selectedAnswers, onAnswerSelect, showResults, onShow
                     <span className="option-letter">{letter}</span>
                     <span className="option-text">{text}</span>
                     {showResults && isCorrectOption && (
-                      <span className="option-check">✓</span>
+                      <span className="option-check" style={{ marginLeft: 'auto', color: 'var(--success)', fontWeight: 800 }}>✓</span>
                     )}
                   </div>
                 );
@@ -360,8 +389,14 @@ function V8QuizView({ quiz, selectedAnswers, onAnswerSelect, showResults, onShow
             </div>
 
             {showResults && q.explanation && (
-              <div className={`v8-q-explanation ${isCorrect ? 'correct' : 'incorrect'}`}>
-                <strong>Explanation:</strong> {q.explanation}
+              <div className={`v8-q-explanation ${isCorrect ? 'correct' : 'incorrect'}`} style={{
+                marginTop: '24px',
+                padding: '20px',
+                background: isCorrect ? 'rgba(61, 90, 69, 0.05)' : 'rgba(153, 27, 27, 0.05)',
+                borderRadius: 'var(--radius-md)',
+                borderLeft: `4px solid ${isCorrect ? 'var(--success)' : 'var(--error)'}`
+              }}>
+                <strong style={{ color: isCorrect ? 'var(--success)' : 'var(--error)' }}>Synthesis Insight:</strong> {q.explanation}
               </div>
             )}
           </div>
@@ -369,9 +404,9 @@ function V8QuizView({ quiz, selectedAnswers, onAnswerSelect, showResults, onShow
       })}
 
       {!showResults && Object.keys(selectedAnswers).length === quiz.length && (
-        <div className="v8-quiz-actions">
-          <button className="btn-primary" onClick={handleCheckAnswers}>
-            Check Answers
+        <div className="v8-quiz-actions" style={{ textAlign: 'center', marginTop: '32px' }}>
+          <button className="btn-primary" style={{ padding: '16px 48px', fontSize: '1rem' }} onClick={handleCheckAnswers}>
+            Finalize Assessment
           </button>
         </div>
       )}
@@ -409,7 +444,15 @@ function V8FlashcardsView({ flashcards }) {
                 <div className="flashcard-content">
                   <h3 className="flashcard-front-text">{card.front}</h3>
                 </div>
-                <div className="flashcard-hint">Tap to flip</div>
+                <div className="flashcard-hint" style={{
+                  position: 'absolute',
+                  bottom: '16px',
+                  fontSize: '0.75rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  fontWeight: 700,
+                  opacity: 0.4
+                }}>Tap to Reveal</div>
               </div>
               <div className="v8-flashcard-back">
                 <div className="flashcard-content">
@@ -472,7 +515,12 @@ function V8RealLifeView({ images }) {
                   />
                 </div>
                 <div className="v8-reallife-arrow">
-                  <svg viewBox="0 0 50 50" className="arrow-svg">
+                  <svg viewBox="0 0 50 50" style={{
+                    width: '32px',
+                    height: '32px',
+                    color: 'var(--accent)',
+                    opacity: 0.3
+                  }}>
                     <path
                       d="M10 25 L40 25 M35 20 L40 25 L35 30"
                       stroke="currentColor"
@@ -486,7 +534,10 @@ function V8RealLifeView({ images }) {
                 <div className="v8-reallife-content">
                   <div
                     className="v8-reallife-icon"
-                    style={{ background: config.gradient }}
+                    style={{
+                      background: config.gradient,
+                      boxShadow: '0 8px 16px -4px rgba(0,0,0,0.2)'
+                    }}
                   >
                     {config.icon}
                   </div>
@@ -495,6 +546,20 @@ function V8RealLifeView({ images }) {
                   </h3>
                   {img.description && (
                     <p className="v8-reallife-desc">{img.description}</p>
+                  )}
+                  {img.prompt && (
+                    <div style={{
+                      marginTop: '24px',
+                      padding: '16px',
+                      background: 'var(--background)',
+                      borderRadius: 'var(--radius-md)',
+                      fontSize: '0.85rem',
+                      borderLeft: '3px solid var(--accent)',
+                      opacity: 0.9
+                    }}>
+                      <strong style={{ display: 'block', color: 'var(--accent)', marginBottom: '4px', textTransform: 'uppercase', fontSize: '0.7rem' }}>Directive Insight:</strong>
+                      {img.prompt}
+                    </div>
                   )}
                 </div>
               </div>
@@ -513,15 +578,22 @@ function V8RealLifeView({ images }) {
 function V8OriginalView({ subtopic }) {
   return (
     <div className="v8-original-view animate-fade-in">
-      <div className="v8-card">
-        <h2 className="v8-section-title">📄 Original Content</h2>
-        <div className="v8-original-meta">
-          <span>Source: {subtopic.subtopic_id} - {subtopic.name}</span>
+      <div className="v8-card glass-effect">
+        <h2 className="v8-section-title">📄 Original Dataset</h2>
+        <div className="v8-original-meta" style={{
+          fontSize: '0.85rem',
+          opacity: 0.6,
+          marginBottom: '32px',
+          padding: '12px',
+          background: 'var(--primary-muted)',
+          borderRadius: 'var(--radius-sm)'
+        }}>
+          <span>Resource Reference: {subtopic.subtopic_id} — {subtopic.name}</span>
         </div>
         {subtopic.learning_objectives && subtopic.learning_objectives.length > 0 && (
-          <div className="v8-original-section">
-            <h3>Learning Objectives</h3>
-            <ul>
+          <div className="v8-original-section" style={{ marginBottom: '32px' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent)', marginBottom: '16px' }}>Learning Objectives</h3>
+            <ul className="v8-bullet-list">
               {subtopic.learning_objectives.map((obj, i) => (
                 <li key={i}>{obj.objective_text}</li>
               ))}
@@ -530,15 +602,15 @@ function V8OriginalView({ subtopic }) {
         )}
         {subtopic.key_terms && subtopic.key_terms.length > 0 && (
           <div className="v8-original-section">
-            <h3>Key Terms</h3>
-            <dl>
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent)', marginBottom: '16px' }}>Key Terminology</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px' }}>
               {subtopic.key_terms.map((term, i) => (
-                <React.Fragment key={i}>
-                  <dt>{term.term}</dt>
-                  <dd>{term.definition}</dd>
-                </React.Fragment>
+                <div key={i} style={{ padding: '16px', background: 'var(--background)', borderRadius: 'var(--radius-md)' }}>
+                  <div style={{ fontWeight: 800, color: 'var(--primary)', marginBottom: '4px' }}>{term.term}</div>
+                  <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>{term.definition}</div>
+                </div>
               ))}
-            </dl>
+            </div>
           </div>
         )}
       </div>

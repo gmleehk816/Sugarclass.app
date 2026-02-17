@@ -3,7 +3,6 @@ import { api } from './api';
 
 // V8 Components
 import ChapterSidebar from './components/ChapterSidebar.orchestrator';
-import SubtopicSidebar from './components/SubtopicSidebar.orchestrator';
 import MiddleArea from './components/MiddleArea.orchestrator';
 
 /**
@@ -189,7 +188,7 @@ function App() {
   }
 
   return (
-    <div className="materials-root">
+    <div className="materials-root materials-root-two-col">
       {/* MOBILE OVERLAY */}
       {mobileSidebarOpen && (
         <div
@@ -209,27 +208,18 @@ function App() {
           viewMode={viewMode}
           onModeChange={setViewMode}
           onSubjectChange={handleSubjectChange}
-        />
-      </div>
-
-      {/* MIDDLE CONTENT */}
-      <MiddleArea
-        viewMode={viewMode}
-        selectedTopic={selectedTopic}
-        selectedSubtopicId={selectedSubtopicId}
-        subjectId={selectedSubject}
-      />
-
-      {/* RIGHT SIDEBAR */}
-      <div className="materials-sidebar materials-sidebar-right">
-        <SubtopicSidebar
-          viewMode={viewMode}
-          selectedTopic={selectedTopic}
           subtopics={subtopics}
           selectedSubtopicId={selectedSubtopicId}
           onSelectSubtopic={handleSubtopicClick}
         />
       </div>
+
+      {/* MAIN CONTENT */}
+      <MiddleArea
+        selectedTopic={selectedTopic}
+        selectedSubtopicId={selectedSubtopicId}
+        subjectId={selectedSubject}
+      />
     </div>
   );
 }

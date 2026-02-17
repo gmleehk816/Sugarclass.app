@@ -1452,6 +1452,9 @@ const AIMaterialsAdmin = () => {
     const [subjects, setSubjects] = useState<any[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState(false);
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+    const [v8TaskLogs, setV8TaskLogs] = useState<{ log_level: string; message: string; created_at: string }[]>([]);
+    const [v8TaskProgress, setV8TaskProgress] = useState(0);
+    const [v8TaskStatus, setV8TaskStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -1489,7 +1492,7 @@ const AIMaterialsAdmin = () => {
         }
     };
 
-    const handleUploadAndIngest = async (skipRewrite = false) => {
+    const handleUploadAndIngest = async () => {
         if (files.length === 0) {
             setStatusMessage('Please select at least one file.');
             return;
@@ -1503,7 +1506,7 @@ const AIMaterialsAdmin = () => {
         }
 
         setUploading(true);
-        setStatusMessage('Uploading files...');
+        setStatusMessage('📤 Uploading files...');
 
         try {
             const formData = new FormData();
@@ -1522,15 +1525,16 @@ const AIMaterialsAdmin = () => {
 
             // Check for PDF conversion errors
             if (uploadRes.error) {
-                setStatusMessage(`Error: ${uploadRes.error}`);
+                setStatusMessage(`❌ Error: ${uploadRes.error}`);
+                setUploading(false);
                 return;
             }
 
             // Show conversion info if PDF was converted
             if (uploadRes.pdf_converted) {
-                setStatusMessage('PDF converted to markdown. Starting ingestion...');
+                setStatusMessage('📝 PDF converted to markdown. Starting V8 ingestion...');
             } else {
-                setStatusMessage('Upload successful. Starting ingestion...');
+                setStatusMessage('✅ Upload successful. Starting V8 ingestion...');
             }
 
             // Auto-populate form fields for visual feedback
@@ -1541,24 +1545,69 @@ const AIMaterialsAdmin = () => {
                 setSyllabus(uploadRes.suggested_syllabus);
             }
 
-            // Use the extracted values directly (not state, which updates async)
-            const ingestRes = await serviceFetch('aimaterials', '/api/admin/ingest', {
+            // Call V8 ingest endpoint instead of old pipeline
+            const ingestRes = await serviceFetch('aimaterials', '/api/admin/v8/ingest', {
                 method: 'POST',
                 body: JSON.stringify({
                     batch_id: uploadRes.batch_id,
                     filename: uploadRes.main_markdown || mdFile?.name,
                     subject_name: extractedSubject,
                     syllabus: extractedSyllabus,
-                    skip_rewrite: skipRewrite
                 })
             });
 
-            setStatusMessage(`Ingestion started! Task ID: ${ingestRes.task_id}`);
+            setStatusMessage(`🚀 V8 ingestion started! Task ID: ${ingestRes.task_id}`);
             setFiles([]); // Clear after success
+            setV8TaskLogs([]);
+            setV8TaskProgress(0);
+            setV8TaskStatus('running');
+
+            // Poll V8 task progress
+            if (ingestRes.task_id) {
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const taskData = await serviceFetch('aimaterials', `/api/admin/v8/tasks/${ingestRes.task_id}`);
+                        const progress = taskData.progress || 0;
+                        const status = taskData.status;
+
+                        // Update logs and progress
+                        setV8TaskProgress(progress);
+                        if (taskData.logs) {
+                            setV8TaskLogs(taskData.logs);
+                        }
+
+                        if (status === 'running') {
+                            setV8TaskStatus('running');
+                            setStatusMessage(`⚙️ V8 Processing: ${progress}% — ${taskData.message || ''}`);
+                        } else if (status === 'completed') {
+                            clearInterval(pollInterval);
+                            setV8TaskStatus('completed');
+                            setStatusMessage(`✅ V8 ingestion complete! ${taskData.message || ''}`);
+                            setUploading(false);
+                            // Auto-switch to V8 Content tab after a short delay
+                            setTimeout(() => setActiveTab('v8'), 2000);
+                        } else if (status === 'failed') {
+                            clearInterval(pollInterval);
+                            setV8TaskStatus('failed');
+                            setStatusMessage(`❌ V8 ingestion failed: ${taskData.error || taskData.message || 'Unknown error'}`);
+                            setUploading(false);
+                        }
+                    } catch (pollErr) {
+                        console.error('Error polling V8 task', pollErr);
+                    }
+                }, 3000);
+
+                // Safety timeout: stop polling after 30 minutes
+                setTimeout(() => {
+                    clearInterval(pollInterval);
+                    setUploading(false);
+                }, 30 * 60 * 1000);
+            } else {
+                setUploading(false);
+            }
         } catch (err: any) {
-            console.error('Error in upload/ingest', err);
-            setStatusMessage(`Error: ${err.message}`);
-        } finally {
+            console.error('Error in upload/V8 ingest', err);
+            setStatusMessage(`❌ Error: ${err.message}`);
             setUploading(false);
         }
     };
@@ -1885,39 +1934,97 @@ const AIMaterialsAdmin = () => {
 
                                 <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
                                     <button
-                                        onClick={() => handleUploadAndIngest(false)}
+                                        onClick={() => handleUploadAndIngest()}
                                         disabled={uploading || files.length === 0}
                                         style={{
                                             ...buttonStyle,
                                             flex: 1,
-                                            background: uploading || files.length === 0 ? '#94a3b8' : '#1e293b',
+                                            background: uploading || files.length === 0 ? '#94a3b8' : 'linear-gradient(135deg, #be123c 0%, #9f1239 100%)',
                                         }}
                                     >
                                         {uploading ? (
                                             <><RefreshCw size={18} className="animate-spin" /> Processing...</>
                                         ) : (
-                                            <><Zap size={18} /> Upload & Process Content</>
-                                        )}
-                                    </button>
-                                    <button
-                                        onClick={() => handleUploadAndIngest(true)}
-                                        disabled={uploading || files.length === 0}
-                                        style={{
-                                            ...buttonStyle,
-                                            flex: 1,
-                                            background: 'white',
-                                            color: '#1e293b',
-                                            border: '2px solid #e2e8f0',
-                                            opacity: uploading || files.length === 0 ? 0.5 : 1
-                                        }}
-                                    >
-                                        {uploading ? (
-                                            <><RefreshCw size={18} className="animate-spin" /> Ingesting...</>
-                                        ) : (
-                                            <><FileText size={18} /> Upload & Ingest Only</>
+                                            <><Zap size={18} /> Upload & Generate V8 Content</>
                                         )}
                                     </button>
                                 </div>
+
+                                {/* Live V8 Task Progress & Logs */}
+                                {v8TaskStatus !== 'idle' && (
+                                    <div style={{
+                                        marginTop: '20px',
+                                        background: v8TaskStatus === 'failed' ? '#fef2f2' :
+                                            v8TaskStatus === 'completed' ? '#f0fdf4' : '#f8fafc',
+                                        borderRadius: '16px',
+                                        border: `1px solid ${v8TaskStatus === 'failed' ? '#fecaca' : v8TaskStatus === 'completed' ? '#bbf7d0' : '#e2e8f0'}`,
+                                        overflow: 'hidden',
+                                    }}>
+                                        {/* Progress Header */}
+                                        <div style={{
+                                            padding: '16px 20px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            borderBottom: '1px solid #f1f5f9',
+                                        }}>
+                                            {v8TaskStatus === 'running' && <RefreshCw size={18} className="animate-spin" color="#3b82f6" />}
+                                            {v8TaskStatus === 'completed' && <CheckCircle2 size={18} color="#22c55e" />}
+                                            {v8TaskStatus === 'failed' && <XCircle size={18} color="#ef4444" />}
+                                            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>
+                                                {v8TaskStatus === 'running' ? `V8 Processing — ${v8TaskProgress}%` :
+                                                    v8TaskStatus === 'completed' ? 'V8 Ingestion Complete!' :
+                                                        'V8 Ingestion Failed'}
+                                            </span>
+                                        </div>
+
+                                        {/* Progress Bar */}
+                                        {v8TaskStatus === 'running' && (
+                                            <div style={{ height: '4px', background: '#e2e8f0' }}>
+                                                <div style={{
+                                                    height: '100%',
+                                                    width: `${v8TaskProgress}%`,
+                                                    background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                                                    transition: 'width 0.5s ease',
+                                                }} />
+                                            </div>
+                                        )}
+
+                                        {/* Log Panel */}
+                                        {v8TaskLogs.length > 0 && (
+                                            <div style={{
+                                                padding: '12px 16px',
+                                                maxHeight: '300px',
+                                                overflowY: 'auto',
+                                                background: '#1e293b',
+                                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                                                fontSize: '0.78rem',
+                                                lineHeight: '1.6',
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#64748b' }}>
+                                                    <Terminal size={14} />
+                                                    <span style={{ fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>Live Logs</span>
+                                                </div>
+                                                {v8TaskLogs.slice().reverse().map((log, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        style={{
+                                                            color: log.log_level === 'error' ? '#f87171' :
+                                                                log.log_level === 'warning' ? '#fbbf24' : '#94a3b8',
+                                                            padding: '3px 0',
+                                                            borderBottom: idx < v8TaskLogs.length - 1 ? '1px solid #334155' : 'none',
+                                                        }}
+                                                    >
+                                                        <span style={{ color: '#475569', marginRight: '10px' }}>
+                                                            {log.created_at ? new Date(log.created_at).toLocaleTimeString() : ''}
+                                                        </span>
+                                                        {log.message}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                         </>

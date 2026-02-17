@@ -177,9 +177,10 @@ const V8ContentViewer = ({ subtopicId }) => {
                           {concept.generated?.bullets ? (
                             <div
                               style={styles.bulletContent}
-                              dangerouslySetInnerHTML={{ __html: concept.generated.bullets
-                                .replace(/\$\$([^$]+)\$\$/g, '<span style="font-family: serif; font-style: italic;">$1</span>')
-                                .replace(/\$([^$]+)\$/g, '<span style="font-family: serif; font-style: italic;">$1</span>')
+                              dangerouslySetInnerHTML={{
+                                __html: concept.generated.bullets
+                                  .replace(/\$\$([^$]+)\$\$/g, '<span style="font-family: serif; font-style: italic;">$1</span>')
+                                  .replace(/\$([^$]+)\$/g, '<span style="font-family: serif; font-style: italic;">$1</span>')
                               }}
                             />
                           ) : null}
@@ -221,10 +222,10 @@ const V8ContentViewer = ({ subtopicId }) => {
                       <span style={{
                         ...styles.qBadge,
                         background: quizAnswers[q.id] === q.correct_answer ? '#059669' :
-                                   quizAnswers[q.id] ? '#be123c' : '#0f172a'
+                          quizAnswers[q.id] ? '#be123c' : '#0f172a'
                       }}>
                         {quizAnswers[q.id] === q.correct_answer ? '✓ Correct' :
-                         quizAnswers[q.id] ? '✗ Incorrect' : 'Not answered'}
+                          quizAnswers[q.id] ? '✗ Incorrect' : 'Not answered'}
                       </span>
                     </div>
                     <div style={styles.qText}>{q.question_text}</div>
@@ -336,7 +337,7 @@ const V8ContentViewer = ({ subtopicId }) => {
                             <div style={{
                               ...styles.reallifeBox,
                               ...(index % 3 === 0 ? styles.reallifeBoxPrimary :
-                                 index % 3 === 1 ? styles.reallifeBoxSecondary : styles.reallifeBoxWarning)
+                                index % 3 === 1 ? styles.reallifeBoxSecondary : styles.reallifeBoxWarning)
                             }}>
                               <h4>Key Insight</h4>
                               <p>{item.prompt}</p>
@@ -370,10 +371,10 @@ const V8ContentViewer = ({ subtopicId }) => {
 
 const styles = {
   container: {
-    fontFamily: "'Inter', system-ui, sans-serif",
-    background: '#f8fafc',
+    fontFamily: "'Outfit', sans-serif",
+    background: '#fcfaf7',
     minHeight: '100vh',
-    color: '#0f172a',
+    color: '#1a1a1b',
     lineHeight: 1.6,
   },
 
@@ -383,14 +384,14 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '4rem 2rem',
-    color: '#64748b',
+    color: '#334155',
   },
 
   spinner: {
-    width: '40px',
-    height: '40px',
-    border: '3px solid #e2e8f0',
-    borderTopColor: '#be123c',
+    width: '48px',
+    height: '48px',
+    border: '3px solid rgba(146, 117, 89, 0.1)',
+    borderTopColor: '#927559',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
     marginBottom: '1rem',
@@ -398,6 +399,7 @@ const styles = {
 
   loadingText: {
     fontSize: '1rem',
+    fontWeight: 500,
   },
 
   error: {
@@ -406,7 +408,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '4rem 2rem',
-    color: '#be123c',
+    color: '#991b1b',
     textAlign: 'center',
   },
 
@@ -422,109 +424,119 @@ const styles = {
 
   // Header
   topHeader: {
-    height: '64px',
-    background: 'rgba(255, 255, 255, 0.95)',
-    backdropFilter: 'blur(8px)',
-    borderBottom: '1px solid #e2e8f0',
+    height: '72px',
+    background: 'rgba(255, 255, 255, 0.85)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
     position: 'sticky',
     top: 0,
     zIndex: 50,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 1.5rem',
+    padding: '0 2.5rem',
   },
 
   headerBrand: {
     display: 'flex',
     alignItems: 'center',
-    gap: '1rem',
+    gap: '1.25rem',
   },
 
   logoIcon: {
-    width: '32px',
-    height: '32px',
-    background: 'linear-gradient(135deg, #be123c, #0369a1)',
-    borderRadius: '8px',
+    width: '40px',
+    height: '40px',
+    background: '#1e293b',
+    borderRadius: '12px',
     display: 'grid',
     placeItems: 'center',
-    color: 'white',
+    color: '#927559',
     fontWeight: 800,
-    fontSize: '12px',
+    fontSize: '14px',
+    boxShadow: '0 4px 12px rgba(30, 41, 59, 0.15)',
   },
 
   headerTitle: {
-    fontWeight: 700,
-    fontSize: '1.125rem',
+    fontWeight: 800,
+    fontSize: '1.25rem',
     display: 'flex',
     flexDirection: 'column',
     lineHeight: 1.2,
+    color: '#1e293b',
+    letterSpacing: '-0.02em',
   },
 
   headerSubtitle: {
     fontSize: '0.75rem',
-    color: '#64748b',
-    fontWeight: 500,
+    color: '#927559',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
   },
 
   headerNav: {
     display: 'flex',
-    background: '#f8fafc',
-    padding: '4px',
-    borderRadius: '10px',
-    border: '1px solid #e2e8f0',
+    background: 'rgba(30, 41, 59, 0.04)',
+    padding: '6px',
+    borderRadius: '16px',
+    border: '1px solid rgba(0, 0, 0, 0.04)',
+    gap: '4px',
   },
 
   navBtn: {
-    padding: '0.5rem 1rem',
+    padding: '0.6rem 1.25rem',
     border: 'none',
     background: 'transparent',
-    color: '#64748b',
+    color: '#475569',
     fontWeight: 600,
-    fontSize: '0.875rem',
-    borderRadius: '8px',
+    fontSize: '0.9rem',
+    borderRadius: '12px',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
   },
 
   navBtnActive: {
     background: 'white',
-    color: '#be123c',
-    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
+    color: '#927559',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
   },
 
   // Layout
   layoutContainer: {
-    display: 'flex',
-    minHeight: 'calc(100vh - 64px)',
-    maxWidth: '1600px',
+    display: 'grid',
+    gridTemplateColumns: '300px 1fr',
+    minHeight: 'calc(100vh - 72px)',
+    maxWidth: '1800px',
     margin: '0 auto',
+    gap: '0',
   },
 
   // Bullet content styling
   bulletContent: {
-    lineHeight: 1.8,
-    color: '#475569',
+    lineHeight: 1.9,
+    color: '#334155',
+    fontSize: '1.05rem',
   },
 
   sidebar: {
-    width: '240px',
-    background: 'white',
-    borderRight: '1px solid #e2e8f0',
-    padding: '1.5rem 1rem',
+    width: '300px',
+    background: 'rgba(255, 255, 255, 0.5)',
+    borderRight: '1px solid rgba(0, 0, 0, 0.04)',
+    padding: '2rem 1.5rem',
     overflowY: 'auto',
-    height: 'calc(100vh - 64px)',
+    height: 'calc(100vh - 72px)',
     position: 'sticky',
-    top: '64px',
+    top: '72px',
   },
 
   sidebarSectionTitle: {
     textTransform: 'uppercase',
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    color: '#94a3b8',
-    letterSpacing: '0.05em',
-    marginBottom: '0.75rem',
+    fontSize: '0.7rem',
+    fontWeight: 800,
+    color: '#927559',
+    letterSpacing: '0.1em',
+    marginBottom: '1rem',
     paddingLeft: '0.75rem',
   },
 
@@ -532,56 +544,66 @@ const styles = {
     listStyle: 'none',
     padding: 0,
     margin: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
   },
 
   tocItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.75rem',
-    padding: '0.75rem',
-    borderRadius: '8px',
+    gap: '1rem',
+    padding: '12px 16px',
+    borderRadius: '14px',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    fontSize: '0.9rem',
-    color: '#64748b',
+    transition: 'all 0.3s ease',
+    fontSize: '0.95rem',
+    color: '#475569',
+    fontWeight: 500,
   },
 
   tocItemActive: {
-    background: '#fff1f2',
-    color: '#be123c',
-    fontWeight: 600,
+    background: 'rgba(146, 117, 89, 0.1)',
+    color: '#1e293b',
+    fontWeight: 700,
+    boxShadow: 'inset 0 0 0 1px rgba(146, 117, 89, 0.2)',
   },
 
   tocIcon: {
     fontSize: '1.25rem',
+    opacity: 0.8,
   },
 
   mainContent: {
     flex: 1,
-    padding: '2rem',
-    marginLeft: '0',
+    padding: '3rem 4rem',
+    overflowY: 'auto',
   },
 
   // Section
   section: {
-    marginBottom: '3rem',
-    scrollMarginTop: 'calc(64px + 2rem)',
+    marginBottom: '5rem',
+    scrollMarginTop: 'calc(72px + 3rem)',
+    animation: 'fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
   },
 
   sectionTitle: {
-    fontSize: '1.875rem',
+    fontSize: '2.25rem',
     fontWeight: 800,
-    color: '#0f172a',
-    letterSpacing: '-0.025em',
-    marginBottom: '1.5rem',
+    color: '#1e293b',
+    letterSpacing: '-0.04em',
+    marginBottom: '2rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
   },
 
   // Two Column Layout
   twoColumnLayout: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '1.5rem',
-    alignItems: 'start',
+    gap: '2.5rem',
+    alignItems: 'stretch',
   },
 
   columnLeft: {
@@ -594,12 +616,13 @@ const styles = {
 
   // Card
   card: {
-    background: 'white',
-    border: '1px solid #e2e8f0',
-    borderRadius: '16px',
-    padding: '1.5rem',
-    marginBottom: '1.5rem',
-    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
+    background: 'rgba(255, 255, 255, 0.85)',
+    backdropFilter: 'blur(8px)',
+    border: '1px solid rgba(0, 0, 0, 0.04)',
+    borderRadius: '24px',
+    padding: '2.5rem',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.02)',
+    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
   },
 
   contentCard: {
@@ -610,22 +633,24 @@ const styles = {
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
+    background: 'rgba(252, 250, 247, 0.7)',
   },
 
   cardBody: {
-    color: '#475569',
-    lineHeight: 1.8,
+    color: '#334155',
+    lineHeight: 1.9,
   },
 
   visualContainer: {
-    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-    border: '1px solid #e2e8f0',
-    borderRadius: '16px',
-    padding: '1rem',
+    background: 'white',
+    border: '1px solid rgba(0, 0, 0, 0.03)',
+    borderRadius: '20px',
+    padding: '2rem',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '300px',
+    minHeight: '400px',
+    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
   },
 
   noVisual: {
@@ -633,100 +658,96 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  // Feature List
-  featureList: {
-    listStyle: 'none',
-    padding: 0,
-    margin: 0,
-  },
-
-  styledListItem: {
-    padding: '0.8rem 1.2rem',
-    marginBottom: '0.6rem',
-    background: 'linear-gradient(135deg, #ffffff 0%, #fff1f2 100%)',
-    borderLeft: '4px solid #be123c',
-    borderRadius: '8px',
-    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)',
-    fontSize: '1rem',
-    lineHeight: 1.6,
+    opacity: 0.3,
   },
 
   // Quiz
   quizQuestion: {
     background: 'white',
-    borderRadius: '16px',
-    padding: '2rem',
-    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-    marginBottom: '2rem',
-    border: '1px solid #e2e8f0',
+    borderRadius: '24px',
+    padding: '3rem',
+    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.04)',
+    marginBottom: '2.5rem',
+    border: '1px solid rgba(0,0,0,0.04)',
   },
 
   qHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '1.5rem',
+    marginBottom: '2rem',
   },
 
   qBadge: {
-    background: '#0f172a',
+    background: '#1e293b',
     color: 'white',
-    padding: '0.25rem 0.75rem',
+    padding: '0.5rem 1.25rem',
     borderRadius: '999px',
-    fontWeight: 700,
-    fontSize: '0.875rem',
+    fontWeight: 800,
+    fontSize: '0.75rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
   },
 
   qText: {
-    fontSize: '1.25rem',
-    fontWeight: 700,
-    marginBottom: '1.5rem',
+    fontSize: '1.5rem',
+    fontWeight: 800,
+    color: '#1e293b',
+    marginBottom: '2.5rem',
+    letterSpacing: '-0.02em',
+    lineHeight: 1.4,
   },
 
   qOptions: {
     display: 'grid',
-    gap: '0.75rem',
+    gap: '1rem',
   },
 
   qOption: {
-    padding: '1rem 1.25rem',
-    border: '2px solid #e2e8f0',
-    borderRadius: '12px',
+    padding: '1.25rem 1.75rem',
+    border: '2px solid rgba(0, 0, 0, 0.04)',
+    borderRadius: '16px',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    fontWeight: 500,
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+    fontWeight: 600,
+    fontSize: '1rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
   },
 
   qOptionSelected: {
-    borderColor: '#be123c',
-    background: '#fff1f2',
+    borderColor: '#927559',
+    background: 'rgba(146, 117, 89, 0.05)',
+    color: '#927559',
   },
 
   qOptionCorrect: {
-    borderColor: '#059669',
-    background: '#d1fae5',
+    borderColor: '#3d5a45',
+    background: 'rgba(61, 90, 69, 0.05)',
+    color: '#3d5a45',
   },
 
   qExplanation: {
-    marginTop: '1.5rem',
-    padding: '1rem',
-    background: '#fef3c7',
-    borderRadius: '8px',
-    fontSize: '0.95rem',
+    marginTop: '2.5rem',
+    padding: '2rem',
+    background: 'rgba(146, 117, 89, 0.05)',
+    borderRadius: '16px',
+    fontSize: '1rem',
+    borderLeft: '4px solid #927559',
+    lineHeight: 1.7,
   },
 
   // Flashcards
   flashcardContainer: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '1.5rem',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+    gap: '2rem',
   },
 
   flashcard: {
-    perspective: '1000px',
-    height: '220px',
+    perspective: '1200px',
+    height: '280px',
     cursor: 'pointer',
   },
 
@@ -734,10 +755,10 @@ const styles = {
     position: 'relative',
     width: '100%',
     height: '100%',
-    transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+    transition: 'transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
     transformStyle: 'preserve-3d',
-    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-    borderRadius: '16px',
+    borderRadius: '24px',
+    boxShadow: '0 15px 35px -5px rgba(0,0,0,0.05)',
   },
 
   flashcardFlipped: {
@@ -749,15 +770,15 @@ const styles = {
     width: '100%',
     height: '100%',
     backfaceVisibility: 'hidden',
-    borderRadius: '16px',
-    padding: '2rem',
+    borderRadius: '24px',
+    padding: '3rem',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
     textAlign: 'center',
     background: 'white',
-    border: '1px solid rgba(0,0,0,0.05)',
+    border: '1px solid rgba(0,0,0,0.03)',
   },
 
   flashcardBack: {
@@ -765,83 +786,82 @@ const styles = {
     width: '100%',
     height: '100%',
     backfaceVisibility: 'hidden',
-    borderRadius: '16px',
-    padding: '2rem',
+    borderRadius: '24px',
+    padding: '3rem',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
     textAlign: 'center',
-    background: 'linear-gradient(135deg, #0369a1, #0284c7)',
+    background: '#1e293b',
     color: 'white',
     transform: 'rotateY(180deg)',
   },
 
   tapHint: {
     position: 'absolute',
-    bottom: '1rem',
-    fontSize: '0.75rem',
-    opacity: 0.6,
+    bottom: '1.5rem',
+    fontSize: '0.7rem',
+    opacity: 0.4,
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.1em',
+    fontWeight: 800,
   },
 
   // Real Life View
   reallifeHeader: {
     textAlign: 'center',
-    marginBottom: '2rem',
+    marginBottom: '4rem',
   },
 
   sectionDesc: {
-    fontSize: '1.125rem',
-    color: '#64748b',
-    marginTop: '-0.5rem',
+    fontSize: '1.25rem',
+    color: '#475569',
+    marginTop: '0.5rem',
+    fontWeight: 500,
   },
 
   reallifeGrid: {
-    display: 'grid',
-    gap: '2rem',
-    maxWidth: '1200px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3rem',
+    maxWidth: '1400px',
     margin: '0 auto',
   },
 
   reallifeCard: {
     background: 'white',
-    borderRadius: '16px',
-    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-    border: '1px solid #e2e8f0',
+    borderRadius: '32px',
+    boxShadow: '0 20px 50px -12px rgba(0,0,0,0.05)',
+    border: '1px solid rgba(0,0,0,0.03)',
     overflow: 'hidden',
-    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+    transition: 'all 0.4s ease',
   },
 
   reallifeLayout: {
     display: 'grid',
-    gridTemplateColumns: '280px 40px 1fr',
-    gap: '1.5rem',
-    padding: '2rem',
-    alignItems: 'center',
+    gridTemplateColumns: '450px 80px 1fr',
+    gap: '0',
+    padding: '0',
+    alignItems: 'stretch',
   },
 
   reallifeImage: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    background: '#fcfaf7',
+    overflow: 'hidden',
   },
 
   reallifeImg: {
     width: '100%',
-    maxWidth: '280px',
-    height: 'auto',
-    borderRadius: '12px',
-    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+    height: '400px',
     objectFit: 'cover',
   },
 
   reallifePlaceholder: {
-    width: '280px',
-    height: '200px',
-    background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-    borderRadius: '12px',
+    width: '100%',
+    height: '400px',
+    background: 'linear-gradient(135deg, #fcfaf7 0%, #f1f5f9 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -851,67 +871,74 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    background: 'white',
+    opacity: 0.3,
   },
 
   arrowSvg: {
-    width: '40px',
-    height: '40px',
-    color: '#64748b',
-    animation: 'arrowPulse 2s ease-in-out infinite',
+    width: '48px',
+    height: '48px',
+    color: '#927559',
   },
 
   reallifeContent: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '1rem',
+    justifyContent: 'center',
+    padding: '4rem',
+    gap: '1.5rem',
   },
 
   reallifeIcon: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '12px',
+    width: '64px',
+    height: '64px',
+    borderRadius: '16px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '1.5rem',
-    marginBottom: '0.5rem',
+    fontSize: '2rem',
+    boxShadow: '0 8px 16px -4px rgba(0,0,0,0.15)',
   },
 
   reallifeTitle: {
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    color: '#0f172a',
+    fontSize: '2rem',
+    fontWeight: 800,
+    color: '#1e293b',
     margin: 0,
+    letterSpacing: '-0.03em',
   },
 
   reallifeDesc: {
     color: '#475569',
-    lineHeight: 1.6,
+    fontSize: '1.15rem',
+    lineHeight: 1.7,
     margin: 0,
+    opacity: 0.8,
   },
 
   reallifeBox: {
-    padding: '1rem 1.25rem',
-    borderRadius: '12px',
-    marginTop: '0.5rem',
+    padding: '1.5rem 2rem',
+    borderRadius: '20px',
+    marginTop: '1rem',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
   },
 
   reallifeBoxPrimary: {
-    background: '#fff1f2',
-    borderLeft: '4px solid #be123c',
-    color: '#881337',
+    background: '#fcfaf7',
+    borderLeft: '4px solid #927559',
+    color: '#1e293b',
   },
 
   reallifeBoxSecondary: {
-    background: '#e0f2fe',
-    borderLeft: '4px solid #0369a1',
-    color: '#0c4a6e',
+    background: '#fcfaf7',
+    borderLeft: '4px solid #1e293b',
+    color: '#1e293b',
   },
 
   reallifeBoxWarning: {
-    background: '#fef3c7',
-    borderLeft: '4px solid #d97706',
-    color: '#78350f',
+    background: '#fcfaf7',
+    borderLeft: '4px solid #927559',
+    color: '#1e293b',
   },
 };
 

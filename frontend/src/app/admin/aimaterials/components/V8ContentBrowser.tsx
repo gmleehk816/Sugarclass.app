@@ -100,53 +100,87 @@ interface V8Task {
 }
 
 // ===========================================================================
-// STYLES
-// ===========================================================================
+// STYLES & DESIGN TOKENS
+// ================================================= design tokens match globals.css
+const designTokens = {
+    primary: '#1e293b', // Slate 800
+    primaryLight: '#334155', // Slate 700
+    primaryMuted: 'rgba(30, 41, 59, 0.05)',
+    accent: '#927559', // Bronze
+    accentLight: '#a48c73',
+    accentMuted: 'rgba(146, 117, 89, 0.1)',
+    background: '#fcfaf7', // Ivory
+    cardBg: 'rgba(255, 255, 255, 0.85)',
+    cardBorder: 'rgba(0, 0, 0, 0.04)',
+    success: '#3d5a45', // Forest Sage
+    shadowSm: '0 2px 4px rgba(0, 0, 0, 0.02)',
+    shadowMd: '0 10px 25px -5px rgba(0, 0, 0, 0.04)',
+    shadowLg: '0 20px 50px -12px rgba(0, 0, 0, 0.08)',
+    shadowGlass: '0 8px 32px 0 rgba(31, 38, 135, 0.05)',
+    radiusXl: '32px',
+    radiusLg: '24px',
+    radiusMd: '16px',
+    radiusSm: '8px',
+    fontFamily: "'Outfit', sans-serif",
+    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+};
 
 const inputStyle = {
     width: '100%',
-    padding: '10px 14px',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
+    padding: '12px 16px',
+    border: `1px solid ${designTokens.cardBorder}`,
+    borderRadius: designTokens.radiusMd,
     fontSize: '0.95rem',
-    fontFamily: 'inherit' as const,
+    fontFamily: designTokens.fontFamily,
     background: 'white',
+    boxShadow: designTokens.shadowSm,
+    transition: designTokens.transition,
 };
 
 const cardStyle = (isMobile?: boolean) => ({
-    background: 'white',
-    padding: isMobile ? '16px' : '24px',
-    borderRadius: '16px',
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    background: designTokens.cardBg,
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    padding: isMobile ? '20px' : '32px',
+    borderRadius: designTokens.radiusLg,
+    border: `1px solid ${designTokens.cardBorder}`,
+    boxShadow: designTokens.shadowMd,
+    transition: designTokens.transition,
 });
 
 const buttonPrimary = {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    borderRadius: '10px',
-    background: '#be123c',
+    gap: '10px',
+    padding: '12px 24px',
+    borderRadius: designTokens.radiusMd,
+    background: designTokens.primary,
     color: 'white',
     border: 'none',
     fontWeight: 600,
     fontSize: '0.9rem',
     cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(30, 41, 59, 0.15)',
+    transition: designTokens.transition,
+    fontFamily: designTokens.fontFamily,
+    letterSpacing: '-0.01em',
 };
 
 const buttonSecondary = {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    borderRadius: '10px',
+    gap: '10px',
+    padding: '12px 24px',
+    borderRadius: designTokens.radiusMd,
     background: 'white',
-    color: '#374151',
-    border: '1px solid #e2e8f0',
+    color: designTokens.primary,
+    border: `1px solid ${designTokens.cardBorder}`,
     fontWeight: 600,
     fontSize: '0.9rem',
     cursor: 'pointer',
+    boxShadow: designTokens.shadowSm,
+    transition: designTokens.transition,
+    fontFamily: designTokens.fontFamily,
 };
 
 // ===========================================================================
@@ -192,201 +226,152 @@ const V8GenerateModal = ({
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
+            background: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '20px'
+            padding: '20px',
+            fontFamily: designTokens.fontFamily
         }}>
             <div style={{
                 background: 'white',
-                borderRadius: '24px',
-                padding: isMobile ? '24px' : '40px',
-                maxWidth: '700px',
+                padding: isMobile ? '24px' : '48px',
+                borderRadius: designTokens.radiusXl,
                 width: '100%',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                maxWidth: '640px',
+                boxShadow: designTokens.shadowLg,
+                position: 'relative',
+                border: `1px solid ${designTokens.cardBorder}`,
+                animation: 'fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
             }}>
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-                    <div>
-                        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: '#1e293b' }}>
-                            Generate V8 Content
+                {/* Close Button */}
+                <button
+                    onClick={onClose}
+                    disabled={generating}
+                    style={{
+                        position: 'absolute',
+                        top: '24px',
+                        right: '24px',
+                        background: designTokens.primaryMuted,
+                        border: 'none',
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: generating ? 'not-allowed' : 'pointer',
+                        color: designTokens.primary,
+                        transition: designTokens.transition
+                    }}
+                >
+                    <XCircle size={20} />
+                </button>
+
+                <div style={{ marginBottom: '32px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                        <div style={{ background: designTokens.accentMuted, padding: '12px', borderRadius: '16px' }}>
+                            <Sparkles size={28} color={designTokens.accent} />
+                        </div>
+                        <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: 0, color: designTokens.primary, letterSpacing: '-0.03em' }}>
+                            Task Configuration
                         </h2>
-                        <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>
-                            {subtopicName ? `Configure generation for: ${subtopicName}` : 'Configure V8 content generation'}
-                        </p>
                     </div>
+                    <p style={{ color: designTokens.primaryLight, opacity: 0.7, fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }}>
+                        {subtopicName ? (
+                            <>Synthesizing V8 content for <strong style={{ color: designTokens.primary }}>{subtopicName}</strong> using advanced LLM pipelines.</>
+                        ) : 'Initialize the V8 generation pipeline for this educational module.'}
+                    </p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '14px', marginBottom: '32px' }}>
+                    {[
+                        { key: 'generate_concepts', label: 'Interactive Concepts', icon: <Layers size={18} /> },
+                        { key: 'generate_svgs', label: 'SVG Architecture', icon: <ImageIcon size={18} /> },
+                        { key: 'generate_quiz', label: 'Assessment Engine', icon: <HelpCircle size={18} /> },
+                        { key: 'generate_flashcards', label: 'Active Recall Sets', icon: <FileText size={18} /> },
+                        { key: 'generate_images', label: 'Visual Context', icon: <ImageIcon size={18} /> },
+                        { key: 'force_regenerate', label: 'Deep Regeneration', icon: <RefreshCw size={18} />, color: designTokens.accent }
+                    ].map((opt) => (
+                        <label
+                            key={opt.key}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                padding: '16px',
+                                borderRadius: designTokens.radiusMd,
+                                background: (options as any)[opt.key] ? designTokens.primaryMuted : '#fcfaf7',
+                                border: `2px solid ${(options as any)[opt.key] ? designTokens.accent : 'rgba(0,0,0,0.03)'}`,
+                                cursor: 'pointer',
+                                transition: designTokens.transition,
+                                opacity: generating ? 0.6 : 1
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={(options as any)[opt.key]}
+                                disabled={generating}
+                                onChange={(e) => setOptions({ ...options, [opt.key]: e.target.checked })}
+                                style={{
+                                    width: '20px',
+                                    height: '20px',
+                                    accentColor: designTokens.primary,
+                                    cursor: 'pointer'
+                                }}
+                            />
+                            <div style={{ color: (options as any)[opt.key] ? designTokens.primary : designTokens.primaryLight, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ opacity: 0.7 }}>{opt.icon}</div>
+                                <span style={{ fontSize: '0.85rem', fontWeight: (options as any)[opt.key] ? 800 : 600 }}>{opt.label}</span>
+                            </div>
+                        </label>
+                    ))}
+                </div>
+
+                <div style={{ marginBottom: '32px' }}>
+                    <label style={{ display: 'block', marginBottom: '12px', fontSize: '0.85rem', fontWeight: 800, color: designTokens.primary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Synthesis Directives
+                    </label>
+                    <textarea
+                        value={options.custom_prompt}
+                        onChange={(e) => setOptions({ ...options, custom_prompt: e.target.value })}
+                        placeholder="Define custom constraints or focus areas for the AI..."
+                        disabled={generating}
+                        style={{
+                            ...inputStyle,
+                            height: '120px',
+                            resize: 'none',
+                            fontSize: '0.9rem',
+                            lineHeight: 1.6
+                        }}
+                    />
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
                     <button
                         onClick={onClose}
                         disabled={generating}
+                        style={{ ...buttonSecondary, flex: 1, justifyContent: 'center', padding: '16px' }}
+                    >
+                        Decline
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={generating}
                         style={{
-                            background: '#f1f5f9',
-                            border: 'none',
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '12px',
-                            display: 'flex',
-                            alignItems: 'center',
+                            ...buttonPrimary,
+                            flex: 1,
                             justifyContent: 'center',
-                            cursor: generating ? 'not-allowed' : 'pointer',
-                            color: '#64748b',
-                            fontSize: '1.2rem'
+                            padding: '16px',
+                            background: designTokens.accent,
+                            boxShadow: `0 12px 24px -6px ${designTokens.accentMuted}`
                         }}
                     >
-                        ✕
+                        {generating ? <Loader2 size={20} className="animate-spin" /> : 'Execute Pipeline'}
                     </button>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    {/* Content Types */}
-                    <div style={{
-                        background: '#f8fafc',
-                        padding: '20px',
-                        borderRadius: '16px',
-                        border: '1px solid #e2e8f0'
-                    }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>
-                            <Layers size={18} color="#7c3aed" /> Content Types to Generate
-                        </label>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                            {[
-                                { key: 'generate_concepts', label: 'Concepts & SVGs', icon: '📚' },
-                                { key: 'generate_svgs', label: 'SVG Diagrams', icon: '🎨' },
-                                { key: 'generate_quiz', label: 'Quiz Questions', icon: '❓' },
-                                { key: 'generate_flashcards', label: 'Flashcards', icon: '🎴' },
-                                { key: 'generate_images', label: 'Real-life Images', icon: '🖼️' },
-                            ].map(item => (
-                                <label key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: generating ? 'not-allowed' : 'pointer', padding: '8px 12px', background: (options as any)[item.key] ? '#eef2ff' : 'white', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={(options as any)[item.key]}
-                                        onChange={(e) => setOptions({ ...options, [item.key]: e.target.checked })}
-                                        disabled={generating}
-                                        style={{ width: '18px', height: '18px', accentColor: '#7c3aed' }}
-                                    />
-                                    <span style={{ fontSize: '0.9rem', color: '#475569', fontWeight: 500 }}>{item.icon} {item.label}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Custom Prompt */}
-                    <div style={{
-                        background: '#f8fafc',
-                        padding: '20px',
-                        borderRadius: '16px',
-                        border: '1px solid #e2e8f0'
-                    }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>
-                            <Edit size={18} color="#7c3aed" /> Additional Instructions
-                        </label>
-                        <textarea
-                            value={options.custom_prompt}
-                            onChange={(e) => setOptions({ ...options, custom_prompt: e.target.value })}
-                            disabled={generating}
-                            placeholder="e.g., Focus on visual explanations, add more examples for difficult concepts, use simpler language..."
-                            style={{
-                                ...inputStyle,
-                                minHeight: '100px',
-                                resize: 'vertical',
-                                background: generating ? '#f1f5f9' : 'white',
-                                fontSize: '0.9rem',
-                                borderRadius: '10px',
-                            }}
-                        />
-                    </div>
-
-                    {/* Force Regenerate */}
-                    {options.force_regenerate && (
-                        <div style={{
-                            padding: '16px',
-                            background: '#fff1f2',
-                            borderRadius: '12px',
-                            border: '1px solid #fecaca',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px'
-                        }}>
-                            <AlertCircle size={20} color="#dc2626" />
-                            <span style={{ fontSize: '0.9rem', color: '#991b1b' }}>
-                                <strong>Force Regenerate:</strong> Existing V8 content for this subtopic will be replaced.
-                            </span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer */}
-                <div style={{
-                    marginTop: '32px',
-                    paddingTop: '24px',
-                    borderTop: '1px solid #f1f5f9',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '16px'
-                }}>
-                    <div style={{
-                        padding: '12px 16px',
-                        background: '#eff6ff',
-                        borderRadius: '12px',
-                        fontSize: '0.85rem',
-                        color: '#1e40af',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                    }}>
-                        <Info size={14} />
-                        Generation runs in background
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                        <button
-                            onClick={onClose}
-                            disabled={generating}
-                            style={{
-                                padding: '12px 24px',
-                                borderRadius: '12px',
-                                border: '1px solid #e2e8f0',
-                                background: 'white',
-                                color: '#64748b',
-                                cursor: generating ? 'not-allowed' : 'pointer',
-                                fontWeight: 600,
-                                fontSize: '0.95rem',
-                            }}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={onConfirm}
-                            disabled={generating}
-                            style={{
-                                padding: '12px 32px',
-                                borderRadius: '12px',
-                                border: 'none',
-                                background: generating ? '#94a3b8' : 'linear-gradient(135deg, #be123c 0%, #9f1239 100%)',
-                                color: 'white',
-                                cursor: generating ? 'not-allowed' : 'pointer',
-                                fontWeight: 700,
-                                fontSize: '0.95rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}
-                        >
-                            {generating ? (
-                                <>
-                                    <Loader2 size={16} className="animate-spin" />
-                                    Generating...
-                                </>
-                            ) : (
-                                <>
-                                    <Zap size={16} />
-                                    Start Generation
-                                </>
-                            )}
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>
@@ -410,6 +395,9 @@ const V8ContentBrowser = ({
     isMobile: boolean;
     isTablet: boolean;
 }) => {
+    const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
+    const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
+
     // Use internal state for V8 subjects (fetched from V8 API)
     const [subjects, setSubjects] = useState<any[]>(propSubjects || []);
     const [loadingSubjects, setLoadingSubjects] = useState(propLoadingSubjects);
@@ -441,37 +429,43 @@ const V8ContentBrowser = ({
         custom_prompt: '',
     });
 
+    const [viewMode, setViewMode] = useState<'topic-overview' | 'subtopic-detail'>('topic-overview');
+
     // Fetch V8 subjects on mount
     useEffect(() => {
         loadSubjects();
     }, []);
 
-    // Sync with prop subjects if provided (as fallback)
-    useEffect(() => {
-        if (propSubjects && propSubjects.length > 0 && subjects.length === 0) {
-            setSubjects(propSubjects);
+    const toggleSubject = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setExpandedSubjects(prev => ({ ...prev, [id]: !prev[id] }));
+        if (selectedSubjectId !== id) {
+            setSelectedSubjectId(id);
         }
-    }, [propSubjects]);
+    };
 
-    // Load topics when subject is selected
+    const toggleTopic = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setExpandedTopics(prev => ({ ...prev, [id]: !prev[id] }));
+        if (selectedTopicId !== id) {
+            setSelectedTopicId(id);
+        }
+    };
+
+    // Auto-expand and load when subject/topic is selected via polling or initial load
     useEffect(() => {
         if (selectedSubjectId) {
+            setExpandedSubjects(prev => ({ ...prev, [selectedSubjectId]: true }));
             loadTopics(selectedSubjectId);
-        } else {
-            setTopics([]);
-            setSelectedTopicId(null);
-            setSubtopics([]);
-            setSelectedSubtopicId(null);
         }
     }, [selectedSubjectId]);
 
-    // Load subtopics when topic is selected
     useEffect(() => {
         if (selectedTopicId) {
+            setExpandedTopics(prev => ({ ...prev, [selectedTopicId]: true }));
             loadSubtopics(selectedTopicId);
-        } else {
-            setSubtopics([]);
-            setSelectedSubtopicId(null);
+            setViewMode('topic-overview');
+            setSelectedSubtopicId(null); // Reset when changing topic
         }
     }, [selectedTopicId]);
 
@@ -479,6 +473,7 @@ const V8ContentBrowser = ({
     useEffect(() => {
         if (selectedSubtopicId) {
             loadSubtopicContent(selectedSubtopicId);
+            setViewMode('subtopic-detail');
         } else {
             setSubtopicStatus(null);
             setFullSubtopic(null);
@@ -517,16 +512,15 @@ const V8ContentBrowser = ({
         try {
             const data = await serviceFetch('aimaterials', '/api/admin/v8/subjects');
             setSubjects(data.subjects || []);
-            // Auto-select first subject if available
+            // Auto-select and expand first subject if available
             if (data.subjects && data.subjects.length > 0) {
-                setSelectedSubjectId(data.subjects[0].id);
+                const firstId = data.subjects[0].id;
+                setSelectedSubjectId(firstId);
+                setExpandedSubjects({ [firstId]: true });
             }
         } catch (err) {
             console.error('Error loading subjects', err);
-            // Fallback to prop subjects
-            if (propSubjects && propSubjects.length > 0) {
-                setSubjects(propSubjects);
-            }
+            if (propSubjects && propSubjects.length > 0) setSubjects(propSubjects);
         } finally {
             setLoadingSubjects(false);
         }
@@ -537,9 +531,6 @@ const V8ContentBrowser = ({
         try {
             const data = await serviceFetch('aimaterials', `/api/admin/v8/subjects/${subjectId}/topics`);
             setTopics(data.topics || []);
-            if (data.topics?.length > 0) {
-                setSelectedTopicId(data.topics[0].id);
-            }
         } catch (err) {
             console.error('Error loading topics', err);
             setTopics([]);
@@ -553,9 +544,6 @@ const V8ContentBrowser = ({
         try {
             const data = await serviceFetch('aimaterials', `/api/admin/v8/topics/${topicId}/subtopics?include_status=true`);
             setSubtopics(data.subtopics || []);
-            if (data.subtopics?.length > 0) {
-                setSelectedSubtopicId(data.subtopics[0].id);
-            }
         } catch (err) {
             console.error('Error loading subtopics', err);
             setSubtopics([]);
@@ -567,11 +555,9 @@ const V8ContentBrowser = ({
     const loadSubtopicContent = async (subtopicId: string) => {
         setLoadingContent(true);
         try {
-            // Load status
             const statusData = await serviceFetch('aimaterials', `/api/admin/v8/subtopics/${subtopicId}/status`);
             setSubtopicStatus(statusData);
 
-            // Load full content if processed
             if (statusData.has_concepts) {
                 const fullData = await serviceFetch('aimaterials', `/api/admin/v8/subtopics/${subtopicId}`);
                 setFullSubtopic(fullData);
@@ -611,7 +597,6 @@ const V8ContentBrowser = ({
             if (data.task_id) {
                 setCurrentTaskId(data.task_id);
             } else if (data.status === 'already_generated') {
-                // Content already exists
                 setTaskStatus({
                     task_id: '',
                     status: 'completed',
@@ -620,7 +605,6 @@ const V8ContentBrowser = ({
                     logs: []
                 });
                 setGenerating(false);
-                // Reload content
                 loadSubtopicContent(selectedSubtopicId);
             } else {
                 setGenerating(false);
@@ -636,328 +620,412 @@ const V8ContentBrowser = ({
         setShowGenerateModal(true);
     };
 
-    // Find selected subject
-    const selectedSubject = subjects.find(s => s.id === selectedSubjectId);
-
     return (
         <div style={{
             display: 'grid',
-            gridTemplateColumns: isTablet ? '1fr' : '260px 280px 1fr',
-            gap: '20px',
-            minHeight: '600px'
+            gridTemplateColumns: isTablet ? '1fr' : '300px 1fr 350px',
+            gap: '32px',
+            minHeight: '800px',
+            fontFamily: designTokens.fontFamily
         }}>
-            {/* Subject List */}
-            <div style={cardStyle(isMobile)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                    <Database size={18} color="#6366f1" />
-                    <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Subjects</h3>
+            {/* Hierarchical Navigation Sidebar (Left) */}
+            <div style={{
+                ...cardStyle(isMobile),
+                display: 'flex',
+                gap: '12px',
+                flexDirection: 'column',
+                maxHeight: '900px',
+                overflow: 'hidden',
+                padding: '24px'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', paddingBottom: '16px', borderBottom: `1px solid ${designTokens.primaryMuted}` }}>
+                    <div style={{ background: designTokens.accentMuted, padding: '8px', borderRadius: '10px' }}>
+                        <Layers size={20} color={designTokens.accent} />
+                    </div>
+                    <div>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: designTokens.primary, letterSpacing: '-0.02em' }}>Content Explorer</h3>
+                        <div style={{ fontSize: '0.7rem', color: designTokens.accent, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>V8 Architecture</div>
+                    </div>
                 </div>
 
-                {loadingSubjects ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>
-                        <Loader2 size={20} className="animate-spin" />
-                    </div>
-                ) : subjects.length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>
-                        No subjects found. Upload content first.
-                    </div>
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {subjects.map((subject: any) => (
-                            <button
-                                key={subject.id}
-                                onClick={() => setSelectedSubjectId(subject.id)}
-                                style={{
-                                    padding: '12px 14px',
-                                    borderRadius: '10px',
-                                    border: 'none',
-                                    background: selectedSubjectId === subject.id ? '#eef2ff' : 'transparent',
-                                    cursor: 'pointer',
-                                    textAlign: 'left',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    transition: 'background 0.15s',
-                                }}
-                            >
-                                <BookOpen size={16} color={selectedSubjectId === subject.id ? '#6366f1' : '#94a3b8'} />
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
-                                        {subject.name}
-                                    </div>
-                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                                        {subject.topic_count || 0} topics
-                                    </div>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
+                <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }} className="custom-scrollbar">
+                    {loadingSubjects ? (
+                        <div style={{ padding: '40px', textAlign: 'center', color: designTokens.primaryLight }}>
+                            <Loader2 size={32} className="animate-spin" />
+                        </div>
+                    ) : subjects.length === 0 ? (
+                        <div style={{ padding: '40px', textAlign: 'center', color: designTokens.primaryLight, opacity: 0.6, fontSize: '0.9rem' }}>
+                            No courses found in database.
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {subjects.map((subject: any) => (
+                                <div key={subject.id} style={{ marginBottom: '6px' }}>
+                                    {/* Subject Row */}
+                                    <button
+                                        onClick={(e) => toggleSubject(subject.id, e)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '12px 16px',
+                                            borderRadius: designTokens.radiusMd,
+                                            border: 'none',
+                                            background: selectedSubjectId === subject.id ? designTokens.accentMuted : 'transparent',
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            transition: designTokens.transition,
+                                        }}
+                                        onMouseEnter={(e) => { e.currentTarget.style.background = selectedSubjectId === subject.id ? designTokens.accentMuted : designTokens.primaryMuted }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.background = selectedSubjectId === subject.id ? designTokens.accentMuted : 'transparent' }}
+                                    >
+                                        <div style={{ opacity: 0.5, color: designTokens.primary }}>
+                                            {expandedSubjects[subject.id] ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                        </div>
+                                        <BookOpen size={18} color={selectedSubjectId === subject.id ? designTokens.accent : designTokens.primaryLight} />
+                                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: selectedSubjectId === subject.id ? designTokens.primary : designTokens.primaryLight, flex: 1, letterSpacing: '-0.01em' }}>
+                                            {subject.name}
+                                        </span>
+                                        <div style={{
+                                            fontSize: '0.7rem',
+                                            fontWeight: 800,
+                                            color: designTokens.accent,
+                                            background: designTokens.accentMuted,
+                                            padding: '2px 8px',
+                                            borderRadius: '20px'
+                                        }}>
+                                            {subject.topic_count || 0}
+                                        </div>
+                                    </button>
 
-            {/* Topic/Subtopic Tree */}
-            <div style={cardStyle(isMobile)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                    <Layers size={18} color="#8b5cf6" />
-                    <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Topics & Subtopics</h3>
-                </div>
+                                    {/* Topics List */}
+                                    {expandedSubjects[subject.id] && (
+                                        <div style={{
+                                            paddingLeft: '24px',
+                                            marginTop: '6px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '4px',
+                                            borderLeft: `2px solid ${designTokens.accentMuted}`,
+                                            marginLeft: '24px'
+                                        }}>
+                                            {loadingTopics && selectedSubjectId === subject.id ? (
+                                                <div style={{ padding: '12px', textAlign: 'center' }}><Loader2 size={18} className="animate-spin" color={designTokens.accent} /></div>
+                                            ) : topics.length === 0 ? (
+                                                <div style={{ padding: '12px', color: designTokens.primaryLight, opacity: 0.5, fontSize: '0.8rem' }}>No topics</div>
+                                            ) : topics.map((topic) => (
+                                                <div key={topic.id}>
+                                                    <button
+                                                        onClick={(e) => toggleTopic(topic.id, e)}
+                                                        style={{
+                                                            width: '100%',
+                                                            padding: '10px 14px',
+                                                            borderRadius: designTokens.radiusSm,
+                                                            border: 'none',
+                                                            background: selectedTopicId === topic.id ? designTokens.primaryMuted : 'transparent',
+                                                            cursor: 'pointer',
+                                                            textAlign: 'left',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '10px',
+                                                            transition: designTokens.transition,
+                                                        }}
+                                                    >
+                                                        <div style={{ opacity: 0.4 }}>
+                                                            {expandedTopics[topic.id] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                                        </div>
+                                                        <FolderOpen size={16} color={selectedTopicId === topic.id ? designTokens.primary : designTokens.primaryLight} style={{ opacity: 0.7 }} />
+                                                        <span style={{ fontWeight: 600, fontSize: '0.85rem', color: selectedTopicId === topic.id ? designTokens.primary : designTokens.primaryLight, flex: 1 }}>
+                                                            {topic.name}
+                                                        </span>
+                                                        <div style={{
+                                                            fontSize: '0.65rem',
+                                                            fontWeight: 700,
+                                                            padding: '2px 6px',
+                                                            borderRadius: '6px',
+                                                            background: topic.processed_count === topic.subtopic_count ? designTokens.success : designTokens.primaryMuted,
+                                                            color: topic.processed_count === topic.subtopic_count ? 'white' : designTokens.primaryLight,
+                                                            opacity: topic.processed_count === topic.subtopic_count ? 1 : 0.6
+                                                        }}>
+                                                            {topic.processed_count}/{topic.subtopic_count}
+                                                        </div>
+                                                    </button>
 
-                {!selectedSubjectId ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>
-                        Select a subject
-                    </div>
-                ) : loadingTopics ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>
-                        <Loader2 size={20} className="animate-spin" />
-                    </div>
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '500px', overflowY: 'auto' }}>
-                        {topics.map((topic) => (
-                            <div key={topic.id}>
-                                {/* Topic Header */}
-                                <button
-                                    onClick={() => setSelectedTopicId(selectedTopicId === topic.id ? null : topic.id)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px 12px',
-                                        borderRadius: '8px',
-                                        border: 'none',
-                                        background: selectedTopicId === topic.id ? '#f5f3ff' : 'transparent',
-                                        cursor: 'pointer',
-                                        textAlign: 'left',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                    }}
-                                >
-                                    {selectedTopicId === topic.id ? (
-                                        <ChevronDown size={14} color="#8b5cf6" />
-                                    ) : (
-                                        <ChevronRight size={14} color="#94a3b8" />
+                                                    {/* Subtopics removed from sidebar tree per user request */}
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
-                                    <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#374151' }}>
-                                        {topic.topic_id} - {topic.name}
-                                    </span>
-                                    <span style={{
-                                        marginLeft: 'auto',
-                                        fontSize: '0.7rem',
-                                        padding: '2px 6px',
-                                        borderRadius: '10px',
-                                        background: topic.processed_count > 0 ? '#dcfce7' : '#f3f4f6',
-                                        color: topic.processed_count > 0 ? '#16a34a' : '#9ca3af',
-                                    }}>
-                                        {topic.processed_count}/{topic.subtopic_count}
-                                    </span>
-                                </button>
-
-                                {/* Subtopics */}
-                                {selectedTopicId === topic.id && (
-                                    <div style={{ paddingLeft: '20px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                        {loadingSubtopics ? (
-                                            <div style={{ padding: '10px', textAlign: 'center' }}>
-                                                <Loader2 size={16} className="animate-spin" />
-                                            </div>
-                                        ) : subtopics.map((subtopic) => (
-                                            <button
-                                                key={subtopic.id}
-                                                onClick={() => setSelectedSubtopicId(subtopic.id)}
-                                                style={{
-                                                    padding: '8px 12px',
-                                                    borderRadius: '6px',
-                                                    border: 'none',
-                                                    background: selectedSubtopicId === subtopic.id ? '#e0e7ff' : 'transparent',
-                                                    cursor: 'pointer',
-                                                    textAlign: 'left',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '8px',
-                                                }}
-                                            >
-                                                <FileText size={14} color={subtopic.processed_at ? '#6366f1' : '#d1d5db'} />
-                                                <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>
-                                                    {subtopic.subtopic_id} {subtopic.name}
-                                                </span>
-                                                {subtopic.v8_concepts_count > 0 && (
-                                                    <CheckCircle2 size={12} color="#22c55e" style={{ marginLeft: 'auto' }} />
-                                                )}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* V8 Content Details */}
-            <div style={cardStyle(isMobile)}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Sparkles size={18} color="#be123c" />
-                        <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>V8 Content</h3>
-                    </div>
-                    {selectedSubtopicId && (
-                        <button
-                            onClick={() => openGenerateModal(false)}
-                            disabled={generating}
-                            style={{
-                                ...buttonPrimary,
-                                opacity: generating ? 0.6 : 1,
-                                cursor: generating ? 'not-allowed' : 'pointer',
-                            }}
-                        >
-                            {generating ? (
-                                <>
-                                    <Loader2 size={16} className="animate-spin" />
-                                    Generating...
-                                </>
-                            ) : (
-                                <>
-                                    <Zap size={16} />
-                                    Generate V8
-                                </>
-                            )}
-                        </button>
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </div>
+            </div>
 
-                {/* Task Progress */}
-                {taskStatus && (
-                    <div style={{
-                        padding: '16px',
-                        background: taskStatus.status === 'failed' ? '#fef2f2' :
-                                   taskStatus.status === 'completed' ? '#f0fdf4' : '#eff6ff',
-                        borderRadius: '12px',
-                        marginBottom: '20px',
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                            {taskStatus.status === 'running' && <Loader2 size={16} className="animate-spin" color="#3b82f6" />}
-                            {taskStatus.status === 'completed' && <CheckCircle2 size={16} color="#22c55e" />}
-                            {taskStatus.status === 'failed' && <XCircle size={16} color="#ef4444" />}
-                            {taskStatus.status === 'pending' && <Clock size={16} color="#f59e0b" />}
-                            <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>
-                                {taskStatus.status === 'running' ? `Processing... ${taskStatus.progress}%` :
-                                 taskStatus.status === 'completed' ? 'Completed!' :
-                                 taskStatus.status === 'failed' ? 'Failed' : 'Pending...'}
-                            </span>
+            {/* V8 Content Details Area (Center) */}
+            <div style={{
+                ...cardStyle(isMobile),
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: '800px',
+                padding: '32px',
+                background: 'rgba(255, 255, 255, 0.98)', // Brighter center for focus
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px', paddingBottom: '24px', borderBottom: `1px solid ${designTokens.primaryMuted}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        {viewMode === 'subtopic-detail' && (
+                            <button
+                                onClick={() => setViewMode('topic-overview')}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: '8px',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    color: designTokens.primaryLight
+                                }}
+                            >
+                                <ChevronRight size={20} style={{ transform: 'rotate(180deg)' }} />
+                            </button>
+                        )}
+                        <div style={{ background: designTokens.primaryMuted, padding: '12px', borderRadius: '16px', border: `1px solid ${designTokens.cardBorder}` }}>
+                            {viewMode === 'topic-overview' ? <Folder size={24} color={designTokens.accent} /> : <Sparkles size={24} color={designTokens.accent} />}
                         </div>
-                        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{taskStatus.message}</div>
-
-                        {/* Progress Bar */}
-                        {taskStatus.status === 'running' && (
-                            <div style={{ marginTop: '12px', background: '#e2e8f0', borderRadius: '10px', height: '8px', overflow: 'hidden' }}>
-                                <div style={{
-                                    background: '#3b82f6',
-                                    height: '100%',
-                                    width: `${taskStatus.progress}%`,
-                                    transition: 'width 0.3s',
-                                }} />
+                        <div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: designTokens.primary, letterSpacing: '-0.02em' }}>
+                                {viewMode === 'topic-overview' ? (topics.find(t => t.id === selectedTopicId)?.name || 'Select a Topic') : (fullSubtopic?.name || 'V8 Detail')}
+                            </h3>
+                            <div style={{ fontSize: '0.85rem', color: designTokens.primaryLight, marginTop: '4px', opacity: 0.7 }}>
+                                {viewMode === 'topic-overview' ? 'Topic Overview & Subtopics' : 'Knowledge Nodes & AI Assessment Engine'}
                             </div>
-                        )}
+                        </div>
+                    </div>
+                </div>
 
-                        {/* Error message */}
-                        {taskStatus.error && (
-                            <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#dc2626' }}>
-                                {taskStatus.error}
+                <div style={{ flex: 1 }}>
+                    {!selectedTopicId ? (
+                        <div style={{ padding: '80px 20px', textAlign: 'center', color: '#94a3b8' }}>
+                            <div style={{ display: 'inline-flex', padding: '24px', background: '#f8fafc', borderRadius: '50%', marginBottom: '24px' }}>
+                                <Eye size={48} color="#cbd5e1" />
                             </div>
-                        )}
+                            <h4 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 12px 0', color: '#475569' }}>Explorer View</h4>
+                            <p style={{ fontSize: '0.95rem', margin: 0, maxWidth: '400px', marginLeft: 'auto', marginRight: 'auto' }}>
+                                Select a subject and topic on the left to begin browsing educational subtopics.
+                            </p>
+                        </div>
+                    ) : viewMode === 'topic-overview' ? (
+                        <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+                                <Layers size={18} color={designTokens.accent} />
+                                <h4 style={{ fontSize: '0.9rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: designTokens.primaryLight }}>Available Subtopics</h4>
+                            </div>
 
-                        {/* Live Logs Panel */}
-                        {taskStatus.logs && taskStatus.logs.length > 0 && (
-                            <div style={{ marginTop: '12px' }}>
-                                <button
-                                    onClick={() => setShowLogs(!showLogs)}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontSize: '0.8rem',
-                                        color: '#64748b',
-                                        padding: '4px 0',
-                                        fontWeight: 500,
-                                    }}
-                                >
-                                    <Terminal size={14} />
-                                    {showLogs ? 'Hide Logs' : 'Show Logs'}
-                                    {showLogs ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                </button>
-
-                                {showLogs && (
-                                    <div style={{
-                                        marginTop: '8px',
-                                        background: '#1e293b',
-                                        borderRadius: '8px',
-                                        padding: '12px',
-                                        maxHeight: '200px',
-                                        overflowY: 'auto',
-                                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                                        fontSize: '0.75rem',
-                                    }}>
-                                        {taskStatus.logs.map((log, idx) => (
-                                            <div
-                                                key={idx}
-                                                style={{
-                                                    color: log.log_level === 'error' ? '#f87171' :
-                                                           log.log_level === 'warning' ? '#fbbf24' : '#94a3b8',
-                                                    padding: '2px 0',
-                                                    borderBottom: idx < taskStatus.logs!.length - 1 ? '1px solid #334155' : 'none',
-                                                }}
-                                            >
-                                                <span style={{ color: '#64748b', marginRight: '8px' }}>
-                                                    {log.created_at ? new Date(log.created_at).toLocaleTimeString() : ''}
-                                                </span>
-                                                {log.message}
+                            {loadingSubtopics ? (
+                                <div style={{ padding: '40px', textAlign: 'center' }}><Loader2 size={32} className="animate-spin" color={designTokens.accent} /></div>
+                            ) : subtopics.length === 0 ? (
+                                <div style={{ padding: '40px', textAlign: 'center', color: designTokens.primaryLight }}>No subtopics found.</div>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                                    {subtopics.map((subtopic) => (
+                                        <button
+                                            key={subtopic.id}
+                                            onClick={() => setSelectedSubtopicId(subtopic.id)}
+                                            style={{
+                                                padding: '24px',
+                                                background: 'white',
+                                                borderRadius: designTokens.radiusMd,
+                                                border: `1px solid ${selectedSubtopicId === subtopic.id ? designTokens.accent : designTokens.cardBorder}`,
+                                                textAlign: 'left',
+                                                cursor: 'pointer',
+                                                transition: designTokens.transition,
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '12px',
+                                                boxShadow: selectedSubtopicId === subtopic.id ? designTokens.shadowLg : designTokens.shadowSm,
+                                                position: 'relative',
+                                                overflow: 'hidden'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.transform = 'translateY(-4px)';
+                                                e.currentTarget.style.boxShadow = designTokens.shadowLg;
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.transform = 'translateY(0)';
+                                                e.currentTarget.style.boxShadow = selectedSubtopicId === subtopic.id ? designTokens.shadowLg : designTokens.shadowSm;
+                                            }}
+                                        >
+                                            {subtopic.v8_concepts_count > 0 && (
+                                                <div style={{ position: 'absolute', top: 0, right: 0, padding: '8px', background: designTokens.success + '20', borderRadius: '0 0 0 12px' }}>
+                                                    <CheckCircle2 size={14} color={designTokens.success} />
+                                                </div>
+                                            )}
+                                            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: designTokens.accent, textTransform: 'uppercase' }}>Subtopic 0{subtopic.order_num}</div>
+                                            <div style={{ fontWeight: 700, fontSize: '1rem', color: designTokens.primary }}>{subtopic.name}</div>
+                                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                                {subtopic.v8_concepts_count > 0 ? (
+                                                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: designTokens.success }}>
+                                                        {subtopic.v8_concepts_count} Knowledge Nodes
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#94a3b8' }}>Pending Synthesis</div>
+                                                )}
                                             </div>
-                                        ))}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        /* Subtopic Detail Mode */
+                        <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
+                            {loadingContent ? (
+                                <div style={{ padding: '80px 20px', textAlign: 'center' }}>
+                                    <Loader2 size={40} className="animate-spin" color={designTokens.accent} />
+                                    <div style={{ marginTop: '16px', fontWeight: 600, color: designTokens.primaryLight }}>Accessing V8 Nodes...</div>
+                                </div>
+                            ) : subtopicStatus && !subtopicStatus.has_concepts ? (
+                                <div style={{ padding: '60px 40px', textAlign: 'center', background: '#f8fafc', borderRadius: '24px', border: '2px dashed #e2e8f0' }}>
+                                    <div style={{ display: 'inline-flex', padding: '20px', background: '#fffbeb', borderRadius: '50%', marginBottom: '20px' }}>
+                                        <Sparkles size={40} color="#f59e0b" />
                                     </div>
-                                )}
+                                    <h4 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 12px 0', color: '#1e293b' }}>
+                                        No V8 Content Synthesis Detected
+                                    </h4>
+                                    <p style={{ fontSize: '0.95rem', color: '#64748b', marginBottom: '32px', maxWidth: '450px', marginLeft: 'auto', marginRight: 'auto' }}>
+                                        This subtopic requires initialization through the V8 generation pipeline to create diagrams and concept nodes.
+                                    </p>
+                                    <button
+                                        onClick={() => openGenerateModal(false)}
+                                        disabled={generating}
+                                        style={{
+                                            ...buttonPrimary,
+                                            padding: '14px 32px',
+                                            borderRadius: '14px',
+                                            fontSize: '1rem',
+                                            boxShadow: '0 10px 25px -5px rgba(190, 18, 60, 0.4)'
+                                        }}
+                                    >
+                                        <Zap size={20} />
+                                        Initialize Synthesis
+                                    </button>
+                                </div>
+                            ) : subtopicStatus && fullSubtopic ? (
+                                <V8ContentDetails
+                                    status={subtopicStatus}
+                                    subtopic={fullSubtopic}
+                                    onRegenerate={() => openGenerateModal(true)}
+                                    regenerating={generating}
+                                />
+                            ) : null}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Telemetry & Tasks Sidebar (Right) */}
+            {
+                !isTablet && (
+                    <div style={{
+                        ...cardStyle(isMobile),
+                        display: 'flex',
+                        flexDirection: 'column',
+                        maxHeight: '900px',
+                        padding: '24px',
+                        background: 'rgba(15, 23, 42, 0.02)', // Slightly distinct slate wash
+                        borderLeft: `1px solid ${designTokens.primaryMuted}`
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px', paddingBottom: '16px', borderBottom: `1px solid ${designTokens.primaryMuted}` }}>
+                            <div style={{ background: designTokens.primary, padding: '8px', borderRadius: '10px' }}>
+                                <BarChart3 size={18} color="white" />
                             </div>
-                        )}
+                            <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, color: designTokens.primary, letterSpacing: '-0.02em' }}>Telemetry Stream</h3>
+                        </div>
+
+                        <div style={{ flex: 1, overflowY: 'auto' }} className="custom-scrollbar">
+                            {taskStatus ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    {/* Mini Task Status */}
+                                    <div style={{
+                                        padding: '20px',
+                                        background: taskStatus.status === 'failed' ? '#fff1f2' :
+                                            taskStatus.status === 'completed' ? '#f0fdf4' : designTokens.primary,
+                                        borderRadius: designTokens.radiusMd,
+                                        color: taskStatus.status === 'running' || taskStatus.status === 'pending' ? 'white' : 'inherit',
+                                        boxShadow: designTokens.shadowSm,
+                                        border: `1px solid ${taskStatus.status === 'failed' ? '#fecaca' : taskStatus.status === 'completed' ? '#bbf7d0' : 'rgba(255,255,255,0.1)'}`,
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                {taskStatus.status === 'running' && <RefreshCw size={16} className="animate-spin" color={designTokens.accentLight} />}
+                                                {taskStatus.status === 'completed' && <CheckCircle2 size={16} color={designTokens.success} />}
+                                                <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{taskStatus.status}</span>
+                                            </div>
+                                            {taskStatus.status === 'running' && (
+                                                <div style={{ fontSize: '1.1rem', fontWeight: 900, color: designTokens.accentLight }}>{taskStatus.progress}%</div>
+                                            )}
+                                        </div>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '12px', lineHeight: 1.4 }}>{taskStatus.message}</div>
+
+                                        {taskStatus.status === 'running' && (
+                                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden' }}>
+                                                <div style={{
+                                                    background: `linear-gradient(90deg, ${designTokens.accent} 0%, ${designTokens.accentLight} 100%)`,
+                                                    height: '100%',
+                                                    width: `${taskStatus.progress}%`,
+                                                    transition: 'width 0.4s ease'
+                                                }} />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Logs */}
+                                    {taskStatus.logs && taskStatus.logs.length > 0 && (
+                                        <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                                <Terminal size={14} color={designTokens.primaryLight} style={{ opacity: 0.6 }} />
+                                                <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: designTokens.primaryLight, opacity: 0.6 }}>Log History</span>
+                                            </div>
+                                            <div style={{
+                                                background: '#0f172a',
+                                                borderRadius: '12px',
+                                                padding: '16px',
+                                                maxHeight: '500px',
+                                                overflowY: 'auto',
+                                                fontFamily: "'Fira Code', monospace",
+                                                fontSize: '0.75rem',
+                                                color: '#94a3b8',
+                                                boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)',
+                                                lineHeight: 1.5
+                                            }} className="custom-scrollbar">
+                                                {taskStatus.logs.slice().reverse().map((log, idx) => (
+                                                    <div key={idx} style={{
+                                                        padding: '6px 0',
+                                                        borderBottom: '1px solid rgba(255,255,255,0.03)',
+                                                        color: log.log_level === 'error' ? '#f87171' : log.log_level === 'warning' ? '#fbbf24' : '#94a3b8'
+                                                    }}>
+                                                        <span style={{ opacity: 0.4, fontSize: '0.65rem' }}>{log.created_at ? new Date(log.created_at).toLocaleTimeString() : 'SYS'}</span>
+                                                        <div style={{ marginTop: '2px' }}>{log.message}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
+                                    <Info size={32} style={{ opacity: 0.2 }} />
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>No Active Tasks</div>
+                                    <p style={{ fontSize: '0.75rem', opacity: 0.6, margin: 0 }}>Start a V8 synthesis task to see live telemetry and architectural logs here.</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
-                {!selectedSubtopicId ? (
-                    <div style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
-                        <Eye size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
-                        <div style={{ fontSize: '1rem' }}>Select a subtopic to view V8 content</div>
-                    </div>
-                ) : loadingContent ? (
-                    <div style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
-                        <Loader2 size={32} className="animate-spin" />
-                    </div>
-                ) : subtopicStatus && !subtopicStatus.has_concepts ? (
-                    <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                        <AlertCircle size={48} color="#f59e0b" style={{ marginBottom: '16px' }} />
-                        <div style={{ fontSize: '1rem', color: '#374151', marginBottom: '8px' }}>
-                            No V8 content yet
-                        </div>
-                        <div style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '20px' }}>
-                            Click "Generate V8" to create concepts, quiz questions, and flashcards.
-                        </div>
-                        <button
-                            onClick={() => openGenerateModal(false)}
-                            disabled={generating}
-                            style={buttonPrimary}
-                        >
-                            <Zap size={16} />
-                            Generate V8 Content
-                        </button>
-                    </div>
-                ) : subtopicStatus && fullSubtopic ? (
-                    <V8ContentDetails
-                        status={subtopicStatus}
-                        subtopic={fullSubtopic}
-                        onRegenerate={() => openGenerateModal(true)}
-                        regenerating={generating}
-                    />
-                ) : null}
-            </div>
-
-            {/* V8 Generation Options Modal */}
             {showGenerateModal && (
                 <V8GenerateModal
                     options={generateOptions}
@@ -988,213 +1056,177 @@ const V8ContentDetails = ({
     onRegenerate: () => void;
     regenerating: boolean;
 }) => {
-    const [activeTab, setActiveTab] = useState<'concepts' | 'quiz' | 'flashcards'>('concepts');
-
     return (
-        <div>
-            {/* Status Summary */}
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: '12px',
-                marginBottom: '20px',
-            }}>
-                <div style={{ padding: '12px', background: '#f0fdf4', borderRadius: '10px', textAlign: 'center' }}>
-                    <Layers size={20} color="#22c55e" style={{ marginBottom: '4px' }} />
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#166534' }}>{status.concept_count}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#4ade80' }}>Concepts</div>
-                </div>
-                <div style={{ padding: '12px', background: '#eff6ff', borderRadius: '10px', textAlign: 'center' }}>
-                    <HelpCircle size={20} color="#3b82f6" style={{ marginBottom: '4px' }} />
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e40af' }}>{status.quiz_count}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#60a5fa' }}>Quiz</div>
-                </div>
-                <div style={{ padding: '12px', background: '#fef3c7', borderRadius: '10px', textAlign: 'center' }}>
-                    <FileText size={20} color="#f59e0b" style={{ marginBottom: '4px' }} />
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#92400e' }}>{status.flashcard_count}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#fbbf24' }}>Flashcards</div>
-                </div>
-                <div style={{ padding: '12px', background: '#fae8ff', borderRadius: '10px', textAlign: 'center' }}>
-                    <ImageIcon size={20} color="#c026d3" style={{ marginBottom: '4px' }} />
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#86198f' }}>{status.svg_count}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#d946ef' }}>SVGs</div>
-                </div>
-            </div>
+        <div style={{ fontFamily: designTokens.fontFamily }}>
+            {/* Unified Content Stream */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '48px' }}>
+                {/* Concepts Section */}
+                <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                        <div style={{ background: designTokens.success + '20', padding: '10px', borderRadius: '12px' }}>
+                            <Layers size={20} color={designTokens.success} />
+                        </div>
+                        <h4 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: designTokens.primary }}>Knowledge Modules</h4>
+                        <div style={{ marginLeft: 'auto', fontSize: '0.8rem', fontWeight: 700, color: designTokens.primaryLight, opacity: 0.4 }}>
+                            {subtopic.concepts?.length || 0} Modules
+                        </div>
+                    </div>
 
-            {/* Tab Navigation */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
-                <button
-                    onClick={() => setActiveTab('concepts')}
-                    style={{
-                        padding: '8px 16px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: activeTab === 'concepts' ? '#eef2ff' : 'transparent',
-                        color: activeTab === 'concepts' ? '#4f46e5' : '#6b7280',
-                        fontWeight: 600,
-                        fontSize: '0.85rem',
-                        cursor: 'pointer',
-                    }}
-                >
-                    <Layers size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-                    Concepts ({subtopic.concepts?.length || 0})
-                </button>
-                <button
-                    onClick={() => setActiveTab('quiz')}
-                    style={{
-                        padding: '8px 16px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: activeTab === 'quiz' ? '#eef2ff' : 'transparent',
-                        color: activeTab === 'quiz' ? '#4f46e5' : '#6b7280',
-                        fontWeight: 600,
-                        fontSize: '0.85rem',
-                        cursor: 'pointer',
-                    }}
-                >
-                    <HelpCircle size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-                    Quiz ({subtopic.quiz?.length || 0})
-                </button>
-                <button
-                    onClick={() => setActiveTab('flashcards')}
-                    style={{
-                        padding: '8px 16px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: activeTab === 'flashcards' ? '#eef2ff' : 'transparent',
-                        color: activeTab === 'flashcards' ? '#4f46e5' : '#6b7280',
-                        fontWeight: 600,
-                        fontSize: '0.85rem',
-                        cursor: 'pointer',
-                    }}
-                >
-                    <FileText size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-                    Flashcards ({subtopic.flashcards?.length || 0})
-                </button>
-            </div>
-
-            {/* Tab Content */}
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {activeTab === 'concepts' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         {subtopic.concepts?.map((concept, index) => (
                             <div key={concept.id || index} style={{
-                                padding: '16px',
-                                background: '#f9fafb',
-                                borderRadius: '12px',
-                                border: '1px solid #e5e7eb',
+                                padding: '24px',
+                                background: 'white',
+                                borderRadius: designTokens.radiusMd,
+                                border: `1px solid ${designTokens.cardBorder}`,
+                                boxShadow: designTokens.shadowSm,
+                                transition: designTokens.transition,
+                                position: 'relative',
+                                overflow: 'hidden'
                             }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                                    <span style={{ fontSize: '1.5rem' }}>{concept.icon || '📚'}</span>
-                                    <span style={{ fontWeight: 600, color: '#1f2937' }}>{concept.title}</span>
+                                <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: designTokens.accent }} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '12px' }}>
+                                    <span style={{ fontSize: '1.75rem' }}>{concept.icon || '📚'}</span>
+                                    <span style={{ fontWeight: 800, color: designTokens.primary, fontSize: '1.05rem', letterSpacing: '-0.01em' }}>{concept.title}</span>
                                     {concept.generated?.svg && (
-                                        <span style={{
+                                        <div style={{
                                             marginLeft: 'auto',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            padding: '4px 12px',
+                                            background: designTokens.success + '20',
+                                            color: designTokens.success,
+                                            borderRadius: '20px',
                                             fontSize: '0.7rem',
-                                            padding: '2px 8px',
-                                            background: '#dcfce7',
-                                            color: '#16a34a',
-                                            borderRadius: '10px',
+                                            fontWeight: 800
                                         }}>
-                                            Has SVG
-                                        </span>
+                                            <ImageIcon size={12} />
+                                            SVG READY
+                                        </div>
                                     )}
                                 </div>
-                                <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                    {concept.description || concept.generated?.bullets?.replace(/<[^>]*>/g, ' ').substring(0, 150) + '...'}
+                                <div style={{
+                                    fontSize: '0.95rem',
+                                    color: designTokens.primaryLight,
+                                    lineHeight: 1.6,
+                                    opacity: 0.8
+                                }}>
+                                    {concept.description || (concept.generated?.bullets ?
+                                        <div dangerouslySetInnerHTML={{ __html: concept.generated.bullets }} /> :
+                                        'No description available.')}
                                 </div>
                             </div>
                         ))}
-                        {(!subtopic.concepts || subtopic.concepts.length === 0) && (
-                            <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>
-                                No concepts found
-                            </div>
-                        )}
                     </div>
-                )}
+                </div>
 
-                {activeTab === 'quiz' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {subtopic.quiz?.map((question, index) => (
-                            <div key={question.id || index} style={{
-                                padding: '16px',
-                                background: '#f9fafb',
-                                borderRadius: '12px',
-                                border: '1px solid #e5e7eb',
-                            }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                                    <span style={{
-                                        padding: '4px 10px',
-                                        background: '#1f2937',
-                                        color: 'white',
-                                        borderRadius: '20px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: 600,
+                {/* Quiz Section */}
+                {subtopic.quiz && subtopic.quiz.length > 0 && (
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                            <div style={{ background: designTokens.primaryMuted, padding: '10px', borderRadius: '12px' }}>
+                                <HelpCircle size={20} color={designTokens.primary} />
+                            </div>
+                            <h4 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: designTokens.primary }}>Assessment Engine</h4>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {subtopic.quiz.map((question, index) => (
+                                <div key={question.id || index} style={{
+                                    padding: '24px',
+                                    background: 'white',
+                                    borderRadius: designTokens.radiusMd,
+                                    border: `1px solid ${designTokens.cardBorder}`,
+                                    boxShadow: designTokens.shadowSm,
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                                        <div style={{
+                                            padding: '4px 12px',
+                                            background: designTokens.primary,
+                                            color: 'white',
+                                            borderRadius: '20px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 800,
+                                            letterSpacing: '0.05em'
+                                        }}>
+                                            QUESTION {question.question_num || index + 1}
+                                        </div>
+                                    </div>
+                                    <div style={{
+                                        fontWeight: 700,
+                                        color: designTokens.primary,
+                                        fontSize: '1.05rem',
+                                        lineHeight: 1.5,
+                                        marginBottom: '16px'
                                     }}>
-                                        Q{question.question_num || index + 1}
-                                    </span>
-                                    {question.difficulty && (
-                                        <span style={{
-                                            fontSize: '0.7rem',
-                                            padding: '2px 8px',
-                                            background: question.difficulty === 'easy' ? '#dcfce7' :
-                                                       question.difficulty === 'hard' ? '#fee2e2' : '#fef3c7',
-                                            color: question.difficulty === 'easy' ? '#16a34a' :
-                                                   question.difficulty === 'hard' ? '#dc2626' : '#d97706',
-                                            borderRadius: '10px',
-                                        }}>
-                                            {question.difficulty}
-                                        </span>
-                                    )}
+                                        {question.question_text}
+                                    </div>
+                                    <div style={{
+                                        background: designTokens.success + '10',
+                                        padding: '12px 16px',
+                                        borderRadius: '10px',
+                                        fontSize: '0.85rem',
+                                        color: designTokens.success,
+                                        fontWeight: 700,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}>
+                                        <CheckCircle2 size={16} />
+                                        Correct Solution: {question.correct_answer}
+                                    </div>
                                 </div>
-                                <div style={{ fontWeight: 500, color: '#374151', marginBottom: '8px' }}>
-                                    {question.question_text}
-                                </div>
-                                <div style={{ fontSize: '0.8rem', color: '#22c55e' }}>
-                                    Answer: {question.correct_answer}
-                                </div>
-                            </div>
-                        ))}
-                        {(!subtopic.quiz || subtopic.quiz.length === 0) && (
-                            <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>
-                                No quiz questions found
-                            </div>
-                        )}
+                            ))}
+                        </div>
                     </div>
                 )}
 
-                {activeTab === 'flashcards' && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
-                        {subtopic.flashcards?.map((card, index) => (
-                            <div key={card.id || index} style={{
-                                padding: '16px',
-                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                borderRadius: '12px',
-                                color: 'white',
-                                minHeight: '120px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                justifyContent: 'space-between',
-                            }}>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                                    {card.front}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>
-                                    {card.back?.substring(0, 80)}...
-                                </div>
+                {/* Flashcards Section */}
+                {subtopic.flashcards && subtopic.flashcards.length > 0 && (
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                            <div style={{ background: designTokens.accentMuted, padding: '10px', borderRadius: '12px' }}>
+                                <FileText size={20} color={designTokens.accent} />
                             </div>
-                        ))}
-                        {(!subtopic.flashcards || subtopic.flashcards.length === 0) && (
-                            <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', gridColumn: '1 / -1' }}>
-                                No flashcards found
-                            </div>
-                        )}
+                            <h4 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: designTokens.primary }}>Active Recall Base</h4>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                            {subtopic.flashcards.map((card, index) => (
+                                <div key={card.id || index} style={{
+                                    padding: '24px',
+                                    background: `linear-gradient(135deg, ${designTokens.primary} 0%, ${designTokens.primaryLight} 100%)`,
+                                    borderRadius: designTokens.radiusMd,
+                                    color: 'white',
+                                    minHeight: '160px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    boxShadow: '0 10px 20px -5px rgba(30, 41, 59, 0.4)',
+                                }}>
+                                    <div style={{ fontSize: '1rem', fontWeight: 800, lineHeight: 1.4 }}>
+                                        {card.front}
+                                    </div>
+                                    <div style={{
+                                        fontSize: '0.8rem',
+                                        background: 'rgba(255,255,255,0.1)',
+                                        padding: '10px',
+                                        borderRadius: '8px',
+                                        marginTop: '16px',
+                                        opacity: 0.9
+                                    }}>
+                                        {card.back}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>
 
             {/* Regenerate Button */}
-            <div style={{ marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
+            <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: `1px solid ${designTokens.primaryMuted}` }}>
                 <button
                     onClick={onRegenerate}
                     disabled={regenerating}
@@ -1202,22 +1234,24 @@ const V8ContentDetails = ({
                         ...buttonSecondary,
                         width: '100%',
                         justifyContent: 'center',
+                        padding: '16px',
+                        background: '#f8fafc'
                     }}
                 >
                     {regenerating ? (
                         <>
-                            <Loader2 size={16} className="animate-spin" />
-                            Regenerating...
+                            <RefreshCw size={18} className="animate-spin" />
+                            Force Refreshing V8 Pipeline...
                         </>
                     ) : (
                         <>
-                            <RefreshCw size={16} />
-                            Regenerate V8 Content
+                            <RefreshCw size={18} />
+                            Regenerate Concept Synthesis
                         </>
                     )}
                 </button>
             </div>
-        </div>
+        </div >
     );
 };
 
