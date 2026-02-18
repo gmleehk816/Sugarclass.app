@@ -147,8 +147,9 @@ class SubjectListResponse(BaseModel):
 
 def get_db_connection():
     """Get database connection"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
@@ -916,31 +917,43 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
     """Background task to generate V8 content"""
 
     def update_task(status: str, progress: int, message: str, error: str = None):
-        conn = get_db_connection()
-        conn.execute("""
-            UPDATE v8_processing_tasks
-            SET status = ?, progress = ?, message = ?, error = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
-            WHERE task_id = ?
-        """, (status, progress, message, error, task_id))
-        conn.commit()
-
-        if status in ['completed', 'failed']:
+        conn = None
+        try:
+            conn = get_db_connection()
             conn.execute("""
-                UPDATE v8_processing_tasks SET completed_at = CURRENT_TIMESTAMP WHERE task_id = ?
-            """, (task_id,))
+                UPDATE v8_processing_tasks
+                SET status = ?, progress = ?, message = ?, error = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
+                WHERE task_id = ?
+            """, (status, progress, message, error, task_id))
             conn.commit()
 
-        conn.close()
+            if status in ['completed', 'failed']:
+                conn.execute("""
+                    UPDATE v8_processing_tasks SET completed_at = CURRENT_TIMESTAMP WHERE task_id = ?
+                """, (task_id,))
+                conn.commit()
+        except Exception as e:
+            print(f"[V8][{task_id}] update_task failed: {e}")
+        finally:
+            if conn:
+                conn.close()
 
     def add_log(level: str, message: str):
-        conn = get_db_connection()
-        conn.execute("""
-            INSERT INTO v8_task_logs (task_id, log_level, message)
-            VALUES (?, ?, ?)
-        """, (task_id, level, message))
-        conn.commit()
-        conn.close()
+        conn = None
+        try:
+            conn = get_db_connection()
+            conn.execute("""
+                INSERT INTO v8_task_logs (task_id, log_level, message)
+                VALUES (?, ?, ?)
+            """, (task_id, level, message))
+            conn.commit()
+        except Exception as e:
+            print(f"[V8][{task_id}] add_log failed ({level}): {e} | {message}")
+        finally:
+            if conn:
+                conn.close()
 
+    processor = None
     try:
         # Import here to avoid circular imports
         from .processors.content_processor_v8 import V8Processor, GeminiClient
@@ -950,47 +963,54 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
 
         # Load subtopic data
         conn = get_db_connection()
-        subtopic = conn.execute("""
-            SELECT s.*, t.name AS topic_name
-            FROM subtopics s
-            JOIN topics t ON s.topic_id = t.id
-            WHERE s.id = ?
-        """, (subtopic_id,)).fetchone()
+        try:
+            subtopic = conn.execute("""
+                SELECT s.*, t.name AS topic_name
+                FROM subtopics s
+                JOIN topics t ON s.topic_id = t.id
+                WHERE s.id = ?
+            """, (subtopic_id,)).fetchone()
 
-        if not subtopic:
-            raise Exception(f"Subtopic {subtopic_id} not found")
+            if not subtopic:
+                raise Exception(f"Subtopic {subtopic_id} not found")
 
-        subtopic = dict(subtopic)
+            subtopic = dict(subtopic)
 
-        # Read markdown content - try content_raw table first, then file
-        markdown_content = None
+            # Read markdown content - try content_raw table first, then file
+            markdown_content = None
 
-        # Option 1: Try content_raw table
-        raw_content = conn.execute("""
-            SELECT markdown_content FROM content_raw
-            WHERE subtopic_id = ?
-            ORDER BY id DESC LIMIT 1
-        """, (subtopic_id,)).fetchone()
+            # Option 1: Try content_raw table
+            raw_content = conn.execute("""
+                SELECT markdown_content FROM content_raw
+                WHERE subtopic_id = ?
+                ORDER BY id DESC LIMIT 1
+            """, (subtopic_id,)).fetchone()
 
-        if raw_content and raw_content['markdown_content']:
-            markdown_content = raw_content['markdown_content']
-            add_log('info', "Loaded content from content_raw table")
+            if raw_content and raw_content['markdown_content']:
+                markdown_content = raw_content['markdown_content']
+                add_log('info', "Loaded content from content_raw table")
 
-        # Option 2: Try markdown file path
-        if not markdown_content:
-            markdown_path = Path(subtopic['markdown_file_path']) if subtopic.get('markdown_file_path') else None
-            if markdown_path and markdown_path.exists():
-                with open(markdown_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    markdown_content = f.read()
-                add_log('info', f"Loaded content from file: {markdown_path.name}")
+            # Option 2: Try markdown file path
+            if not markdown_content:
+                markdown_path = Path(subtopic['markdown_file_path']) if subtopic.get('markdown_file_path') else None
+                if markdown_path and markdown_path.exists():
+                    with open(markdown_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        markdown_content = f.read()
+                    add_log('info', f"Loaded content from file: {markdown_path.name}")
 
-        if not markdown_content:
-            raise Exception(f"No content found for subtopic {subtopic_id}. Neither content_raw nor markdown file exists.")
-
-        conn.close()
+            if not markdown_content:
+                raise Exception(f"No content found for subtopic {subtopic_id}. Neither content_raw nor markdown file exists.")
+        finally:
+            conn.close()
 
         add_log('info', f"Loaded markdown: {len(markdown_content)} chars")
         update_task('running', 20, 'Analyzing structure...')
+
+        generate_svgs = options.get('generate_svgs', True)
+        generate_quiz = options.get('generate_quiz', True)
+        generate_flashcards = options.get('generate_flashcards', True)
+        if options.get('generate_images', False):
+            add_log('warning', "generate_images=true requested, but image generation is not implemented in this task yet.")
 
         # Initialize generator
         processor = V8Processor()
@@ -1010,8 +1030,11 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
 
         # Save concepts (clear existing first)
         conn = get_db_connection()
+        conn.execute(
+            "DELETE FROM v8_generated_content WHERE concept_id IN (SELECT id FROM v8_concepts WHERE subtopic_id = ?)",
+            (subtopic_id,)
+        )
         conn.execute("DELETE FROM v8_concepts WHERE subtopic_id = ?", (subtopic_id,))
-        conn.execute("DELETE FROM v8_generated_content WHERE concept_id IN (SELECT id FROM v8_concepts WHERE subtopic_id = ?)", (subtopic_id,))
         conn.commit()
         conn.close()
 
@@ -1031,15 +1054,21 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
 
         # Get saved concepts
         saved_concepts = processor.db.get_concepts(subtopic_id)
+        concept_total = max(1, len(saved_concepts))
 
         # Generate SVGs and bullets
         for i, concept in enumerate(saved_concepts):
-            add_log('info', f"Generating SVG for: {concept['title']}")
-
-            svg = processor.gemini.generate_svg(concept['title'], concept['description'])
-            if svg:
-                processor.db.update_generated_content(concept['id'], 'svg', svg)
-                add_log('info', f"✓ SVG generated for {concept['title']}")
+            if generate_svgs:
+                add_log('info', f"Generating SVG for: {concept['title']}")
+                svg = processor.gemini.generate_svg(concept['title'], concept['description'])
+                if svg:
+                    processor.db.update_generated_content(concept['id'], 'svg', svg)
+                    if 'fallback-svg' in svg:
+                        add_log('warning', f"⚠ SVG fallback used for {concept['title']}")
+                    else:
+                        add_log('info', f"✓ SVG generated for {concept['title']}")
+            else:
+                add_log('info', f"Skipping SVG generation for: {concept['title']}")
 
             bullets = processor.gemini.generate_bullets(
                 concept['title'],
@@ -1050,11 +1079,11 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
                 processor.db.update_generated_content(concept['id'], 'bullets', bullets)
                 add_log('info', f"✓ Bullets generated for {concept['title']}")
 
-            progress = 40 + int(40 * (i + 1) / len(saved_concepts))
+            progress = 40 + int(40 * (i + 1) / concept_total)
             update_task('running', progress, f'Processing concept {i+1}/{len(saved_concepts)}')
 
         # Generate quiz
-        if options.get('generate_quiz', True):
+        if generate_quiz:
             add_log('info', "Generating quiz...")
             update_task('running', 85, 'Generating quiz...')
 
@@ -1070,7 +1099,7 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
                 add_log('info', f"✓ Generated {len(quiz['questions'])} quiz questions")
 
         # Generate flashcards
-        if options.get('generate_flashcards', True):
+        if generate_flashcards:
             add_log('info', "Generating flashcards...")
             update_task('running', 90, 'Generating flashcards...')
 
@@ -1091,35 +1120,45 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
         add_log('info', "V8 generation complete!")
         update_task('completed', 100, 'V8 content generation complete!')
 
-        processor.close()
-
     except Exception as e:
         import traceback
         error_msg = str(e)
         add_log('error', error_msg)
         add_log('error', traceback.format_exc())
         update_task('failed', 0, 'Generation failed', error_msg)
+    finally:
+        if processor:
+            processor.close()
 
 
 def run_svg_regeneration(task_id: str, concept_id: int, concept: Dict, custom_prompt: Optional[str] = None):
     """Background task to regenerate SVG"""
 
     def update_task(status: str, message: str):
-        conn = get_db_connection()
-        conn.execute("""
-            UPDATE v8_processing_tasks
-            SET status = ?, message = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
-            WHERE task_id = ?
-        """, (status, message, task_id))
-        conn.commit()
-        conn.close()
+        conn = None
+        try:
+            conn = get_db_connection()
+            conn.execute("""
+                UPDATE v8_processing_tasks
+                SET status = ?, message = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
+                WHERE task_id = ?
+            """, (status, message, task_id))
+            conn.commit()
+        except Exception as e:
+            print(f"[V8][{task_id}] svg update_task failed: {e}")
+        finally:
+            if conn:
+                conn.close()
 
+    processor = None
     try:
         from .processors.content_processor_v8 import V8Processor
 
         update_task('running', 'Regenerating SVG...')
 
         processor = V8Processor()
+        if not processor.gemini:
+            raise Exception("LLM API key not configured")
         
         # Use custom prompt if provided, otherwise default to concept description
         prompt_to_use = custom_prompt if custom_prompt else concept['description']
@@ -1127,14 +1166,18 @@ def run_svg_regeneration(task_id: str, concept_id: int, concept: Dict, custom_pr
 
         if svg:
             processor.db.update_generated_content(concept_id, 'svg', svg)
-            update_task('completed', 'SVG regenerated successfully')
+            if 'fallback-svg' in svg:
+                update_task('completed', 'SVG regenerated with fallback diagram')
+            else:
+                update_task('completed', 'SVG regenerated successfully')
         else:
             update_task('failed', 'Failed to regenerate SVG')
 
-        processor.close()
-
     except Exception as e:
         update_task('failed', f'Error: {str(e)}')
+    finally:
+        if processor:
+            processor.close()
 
 
 # ============================================================================
@@ -1149,6 +1192,34 @@ def _sanitize_code(name: str) -> str:
     code = re.sub(r'[^\w\s-]', '', name).strip().lower()
     code = re.sub(r'[-\s]+', '_', code)
     return code
+
+
+def _resolve_upload_markdown_path(batch_id: str, filename: str) -> Path:
+    """Resolve and validate upload markdown path to prevent traversal."""
+    safe_batch_id = (batch_id or "").strip()
+    safe_filename = (filename or "").strip()
+
+    if not safe_batch_id or not safe_filename:
+        raise HTTPException(status_code=400, detail="batch_id and filename are required")
+
+    # Only allow simple single-segment names
+    if Path(safe_batch_id).name != safe_batch_id or Path(safe_filename).name != safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid batch_id or filename")
+
+    if not safe_filename.lower().endswith(".md"):
+        raise HTTPException(status_code=400, detail="Only markdown (.md) files are allowed for V8 ingestion")
+
+    upload_root = UPLOAD_DIR.resolve()
+    batch_dir = (UPLOAD_DIR / safe_batch_id).resolve()
+    file_path = (batch_dir / safe_filename).resolve()
+
+    if upload_root not in file_path.parents or file_path.parent != batch_dir:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {safe_filename}")
+
+    return file_path
 
 
 def ensure_v8_tables():
@@ -1178,10 +1249,13 @@ async def v8_ingest(request: V8IngestRequest, background_tasks: BackgroundTasks)
     
     # Defensive check for tables
     ensure_v8_tables()
-    
-    file_path = UPLOAD_DIR / request.batch_id / request.filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
+
+    subject_name = (request.subject_name or "").strip()
+    syllabus = (request.syllabus or "").strip() or "IGCSE"
+    if not subject_name:
+        raise HTTPException(status_code=400, detail="subject_name is required")
+
+    file_path = _resolve_upload_markdown_path(request.batch_id, request.filename)
 
     task_id = str(uuid.uuid4())
 
@@ -1197,8 +1271,8 @@ async def v8_ingest(request: V8IngestRequest, background_tasks: BackgroundTasks)
         run_v8_full_ingestion,
         task_id,
         str(file_path),
-        request.subject_name,
-        request.syllabus
+        subject_name,
+        syllabus
     )
 
     return {"task_id": task_id, "status": "pending", "message": "V8 full ingestion started"}
@@ -1208,27 +1282,40 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
     """Background task: full V8 pipeline — parse markdown, create hierarchy, generate all V8 content"""
 
     def update_task(status: str, progress: int, message: str, error: str = None):
-        conn = get_db_connection()
-        conn.execute("""
-            UPDATE v8_processing_tasks
-            SET status = ?, progress = ?, message = ?, error = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
-            WHERE task_id = ?
-        """, (status, progress, message, error, task_id))
-        conn.commit()
-        if status in ['completed', 'failed']:
-            conn.execute("UPDATE v8_processing_tasks SET completed_at = CURRENT_TIMESTAMP WHERE task_id = ?", (task_id,))
+        conn = None
+        try:
+            conn = get_db_connection()
+            conn.execute("""
+                UPDATE v8_processing_tasks
+                SET status = ?, progress = ?, message = ?, error = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
+                WHERE task_id = ?
+            """, (status, progress, message, error, task_id))
             conn.commit()
-        conn.close()
+            if status in ['completed', 'failed']:
+                conn.execute("UPDATE v8_processing_tasks SET completed_at = CURRENT_TIMESTAMP WHERE task_id = ?", (task_id,))
+                conn.commit()
+        except Exception as e:
+            print(f"[V8][{task_id}] update_task failed: {e}")
+        finally:
+            if conn:
+                conn.close()
 
     def add_log(level: str, message: str):
-        conn = get_db_connection()
-        conn.execute("""
-            INSERT INTO v8_task_logs (task_id, log_level, message)
-            VALUES (?, ?, ?)
-        """, (task_id, level, message))
-        conn.commit()
-        conn.close()
+        conn = None
+        try:
+            conn = get_db_connection()
+            conn.execute("""
+                INSERT INTO v8_task_logs (task_id, log_level, message)
+                VALUES (?, ?, ?)
+            """, (task_id, level, message))
+            conn.commit()
+        except Exception as e:
+            print(f"[V8][{task_id}] add_log failed ({level}): {e} | {message}")
+        finally:
+            if conn:
+                conn.close()
 
+    processor = None
     try:
         from .processors.content_processor_v8 import ContentSplitter, V8Processor, GeminiClient, ConceptData
 
@@ -1319,8 +1406,11 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             # Insert topic - try V8 schema first, fallback to old schema
             try:
                 conn.execute("""
-                    INSERT OR IGNORE INTO topics (subject_id, topic_id, name, order_num)
+                    INSERT INTO topics (subject_id, topic_id, name, order_num)
                     VALUES (?, ?, ?, ?)
+                    ON CONFLICT(subject_id, topic_id) DO UPDATE SET
+                        name = excluded.name,
+                        order_num = excluded.order_num
                 """, (subject_db_id, topic_code, topic_name, ch_idx + 1))
                 conn.commit()
                 topic_row = conn.execute(
@@ -1343,16 +1433,21 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             topic_db_id = topic_row['id']
 
             for st_idx, subtopic in enumerate(chapter['subtopics']):
-                subtopic_text_id = subtopic.get('num', f"{ch_idx+1}.{st_idx+1}")
-                subtopic_slug = subtopic.get('slug', _sanitize_code(subtopic['title']))
+                subtopic_text_id = (subtopic.get('num') or f"{ch_idx+1}.{st_idx+1}").strip()
+                subtopic_slug = subtopic.get('slug') or _sanitize_code(subtopic['title'])
                 subtopic_name = subtopic['title']
                 subtopic_content = subtopic.get('content', '')
 
                 # Insert subtopic - try V8 schema first, fallback to old schema
                 try:
                     conn.execute("""
-                        INSERT OR IGNORE INTO subtopics (topic_id, subtopic_id, slug, name, order_num, markdown_file_path)
+                        INSERT INTO subtopics (topic_id, subtopic_id, slug, name, order_num, markdown_file_path)
                         VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(topic_id, subtopic_id) DO UPDATE SET
+                            slug = excluded.slug,
+                            name = excluded.name,
+                            order_num = excluded.order_num,
+                            markdown_file_path = excluded.markdown_file_path
                     """, (topic_db_id, subtopic_text_id, subtopic_slug, subtopic_name, st_idx + 1, str(md_path)))
                     conn.commit()
                     st_row = conn.execute(
@@ -1423,6 +1518,24 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
         for i, (st_db_id, st_name, st_content) in enumerate(subtopic_db_ids):
             subtopic_progress_base = 20 + int(75 * i / len(subtopic_db_ids))
             subtopic_progress_end = 20 + int(75 * (i + 1) / len(subtopic_db_ids))
+            subtopic_progress_span = max(1, subtopic_progress_end - subtopic_progress_base)
+
+            concepts_phase_start = min(
+                subtopic_progress_end,
+                subtopic_progress_base + max(1, int(subtopic_progress_span * 0.15))
+            )
+            concepts_phase_end = min(
+                subtopic_progress_end,
+                max(concepts_phase_start, subtopic_progress_base + max(2, int(subtopic_progress_span * 0.75)))
+            )
+            quiz_phase_progress = min(
+                subtopic_progress_end,
+                max(concepts_phase_end, subtopic_progress_base + max(2, int(subtopic_progress_span * 0.85)))
+            )
+            flashcards_phase_progress = min(
+                subtopic_progress_end,
+                max(quiz_phase_progress, subtopic_progress_base + max(3, int(subtopic_progress_span * 0.92)))
+            )
 
             add_log('info', f"[{i+1}/{len(subtopic_db_ids)}] Processing: {st_name}")
             update_task('running', subtopic_progress_base, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Analyzing...')
@@ -1462,16 +1575,28 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                     processor.db.save_concepts(st_db_id, [concept])
 
                 add_log('info', f"  Saved {len(concepts)} concepts to DB")
-                update_task('running', subtopic_progress_base + 1, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating SVGs...')
+                update_task('running', concepts_phase_start, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating concept visuals...')
 
                 # Generate SVGs and bullets for each concept
                 saved_concepts = processor.db.get_concepts(st_db_id)
+                concept_count = max(1, len(saved_concepts))
                 for ci, concept in enumerate(saved_concepts):
+                    concept_progress = concepts_phase_start + int(
+                        (concepts_phase_end - concepts_phase_start) * ((ci + 1) / concept_count)
+                    )
+                    update_task(
+                        'running',
+                        concept_progress,
+                        f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Concept {ci+1}/{len(saved_concepts)}'
+                    )
                     add_log('info', f"  Calling LLM: SVG for '{concept['title']}'...")
                     svg = processor.gemini.generate_svg(concept['title'], concept['description'])
                     if svg:
                         processor.db.update_generated_content(concept['id'], 'svg', svg)
-                        add_log('info', f"    ✓ SVG generated ({len(svg)} chars)")
+                        if 'fallback-svg' in svg:
+                            add_log('warning', f"    ⚠ SVG fallback used ({len(svg)} chars)")
+                        else:
+                            add_log('info', f"    ✓ SVG generated ({len(svg)} chars)")
                     else:
                         add_log('warning', f"    ✗ SVG generation returned empty")
 
@@ -1483,7 +1608,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                     else:
                         add_log('warning', f"    ✗ Bullets generation returned empty")
 
-                update_task('running', subtopic_progress_base + 2, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating quiz...')
+                update_task('running', quiz_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating quiz...')
 
                 # Generate quiz
                 conn = get_db_connection()
@@ -1503,7 +1628,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 else:
                     add_log('warning', f"  ✗ Quiz generation returned empty")
 
-                update_task('running', subtopic_progress_base + 3, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating flashcards...')
+                update_task('running', flashcards_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating flashcards...')
 
                 # Generate flashcards
                 conn = get_db_connection()
@@ -1539,11 +1664,15 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             update_task('running', subtopic_progress_end, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Done')
 
         add_log('info', f"Generation summary: {total_success} succeeded, {total_failed} failed out of {len(subtopic_db_ids)}")
-
-        processor.close()
-
-        add_log('info', f"V8 full ingestion complete! Processed {len(subtopic_db_ids)} subtopics.")
-        update_task('completed', 100, f'V8 ingestion complete: {len(subtopic_db_ids)} subtopics processed')
+        if total_success == 0 and total_failed > 0:
+            add_log('error', "V8 full ingestion failed for all subtopics")
+            update_task('failed', 100, f'V8 ingestion failed: 0 succeeded, {total_failed} failed')
+        elif total_failed > 0:
+            add_log('warning', f"V8 full ingestion completed with warnings: {total_success} succeeded, {total_failed} failed")
+            update_task('completed', 100, f'V8 ingestion partial: {total_success} succeeded, {total_failed} failed')
+        else:
+            add_log('info', f"V8 full ingestion complete! Processed {len(subtopic_db_ids)} subtopics.")
+            update_task('completed', 100, f'V8 ingestion complete: {len(subtopic_db_ids)} subtopics processed')
 
     except Exception as e:
         import traceback
@@ -1551,18 +1680,43 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
         add_log('error', error_msg)
         add_log('error', traceback.format_exc())
         update_task('failed', 0, 'Ingestion failed', error_msg)
+    finally:
+        if processor:
+            processor.close()
 
 
 def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list) -> list:
-    """Re-parse markdown to map chapters → subtopics.
-    Returns list of {'num', 'title', 'subtopics': [...]} dicts.
-    """
+    """Map chapters → subtopics, preferring splitter-provided chapter metadata."""
     from .processors.content_processor_v8 import ContentSplitter
 
-    lines = markdown_content.split('\n')
-    temp_splitter = ContentSplitter("")  # Just to access _match_chapter
-
     chapters = []
+    chapter_index = {}
+
+    # Preferred path: ContentSplitter now annotates each subtopic with chapter metadata.
+    has_chapter_metadata = any(
+        (st.get('chapter_title') is not None) or (st.get('chapter_num') is not None)
+        for st in subtopic_list
+    )
+    if has_chapter_metadata:
+        for st in subtopic_list:
+            chapter_title = (st.get('chapter_title') or '').strip() or 'General'
+            chapter_num = str(st.get('chapter_num') or '').strip()
+            key = f"{chapter_num}::{chapter_title}" if chapter_num else chapter_title
+            if key not in chapter_index:
+                chapter_index[key] = len(chapters)
+                chapters.append({
+                    'num': chapter_num or str(len(chapters) + 1),
+                    'title': chapter_title,
+                    'subtopics': []
+                })
+            chapters[chapter_index[key]]['subtopics'].append(st)
+
+        if chapters:
+            return chapters
+
+    # Backward-compatible fallback for old splitter payloads without chapter metadata.
+    lines = markdown_content.split('\n')
+    temp_splitter = ContentSplitter("")
     current_chapter = None
     subtopic_idx = 0
 
@@ -1583,13 +1737,11 @@ def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list)
             if current_chapter:
                 current_chapter['subtopics'].append(st)
             else:
-                # Subtopic before first chapter — create default chapter
                 if not chapters:
                     chapters.append({'num': '1', 'title': 'General', 'subtopics': []})
                 chapters[-1]['subtopics'].append(st)
             subtopic_idx += 1
 
-    # Any remaining subtopics not matched
     while subtopic_idx < len(subtopic_list):
         if chapters:
             chapters[-1]['subtopics'].append(subtopic_list[subtopic_idx])

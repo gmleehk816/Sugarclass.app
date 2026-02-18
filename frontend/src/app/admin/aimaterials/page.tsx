@@ -1498,8 +1498,8 @@ const AIMaterialsAdmin = () => {
             return;
         }
 
-        const mdFile = files.find(f => f.name.endsWith('.md'));
-        const pdfFile = files.find(f => f.name.endsWith('.pdf'));
+        const mdFile = files.find(f => f.name.toLowerCase().endsWith('.md'));
+        const pdfFile = files.find(f => f.name.toLowerCase().endsWith('.pdf'));
         if (!mdFile && !pdfFile) {
             setStatusMessage('At least one .md or .pdf file is required for ingestion.');
             return;
@@ -1519,9 +1519,12 @@ const AIMaterialsAdmin = () => {
                 body: formData
             });
 
-            // Extract suggested metadata from upload response
-            const extractedSubject = uploadRes.suggested_subject || subjectName;
-            const extractedSyllabus = uploadRes.suggested_syllabus || syllabus;
+            // IMPORTANT: user-selected tree/manual values must take precedence.
+            // Suggestions from upload/PDF conversion are only fallbacks.
+            const normalizedSubject = subjectName.trim();
+            const normalizedSyllabus = syllabus.trim();
+            const extractedSubject = normalizedSubject || (uploadRes.suggested_subject || '').trim();
+            const extractedSyllabus = normalizedSyllabus || (uploadRes.suggested_syllabus || '').trim();
 
             // Check for PDF conversion errors
             if (uploadRes.error) {
@@ -1537,12 +1540,18 @@ const AIMaterialsAdmin = () => {
                 setStatusMessage('✅ Upload successful. Starting V8 ingestion...');
             }
 
-            // Auto-populate form fields for visual feedback
-            if (uploadRes.suggested_subject) {
+            // Auto-populate only when user did not already provide values.
+            if (uploadRes.suggested_subject && !normalizedSubject) {
                 setSubjectName(uploadRes.suggested_subject);
             }
-            if (uploadRes.suggested_syllabus) {
+            if (uploadRes.suggested_syllabus && !normalizedSyllabus) {
                 setSyllabus(uploadRes.suggested_syllabus);
+            }
+
+            if (!extractedSubject) {
+                setStatusMessage('❌ Subject is required. Select it from the tree (Level → Subject/Board) or enter manually.');
+                setUploading(false);
+                return;
             }
 
             // Call V8 ingest endpoint instead of old pipeline
@@ -1552,7 +1561,7 @@ const AIMaterialsAdmin = () => {
                     batch_id: uploadRes.batch_id,
                     filename: uploadRes.main_markdown || mdFile?.name,
                     subject_name: extractedSubject,
-                    syllabus: extractedSyllabus,
+                    syllabus: extractedSyllabus || 'IGCSE',
                 })
             });
 
@@ -1564,9 +1573,12 @@ const AIMaterialsAdmin = () => {
 
             // Poll V8 task progress
             if (ingestRes.task_id) {
+                let consecutivePollErrors = 0;
+                let safetyTimeout: ReturnType<typeof setTimeout> | null = null;
                 const pollInterval = setInterval(async () => {
                     try {
                         const taskData = await serviceFetch('aimaterials', `/api/admin/v8/tasks/${ingestRes.task_id}`);
+                        consecutivePollErrors = 0;
                         const progress = taskData.progress || 0;
                         const status = taskData.status;
 
@@ -1581,6 +1593,7 @@ const AIMaterialsAdmin = () => {
                             setStatusMessage(`⚙️ V8 Processing: ${progress}% — ${taskData.message || ''}`);
                         } else if (status === 'completed') {
                             clearInterval(pollInterval);
+                            if (safetyTimeout) clearTimeout(safetyTimeout);
                             setV8TaskStatus('completed');
                             setStatusMessage(`✅ V8 ingestion complete! ${taskData.message || ''}`);
                             setUploading(false);
@@ -1588,19 +1601,25 @@ const AIMaterialsAdmin = () => {
                             setTimeout(() => setActiveTab('v8'), 2000);
                         } else if (status === 'failed') {
                             clearInterval(pollInterval);
+                            if (safetyTimeout) clearTimeout(safetyTimeout);
                             setV8TaskStatus('failed');
                             setStatusMessage(`❌ V8 ingestion failed: ${taskData.error || taskData.message || 'Unknown error'}`);
                             setUploading(false);
                         }
                     } catch (pollErr) {
                         console.error('Error polling V8 task', pollErr);
+                        consecutivePollErrors += 1;
+                        if (consecutivePollErrors >= 3) {
+                            setStatusMessage('⚠️ Temporary connection issue while polling V8 task. Processing may still be running.');
+                        }
                     }
                 }, 3000);
 
                 // Safety timeout: stop polling after 30 minutes
-                setTimeout(() => {
+                safetyTimeout = setTimeout(() => {
                     clearInterval(pollInterval);
                     setUploading(false);
+                    setStatusMessage('⌛ V8 ingestion is taking longer than expected. You can check progress in the V8 tab shortly.');
                 }, 30 * 60 * 1000);
             } else {
                 setUploading(false);
@@ -2043,9 +2062,7 @@ const AIMaterialsAdmin = () => {
                         <V8ContentBrowser
                             subjects={subjects}
                             loadingSubjects={loadingSubjects}
-                            onRefresh={fetchSubjects}
                             isMobile={isMobile}
-                            isTablet={isTablet}
                         />
                     ) : null}
 

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Menu, ListOrdered } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, ListOrdered, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../api';
 
 // ============================================================================
@@ -15,9 +15,32 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
   const [flippedCards, setFlippedCards] = useState({});
   const [quizAnswers, setQuizAnswers] = useState({});
   const [isTocVisible, setIsTocVisible] = useState(true);
+  const [viewIndexes, setViewIndexes] = useState({
+    quiz: 0,
+    flashcards: 0,
+    reallife: 0,
+  });
+
+  const getQuizKey = (question, index) => String(question?.id ?? question?.question_num ?? index);
+  const parseQuizOptions = (options) => {
+    if (!options) return {};
+    if (typeof options === 'string') {
+      try {
+        return JSON.parse(options);
+      } catch {
+        return {};
+      }
+    }
+    return options;
+  };
 
   useEffect(() => {
     if (!subtopicId) return;
+    setActiveView('content');
+    setActiveSection(null);
+    setFlippedCards({});
+    setQuizAnswers({});
+    setViewIndexes({ quiz: 0, flashcards: 0, reallife: 0 });
     loadV8Content();
   }, [subtopicId]);
 
@@ -40,11 +63,8 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
   };
 
   const scrollToSection = (sectionId) => {
+    setActiveView('content');
     setActiveSection(sectionId);
-    const element = document.getElementById(`section-${sectionId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
   };
 
   const toggleCard = (cardId) => {
@@ -53,6 +73,76 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
 
   const selectQuizAnswer = (questionId, answer) => {
     setQuizAnswers(prev => ({ ...prev, [questionId]: answer }));
+  };
+
+  const concepts = v8Data?.concepts || [];
+  const quizItems = v8Data?.quiz || [];
+  const flashcards = v8Data?.flashcards || [];
+  const reallifeItems = v8Data?.reallife_images || [];
+
+  const currentConceptIndex = Math.max(0, concepts.findIndex(c => c.concept_key === activeSection));
+  const currentConcept = concepts[currentConceptIndex] || null;
+
+  const currentQuizIndex = Math.min(viewIndexes.quiz, Math.max(quizItems.length - 1, 0));
+  const currentQuiz = quizItems[currentQuizIndex] || null;
+  const currentQuizKey = currentQuiz ? getQuizKey(currentQuiz, currentQuizIndex) : null;
+  const currentQuizOptions = currentQuiz ? parseQuizOptions(currentQuiz.options) : {};
+
+  const currentFlashcardIndex = Math.min(viewIndexes.flashcards, Math.max(flashcards.length - 1, 0));
+  const currentFlashcard = flashcards[currentFlashcardIndex] || null;
+
+  const currentReallifeIndex = Math.min(viewIndexes.reallife, Math.max(reallifeItems.length - 1, 0));
+  const currentReallife = reallifeItems[currentReallifeIndex] || null;
+
+  useEffect(() => {
+    if (!concepts.length) {
+      setActiveSection(null);
+      return;
+    }
+    const exists = concepts.some(c => c.concept_key === activeSection);
+    if (!exists) {
+      setActiveSection(concepts[0].concept_key);
+    }
+  }, [activeSection, concepts]);
+
+  useEffect(() => {
+    setViewIndexes(prev => ({
+      quiz: Math.min(prev.quiz, Math.max(quizItems.length - 1, 0)),
+      flashcards: Math.min(prev.flashcards, Math.max(flashcards.length - 1, 0)),
+      reallife: Math.min(prev.reallife, Math.max(reallifeItems.length - 1, 0)),
+    }));
+  }, [quizItems.length, flashcards.length, reallifeItems.length]);
+
+  const getPaginationConfig = () => {
+    if (activeView === 'content') {
+      return { key: 'content', index: currentConceptIndex, total: concepts.length, label: 'Concept' };
+    }
+    if (activeView === 'quiz') {
+      return { key: 'quiz', index: currentQuizIndex, total: quizItems.length, label: 'Question' };
+    }
+    if (activeView === 'flashcards') {
+      return { key: 'flashcards', index: currentFlashcardIndex, total: flashcards.length, label: 'Card' };
+    }
+    if (activeView === 'reallife') {
+      return { key: 'reallife', index: currentReallifeIndex, total: reallifeItems.length, label: 'Application' };
+    }
+    return null;
+  };
+
+  const pagination = getPaginationConfig();
+
+  const goToPage = (delta) => {
+    if (!pagination || pagination.total <= 1) return;
+    const nextIndex = Math.max(0, Math.min(pagination.total - 1, pagination.index + delta));
+    if (nextIndex === pagination.index) return;
+
+    if (pagination.key === 'content') {
+      const nextConcept = concepts[nextIndex];
+      if (nextConcept) setActiveSection(nextConcept.concept_key);
+      return;
+    }
+
+    setViewIndexes(prev => ({ ...prev, [pagination.key]: nextIndex }));
   };
 
   if (loading) {
@@ -99,47 +189,50 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
             <span style={styles.headerSubtitle}>Interactive Learning</span>
           </div>
         </div>
-        <nav style={styles.headerNav}>
-          <button
-            style={{ ...styles.navBtn, ...(activeView === 'content' ? styles.navBtnActive : {}) }}
-            onClick={() => setActiveView('content')}
-          >
-            Learn
-          </button>
-          <button
-            style={{ ...styles.navBtn, ...(activeView === 'quiz' ? styles.navBtnActive : {}) }}
-            onClick={() => setActiveView('quiz')}
-          >
-            Quiz
-          </button>
-          <button
-            style={{ ...styles.navBtn, ...(activeView === 'flashcards' ? styles.navBtnActive : {}) }}
-            onClick={() => setActiveView('flashcards')}
-          >
-            Cards
-          </button>
-          <button
-            style={{ ...styles.navBtn, ...(activeView === 'reallife' ? styles.navBtnActive : {}) }}
-            onClick={() => setActiveView('reallife')}
-          >
-            Real Life
-          </button>
-
-          {activeView === 'content' && (
+        <div style={styles.headerRight}>
+          <nav style={styles.headerNav}>
             <button
-              onClick={() => setIsTocVisible(!isTocVisible)}
-              style={{
-                ...styles.navBtn,
-                background: isTocVisible ? 'rgba(146, 117, 89, 0.1)' : 'transparent',
-                color: isTocVisible ? '#927559' : '#64748b',
-                marginLeft: '12px'
-              }}
-              title={isTocVisible ? "Hide Index" : "Show Index"}
+              style={{ ...styles.navBtn, ...(activeView === 'content' ? styles.navBtnActive : {}) }}
+              onClick={() => setActiveView('content')}
             >
-              <ListOrdered size={18} />
+              Learn
             </button>
-          )}
-        </nav>
+            <button
+              style={{ ...styles.navBtn, ...(activeView === 'quiz' ? styles.navBtnActive : {}) }}
+              onClick={() => setActiveView('quiz')}
+            >
+              Quiz
+            </button>
+            <button
+              style={{ ...styles.navBtn, ...(activeView === 'flashcards' ? styles.navBtnActive : {}) }}
+              onClick={() => setActiveView('flashcards')}
+            >
+              Cards
+            </button>
+            <button
+              style={{ ...styles.navBtn, ...(activeView === 'reallife' ? styles.navBtnActive : {}) }}
+              onClick={() => setActiveView('reallife')}
+            >
+              Real Life
+            </button>
+
+            {activeView === 'content' && (
+              <button
+                onClick={() => setIsTocVisible(!isTocVisible)}
+                style={{
+                  ...styles.navBtn,
+                  background: isTocVisible ? 'rgba(146, 117, 89, 0.1)' : 'transparent',
+                  color: isTocVisible ? '#927559' : '#64748b',
+                  marginLeft: '12px'
+                }}
+                title={isTocVisible ? "Hide Index" : "Show Index"}
+              >
+                <ListOrdered size={18} />
+              </button>
+            )}
+          </nav>
+
+        </div>
       </header>
 
       <div style={styles.layoutContainer}>
@@ -155,7 +248,7 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
         }}>
           <div style={styles.sidebarSectionTitle}>Table of Contents</div>
           <ul style={styles.tocList}>
-            {v8Data.concepts.map((concept) => (
+            {concepts.map((concept) => (
               <li
                 key={concept.concept_key}
                 style={{
@@ -189,27 +282,27 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
           {/* VIEW: CONTENT */}
           {activeView === 'content' && (
             <div id="view-content">
-              {v8Data.concepts.map((concept, index) => (
+              {currentConcept ? (
                 <section
-                  key={concept.concept_key}
-                  id={`section-${concept.concept_key}`}
+                  key={currentConcept.concept_key}
+                  id={`section-${currentConcept.concept_key}`}
                   style={styles.section}
                 >
                   <h2 style={styles.sectionTitle}>
-                    {concept.icon || '📚'} {concept.title}
+                    {currentConcept.icon || '📚'} {currentConcept.title}
                   </h2>
                   <div style={styles.twoColumnLayout}>
                     <div style={styles.columnLeft}>
                       <div style={{ ...styles.card, ...styles.contentCard }}>
                         <div style={styles.cardBody}>
-                          {concept.description && (
-                            <p style={{ marginBottom: '1rem' }}>{concept.description}</p>
+                          {currentConcept.description && (
+                            <p style={{ marginBottom: '1rem' }}>{currentConcept.description}</p>
                           )}
-                          {concept.generated?.bullets ? (
+                          {currentConcept.generated?.bullets ? (
                             <div
                               style={styles.bulletContent}
                               dangerouslySetInnerHTML={{
-                                __html: concept.generated.bullets
+                                __html: currentConcept.generated.bullets
                                   .replace(/\$\$([^$]+)\$\$/g, '<span style="font-family: serif; font-style: italic;">$1</span>')
                                   .replace(/\$([^$]+)\$/g, '<span style="font-family: serif; font-style: italic;">$1</span>')
                               }}
@@ -221,9 +314,9 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
                     <div style={styles.columnRight}>
                       <div style={{ ...styles.card, ...styles.visualCard }}>
                         <div style={styles.visualContainer}>
-                          {concept.generated?.svg ? (
+                          {currentConcept.generated?.svg ? (
                             <div
-                              dangerouslySetInnerHTML={{ __html: concept.generated.svg }}
+                              dangerouslySetInnerHTML={{ __html: currentConcept.generated.svg }}
                               style={{ width: '100%', height: '100%' }}
                             />
                           ) : (
@@ -237,7 +330,12 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
                     </div>
                   </div>
                 </section>
-              ))}
+              ) : (
+                <div style={styles.empty}>
+                  <span style={{ fontSize: '3rem' }}>📚</span>
+                  <div>No concepts available</div>
+                </div>
+              )}
             </div>
           )}
 
@@ -245,43 +343,44 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
           {activeView === 'quiz' && (
             <div id="view-quiz">
               <h2 style={styles.sectionTitle}>❓ Practice Quiz</h2>
-              {v8Data.quiz && v8Data.quiz.length > 0 ? (
-                v8Data.quiz.map((q, index) => (
-                  <div key={q.id || index} style={styles.quizQuestion}>
-                    <div style={styles.qHeader}>
-                      <span style={styles.qBadge}>Question {q.question_num || index + 1}</span>
-                      <span style={{
-                        ...styles.qBadge,
-                        background: quizAnswers[q.id] === q.correct_answer ? '#059669' :
-                          quizAnswers[q.id] ? '#be123c' : '#0f172a'
-                      }}>
-                        {quizAnswers[q.id] === q.correct_answer ? '✓ Correct' :
-                          quizAnswers[q.id] ? '✗ Incorrect' : 'Not answered'}
-                      </span>
-                    </div>
-                    <div style={styles.qText}>{q.question_text}</div>
-                    <div style={styles.qOptions}>
-                      {['A', 'B', 'C', 'D'].map(opt => (
+              {currentQuiz ? (
+                <div key={currentQuiz.id || currentQuizIndex} style={styles.quizQuestion}>
+                  <div style={styles.qHeader}>
+                    <span style={styles.qBadge}>Question {currentQuiz.question_num || currentQuizIndex + 1}</span>
+                    <span style={{
+                      ...styles.qBadge,
+                      background: quizAnswers[currentQuizKey] === currentQuiz.correct_answer ? '#059669' :
+                        quizAnswers[currentQuizKey] ? '#be123c' : '#0f172a'
+                    }}>
+                      {quizAnswers[currentQuizKey] === currentQuiz.correct_answer ? '✓ Correct' :
+                        quizAnswers[currentQuizKey] ? '✗ Incorrect' : 'Not answered'}
+                    </span>
+                  </div>
+                  <div style={styles.qText}>{currentQuiz.question_text}</div>
+                  <div style={styles.qOptions}>
+                    {['A', 'B', 'C', 'D'].map(opt => {
+                      const currentAnswer = quizAnswers[currentQuizKey];
+                      return (
                         <div
                           key={opt}
                           style={{
                             ...styles.qOption,
-                            ...(quizAnswers[q.id] === opt ? styles.qOptionSelected : {}),
-                            ...(quizAnswers[q.id] && opt === q.correct_answer ? styles.qOptionCorrect : {})
+                            ...(currentAnswer === opt ? styles.qOptionSelected : {}),
+                            ...(currentAnswer && opt === currentQuiz.correct_answer ? styles.qOptionCorrect : {})
                           }}
-                          onClick={() => selectQuizAnswer(q.id, opt)}
+                          onClick={() => selectQuizAnswer(currentQuizKey, opt)}
                         >
-                          <strong>{opt}.</strong> {q.options?.[opt]}
+                          <strong>{opt}.</strong> {currentQuizOptions?.[opt]}
                         </div>
-                      ))}
-                    </div>
-                    {quizAnswers[q.id] && (
-                      <div style={styles.qExplanation}>
-                        <strong>Explanation:</strong> {q.explanation}
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
-                ))
+                  {quizAnswers[currentQuizKey] && (
+                    <div style={styles.qExplanation}>
+                      <strong>Explanation:</strong> {currentQuiz.explanation}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div style={styles.empty}>
                   <span style={{ fontSize: '3rem' }}>📝</span>
@@ -295,29 +394,27 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
           {activeView === 'flashcards' && (
             <div id="view-flashcards">
               <h2 style={styles.sectionTitle}>⚡ Flashcards</h2>
-              {v8Data.flashcards && v8Data.flashcards.length > 0 ? (
-                <div style={styles.flashcardContainer}>
-                  {v8Data.flashcards.map((card, index) => (
-                    <div
-                      key={card.id || index}
-                      style={styles.flashcard}
-                      onClick={() => toggleCard(card.id || index)}
-                    >
-                      <div style={{
-                        ...styles.flashcardInner,
-                        ...(flippedCards[card.id || index] ? styles.flashcardFlipped : {})
-                      }}>
-                        <div style={styles.flashcardFront}>
-                          <h3>{card.front}</h3>
-                          <span style={styles.tapHint}>Tap to flip</span>
-                        </div>
-                        <div style={styles.flashcardBack}>
-                          <p>{card.back}</p>
-                          <span style={styles.tapHint}>Tap to flip back</span>
-                        </div>
+              {currentFlashcard ? (
+                <div style={styles.flashcardPagerContainer}>
+                  <div
+                    key={currentFlashcard.id || currentFlashcardIndex}
+                    style={styles.flashcard}
+                    onClick={() => toggleCard(String(currentFlashcard.id || currentFlashcardIndex))}
+                  >
+                    <div style={{
+                      ...styles.flashcardInner,
+                      ...(flippedCards[String(currentFlashcard.id || currentFlashcardIndex)] ? styles.flashcardFlipped : {})
+                    }}>
+                      <div style={styles.flashcardFront}>
+                        <h3>{currentFlashcard.front}</h3>
+                        <span style={styles.tapHint}>Tap to flip</span>
+                      </div>
+                      <div style={styles.flashcardBack}>
+                        <p>{currentFlashcard.back}</p>
+                        <span style={styles.tapHint}>Tap to flip back</span>
                       </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
               ) : (
                 <div style={styles.empty}>
@@ -335,49 +432,47 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
                 <h2 style={styles.sectionTitle}>🌍 Real Life Applications</h2>
                 <p style={styles.sectionDesc}>Connecting concepts to the world around us</p>
               </div>
-              {v8Data.reallife_images && v8Data.reallife_images.length > 0 ? (
+              {currentReallife ? (
                 <div style={styles.reallifeGrid}>
-                  {v8Data.reallife_images.map((item, index) => (
-                    <div key={item.id || index} style={styles.reallifeCard}>
-                      <div style={styles.reallifeLayout}>
-                        <div style={styles.reallifeImage}>
-                          {item.image_url ? (
-                            <img src={item.image_url} alt={item.title} style={styles.reallifeImg} />
-                          ) : (
-                            <div style={styles.reallifePlaceholder}>
-                              <span style={{ fontSize: '4rem' }}>🖼️</span>
-                            </div>
-                          )}
-                        </div>
-                        <div style={styles.reallifeArrow}>
-                          <svg style={styles.arrowSvg} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M5 12h14M12 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                        <div style={styles.reallifeContent}>
-                          <div style={{
-                            ...styles.reallifeIcon,
-                            background: index % 3 === 0 ? '#fff1f2' : index % 3 === 1 ? '#e0f2fe' : '#fef3c7',
-                            color: index % 3 === 0 ? '#be123c' : index % 3 === 1 ? '#0369a1' : '#d97706'
-                          }}>
-                            {item.image_type === 'example' ? '🔬' : item.image_type === 'application' ? '💡' : '🌍'}
+                  <div key={currentReallife.id || currentReallifeIndex} style={styles.reallifeCard}>
+                    <div style={styles.reallifeLayout}>
+                      <div style={styles.reallifeImage}>
+                        {currentReallife.image_url ? (
+                          <img src={currentReallife.image_url} alt={currentReallife.title} style={styles.reallifeImg} />
+                        ) : (
+                          <div style={styles.reallifePlaceholder}>
+                            <span style={{ fontSize: '4rem' }}>🖼️</span>
                           </div>
-                          <h3 style={styles.reallifeTitle}>{item.title || `Application ${index + 1}`}</h3>
-                          <p style={styles.reallifeDesc}>{item.description}</p>
-                          {item.prompt && (
-                            <div style={{
-                              ...styles.reallifeBox,
-                              ...(index % 3 === 0 ? styles.reallifeBoxPrimary :
-                                index % 3 === 1 ? styles.reallifeBoxSecondary : styles.reallifeBoxWarning)
-                            }}>
-                              <h4>Key Insight</h4>
-                              <p>{item.prompt}</p>
-                            </div>
-                          )}
+                        )}
+                      </div>
+                      <div style={styles.reallifeArrow}>
+                        <svg style={styles.arrowSvg} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                      <div style={styles.reallifeContent}>
+                        <div style={{
+                          ...styles.reallifeIcon,
+                          background: currentReallifeIndex % 3 === 0 ? '#fff1f2' : currentReallifeIndex % 3 === 1 ? '#e0f2fe' : '#fef3c7',
+                          color: currentReallifeIndex % 3 === 0 ? '#be123c' : currentReallifeIndex % 3 === 1 ? '#0369a1' : '#d97706'
+                        }}>
+                          {currentReallife.image_type === 'example' ? '🔬' : currentReallife.image_type === 'application' ? '💡' : '🌍'}
                         </div>
+                        <h3 style={styles.reallifeTitle}>{currentReallife.title || `Application ${currentReallifeIndex + 1}`}</h3>
+                        <p style={styles.reallifeDesc}>{currentReallife.description}</p>
+                        {currentReallife.prompt && (
+                          <div style={{
+                            ...styles.reallifeBox,
+                            ...(currentReallifeIndex % 3 === 0 ? styles.reallifeBoxPrimary :
+                              currentReallifeIndex % 3 === 1 ? styles.reallifeBoxSecondary : styles.reallifeBoxWarning)
+                          }}>
+                            <h4>Key Insight</h4>
+                            <p>{currentReallife.prompt}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
               ) : (
                 <div style={styles.empty}>
@@ -388,6 +483,32 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {pagination && pagination.total > 1 && (
+            <div style={styles.paginationFooter}>
+              <div style={styles.paginationBar}>
+                <button
+                  style={{ ...styles.paginationBtn, ...(pagination.index === 0 ? styles.paginationBtnDisabled : {}) }}
+                  onClick={() => goToPage(-1)}
+                  disabled={pagination.index === 0}
+                  title={`Previous ${pagination.label}`}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div style={styles.paginationMeta}>
+                  {pagination.label} {pagination.index + 1} / {pagination.total}
+                </div>
+                <button
+                  style={{ ...styles.paginationBtn, ...(pagination.index >= pagination.total - 1 ? styles.paginationBtnDisabled : {}) }}
+                  onClick={() => goToPage(1)}
+                  disabled={pagination.index >= pagination.total - 1}
+                  title={`Next ${pagination.label}`}
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
             </div>
           )}
         </main>
@@ -517,6 +638,55 @@ const styles = {
     borderRadius: '16px',
     border: '1px solid rgba(0, 0, 0, 0.04)',
     gap: '4px',
+  },
+
+  headerRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+
+  paginationBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    background: 'rgba(30, 41, 59, 0.04)',
+    border: '1px solid rgba(0, 0, 0, 0.04)',
+    borderRadius: '999px',
+    padding: '6px',
+  },
+
+  paginationFooter: {
+    marginTop: '2rem',
+    display: 'flex',
+    justifyContent: 'center',
+  },
+
+  paginationBtn: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '999px',
+    border: 'none',
+    background: 'white',
+    color: '#1e293b',
+    display: 'grid',
+    placeItems: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)',
+  },
+
+  paginationBtnDisabled: {
+    opacity: 0.35,
+    cursor: 'not-allowed',
+    boxShadow: 'none',
+  },
+
+  paginationMeta: {
+    fontSize: '0.82rem',
+    fontWeight: 700,
+    color: '#334155',
+    minWidth: '128px',
+    textAlign: 'center',
   },
 
   navBtn: {
@@ -778,9 +948,17 @@ const styles = {
     gap: '2rem',
   },
 
+  flashcardPagerContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: '8px',
+  },
+
   flashcard: {
     perspective: '1200px',
     height: '280px',
+    width: 'min(100%, 420px)',
     cursor: 'pointer',
   },
 

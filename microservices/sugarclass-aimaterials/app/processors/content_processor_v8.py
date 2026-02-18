@@ -65,10 +65,12 @@ except ImportError:
     API_KEY = os.getenv("LLM_API_KEY") or os.getenv("GEMINI_API_KEY")
     MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
 
-REQUEST_INTERVAL = 6.0  # 10 requests per minute
-MAX_RETRIES = 3
-REQUEST_TIMEOUT = 120
-RETRY_DELAY = 5.0  # Seconds to wait before retry
+REQUEST_INTERVAL = float(os.getenv("V8_REQUEST_INTERVAL", "2.0"))
+MAX_RETRIES = int(os.getenv("V8_MAX_RETRIES", "3"))
+REQUEST_TIMEOUT = int(os.getenv("V8_REQUEST_TIMEOUT", "120"))
+SVG_REQUEST_TIMEOUT = int(os.getenv("V8_SVG_REQUEST_TIMEOUT", "45"))
+SVG_MAX_RETRIES = int(os.getenv("V8_SVG_MAX_RETRIES", "2"))
+RETRY_DELAY = float(os.getenv("V8_RETRY_DELAY", "5.0"))
 
 # ============================================================================
 # DATA STRUCTURES
@@ -352,12 +354,18 @@ class ContentSplitter:
         r'^#\s+(Chapter\s*\d+[:\s].+)$',          # # Chapter 1: Title
         r'^#\s+([A-Z]\d+)\s+(.+)$',              # # P1 Describing Motion
         r'^#\s+(\d+)\.\s+(.+)$',                 # # 1. Title
+        r'^#\s+(Section\s*[A-Za-z0-9IVX]+)[:\s-]+(.+)$',  # # Section A: Title
+        r'^#\s+(Part\s*[A-Za-z0-9IVX]+)[:\s-]+(.+)$',     # # Part II: Title
+        r'^\*\*(Section\s*[A-Za-z0-9IVX]+)[:\s-]+([^*]+)\*\*$',  # **Section B: Title**
         r'^\*\*(\d+)\.\s+([^*]+)\*\*$',          # **1. Title**
         r'^#\s+([^#\n]+)$',                      # # Any Header 1 (Generic Fallback)
     ]
 
     SUBTOPIC_PATTERNS = [
+        r'^###\s+(\d+\.\d+)\s+(.+)$',            # ### 2.4 Calculating Speed
+        r'^###\s+([^#\n]+)$',                    # ### Any Header 3
         r'^\*\*(\d+\.\d+)\*\*\s+(.+)$',          # **2.4** Calculating Speed
+        r'^\*\*(\d+\.\d+)\s+([^*]+)\*\*$',       # **2.4 Calculating Speed**
         r'^##\s+(\d+\.\d+)\s+(.+)$',             # ## 2.4 Calculating Speed
         r'^(\d+\.\d+)\s+(.+)$',                  # 2.4 Calculating Speed
         r'^([A-Z]\d+\.\d+)\s+(.+)$',             # P1.1 Describing Motion
@@ -370,54 +378,74 @@ class ContentSplitter:
         self.subtopics = []
 
     def split(self) -> List[Dict]:
-        """Split content into subtopics"""
+        """Split content into subtopics with chapter-aware fallback handling."""
         lines = self.content.split('\n')
 
         current_chapter = None
         current_subtopic = None
         current_content = []
+        chapter_intro_content = []
 
         for line in lines:
             line = line.strip()
-            if not line: continue
+            if not line:
+                continue
+
             # Check for chapter headers
             chapter_match = self._match_chapter(line)
             if chapter_match:
-                # Save previous subtopic if exists
-                if current_subtopic:
-                    self._save_subtopic(current_subtopic, current_content)
-                
-                # Start new chapter tracking
-                current_chapter = chapter_match
+                self._flush_current_subtopic(current_subtopic, current_content, current_chapter)
                 current_subtopic = None
                 current_content = []
+
+                if current_chapter and chapter_intro_content:
+                    fallback_subtopic = self._build_fallback_subtopic(current_chapter, len(self.subtopics) + 1)
+                    self._save_subtopic(fallback_subtopic, chapter_intro_content, current_chapter)
+                chapter_intro_content = []
+
+                current_chapter = chapter_match
+                self.chapters.append(current_chapter)
                 continue
 
             # Check for subtopic headers
             subtopic_match = self._match_subtopic(line)
             if subtopic_match:
-                # Save previous subtopic
-                if current_subtopic:
-                    self._save_subtopic(current_subtopic, current_content)
+                self._flush_current_subtopic(current_subtopic, current_content, current_chapter)
+                current_subtopic = None
+                current_content = []
+
+                if not current_chapter:
+                    current_chapter = {'num': '1', 'title': 'General', 'type': 'chapter'}
+                    self.chapters.append(current_chapter)
+
+                if chapter_intro_content:
+                    intro_subtopic = self._build_fallback_subtopic(current_chapter, len(self.subtopics) + 1)
+                    self._save_subtopic(intro_subtopic, chapter_intro_content, current_chapter)
+                    chapter_intro_content = []
 
                 current_subtopic = subtopic_match
-                current_content = []
                 continue
 
             # Add content line
             if current_subtopic:
                 current_content.append(line)
-            elif current_chapter and not current_subtopic:
-                # If we are in a chapter but haven't hit a subtopic header yet,
-                # we don't save the content as a "subtopic" yet, but we allow
-                # the loop to continue searching.
-                pass
+            else:
+                if not current_chapter:
+                    current_chapter = {'num': '1', 'title': 'General', 'type': 'chapter'}
+                    self.chapters.append(current_chapter)
+                chapter_intro_content.append(line)
 
-        # Save last subtopic
-        if current_subtopic:
-            self._save_subtopic(current_subtopic, current_content)
+        self._flush_current_subtopic(current_subtopic, current_content, current_chapter)
+        if current_chapter and chapter_intro_content:
+            fallback_subtopic = self._build_fallback_subtopic(current_chapter, len(self.subtopics) + 1)
+            self._save_subtopic(fallback_subtopic, chapter_intro_content, current_chapter)
 
         return self.subtopics
+
+    def _flush_current_subtopic(self, subtopic: Optional[Dict], content: List[str], chapter: Optional[Dict]):
+        """Persist current subtopic if present."""
+        if subtopic:
+            self._save_subtopic(subtopic, content, chapter)
 
     def _match_chapter(self, line: str) -> Optional[Dict]:
         """Check if line matches chapter pattern"""
@@ -438,6 +466,22 @@ class ContentSplitter:
                     'type': 'chapter'
                 }
         return None
+
+    def _build_fallback_subtopic(self, chapter: Dict, order_hint: int) -> Dict:
+        """Create a synthetic subtopic when chapter text has no explicit subtopic header."""
+        chapter_num = str(chapter.get('num') or '').strip()
+        chapter_title = (chapter.get('title') or 'Overview').strip()
+        fallback_num = f"{chapter_num}.0" if chapter_num else f"{order_hint}.0"
+        slug_base = chapter_title or f"section_{order_hint}"
+        slug = re.sub(r'[^\w\s-]', '', slug_base).strip().lower()
+        slug = re.sub(r'[-\s]+', '-', slug)
+        return {
+            'num': fallback_num,
+            'title': f"{chapter_title} Overview",
+            'slug': slug or f"section-{order_hint}",
+            'type': 'subtopic',
+            'is_fallback': True
+        }
 
     def _match_subtopic(self, line: str) -> Optional[Dict]:
         """Check if line matches subtopic pattern"""
@@ -465,12 +509,16 @@ class ContentSplitter:
                 }
         return None
 
-    def _save_subtopic(self, subtopic: Dict, content: List[str]):
+    def _save_subtopic(self, subtopic: Dict, content: List[str], chapter: Optional[Dict] = None):
         """Save subtopic with its content"""
-        self.subtopics.append({
+        payload = {
             **subtopic,
             'content': '\n'.join(content).strip()
-        })
+        }
+        if chapter:
+            payload['chapter_num'] = chapter.get('num')
+            payload['chapter_title'] = chapter.get('title')
+        self.subtopics.append(payload)
 
 
 # ============================================================================
@@ -501,15 +549,16 @@ class GeminiClient:
 
         self.last_request_time = time.time()
 
-    def generate(self, prompt: str, timeout: int = 120) -> Optional[str]:
+    def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT, max_retries: Optional[int] = None) -> Optional[str]:
         """Generate content from Gemini API"""
         request_data = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.7
         }
+        retries = max_retries if max_retries is not None else MAX_RETRIES
 
-        for attempt in range(1, MAX_RETRIES + 1):
+        for attempt in range(1, retries + 1):
             try:
                 self._wait_for_rate_limit()
 
@@ -525,21 +574,69 @@ class GeminiClient:
                     if "choices" in data and len(data["choices"]) > 0:
                         return data["choices"][0]["message"]["content"]
 
-                elif response.status_code == 429:
-                    time.sleep(RETRY_DELAY)
-                    continue
+                elif response.status_code in (429, 500, 502, 503, 504):
+                    if attempt < retries:
+                        time.sleep(RETRY_DELAY)
+                        continue
+                    return None
                 else:
                     print(f"    [ERROR] HTTP {response.status_code}")
                     return None
 
             except Exception as e:
                 print(f"    [ERROR] {str(e)}")
-                if attempt < MAX_RETRIES:
+                if attempt < retries:
                     time.sleep(RETRY_DELAY)
                     continue
                 return None
 
         return None
+
+    def _extract_svg(self, raw_response: Optional[str]) -> Optional[str]:
+        """Extract a clean <svg>...</svg> block from model output."""
+        if not raw_response:
+            return None
+        text = raw_response.strip()
+        text = re.sub(r'^```(?:svg|xml)?\s*', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\s*```$', '', text)
+        match = re.search(r'<svg[\s\S]*?</svg>', text, flags=re.IGNORECASE)
+        if not match:
+            return None
+        svg = match.group(0).strip()
+        if 'viewBox=' not in svg:
+            svg = re.sub(r'<svg\b', '<svg viewBox="0 0 500 320"', svg, count=1, flags=re.IGNORECASE)
+        return svg
+
+    def _escape_xml(self, text: str) -> str:
+        return (text or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+
+    def _build_fallback_svg(self, title: str, description: str) -> str:
+        """Return deterministic fallback SVG when model output is missing/invalid."""
+        safe_title = self._escape_xml((title or 'Concept')[:80])
+        safe_desc = self._escape_xml((description or '').strip()[:220])
+        return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 320" role="img" aria-label="{safe_title}">
+  <!-- fallback-svg -->
+  <style>
+    .bg {{ fill: #f8fafc; }}
+    .panel {{ fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; }}
+    .title {{ font: 700 20px sans-serif; fill: #0f172a; }}
+    .desc {{ font: 500 14px sans-serif; fill: #334155; }}
+    .chip {{ fill: #e2e8f0; }}
+    .chipText {{ font: 600 12px sans-serif; fill: #475569; }}
+    .line {{ stroke: #64748b; stroke-width: 2; opacity: 0.6; }}
+  </style>
+  <rect class="bg" x="0" y="0" width="500" height="320"/>
+  <rect class="panel" x="24" y="24" width="452" height="272" rx="16"/>
+  <text class="title" x="44" y="62">{safe_title}</text>
+  <line class="line" x1="44" y1="78" x2="456" y2="78"/>
+  <rect class="chip" x="44" y="96" width="128" height="30" rx="15"/>
+  <text class="chipText" x="60" y="116">Core idea</text>
+  <rect class="chip" x="184" y="96" width="128" height="30" rx="15"/>
+  <text class="chipText" x="200" y="116">Relation</text>
+  <rect class="chip" x="324" y="96" width="128" height="30" rx="15"/>
+  <text class="chipText" x="340" y="116">Application</text>
+  <text class="desc" x="44" y="160">{safe_desc}</text>
+</svg>"""
 
     def analyze_structure(self, content: str) -> Optional[List[Dict]]:
         """Analyze content and identify key concepts"""
@@ -581,33 +678,29 @@ Focus on concepts that are visually representable and core to understanding."""
 
     def generate_svg(self, title: str, description: str) -> Optional[str]:
         """Generate SVG diagram"""
+        description_text = description or ""
         # Allow description to be a full prompt override
-        if description.strip().lower().startswith("create an animated svg"):
-            prompt = description
+        if description_text.strip().lower().startswith("create an animated svg"):
+            prompt = description_text
         else:
-            prompt = f"""Create an ANIMATED SVG diagram for physics education.
+            prompt = f"""Create an educational SVG diagram.
 
-**Topic: {title}**
-
-**Description: {description}**
+Topic: {title}
+Description: {description_text}
 
 Requirements:
-1. SVG viewBox="0 0 500 350"
-2. Include CSS animations embedded in <style> tag
-3. Use smooth, educational animations
-4. Color scheme:
-   - Primary: #be123c (rose)
-   - Secondary: #0369a1 (physics blue)
-   - Accent: #10B981 (green)
-   - Background: #F9F9F9
-5. Include proper labels
-6. Add title at top
-7. Use Inter, system-ui font family
-8. Physics-specific: Show vectors, arrows, motion paths
-
-Return ONLY the SVG code (no markdown)."""
-
-        return self.generate(prompt)
+1. Return ONLY raw <svg>...</svg> (no markdown fences).
+2. Use viewBox="0 0 500 320".
+3. Keep it clear and readable for students.
+4. Include labels and at least 2 meaningful visual elements.
+5. Optional animation is allowed but not required.
+"""
+        raw = self.generate(prompt, timeout=SVG_REQUEST_TIMEOUT, max_retries=SVG_MAX_RETRIES)
+        svg = self._extract_svg(raw)
+        if svg:
+            return svg
+        print("    [WARN] SVG generation failed or returned invalid SVG, using fallback diagram.")
+        return self._build_fallback_svg(title, description_text)
 
     def generate_bullets(self, title: str, description: str, full_content: str) -> Optional[str]:
         """Generate PowerPoint-style bullets"""
@@ -905,9 +998,10 @@ class V8Processor:
             print(f"\n[{i}/{len(subtopic_data)}] Processing: {subtopic['title']}")
 
             # Create subtopic data
+            subtopic_id = (subtopic.get('num') or f"{i}.0").strip()
             data = SubtopicData(
                 topic_id=topic_code,
-                subtopic_id=subtopic['num'],
+                subtopic_id=subtopic_id,
                 slug=subtopic['slug'],
                 name=subtopic['title'],
                 order_num=i,

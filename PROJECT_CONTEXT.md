@@ -210,6 +210,48 @@ The main dashboard uses a **1:1:1 Balanced Grid**. Every column weight should be
 - Enhanced RAG capabilities with Qdrant integration
 - Session management with Redis caching
 
+### Latest Session Handoff (2026-02-18)
+
+**AI Materials V8 ingestion and generation hardening (backend)**:
+- Files:
+  - `microservices/sugarclass-aimaterials/app/admin_v8.py`
+  - `microservices/sugarclass-aimaterials/app/processors/content_processor_v8.py`
+- Key changes:
+  - Improved V8 task resilience around DB/task-log updates (avoid stuck tasks on transient DB write issues).
+  - Added SQLite lock tolerance (`timeout` + `busy_timeout`) for V8 admin DB connections.
+  - Improved full-ingestion progress reporting per-subtopic/per-phase to reduce "stuck halfway" perception.
+  - Added generation option handling consistency (`generate_svgs`, `generate_quiz`, `generate_flashcards`).
+
+**PDF ingestion pipeline correctness + stability (V8 path)**:
+- Flow context: PDF ingestion is `upload PDF -> convert to markdown -> V8 split/ingest/generate`.
+- Key fixes:
+  - Splitter now recognizes more chapter/subtopic patterns (`Section`, `Part`, `###`, generic heading variants).
+  - Chapter intro text (content before first explicit subtopic) is no longer dropped; synthetic "Overview" subtopics are created when needed.
+  - Chapter metadata is attached to split subtopics and used for chapter mapping, preventing section loss in downstream hierarchy.
+  - Subtopic ID fallback now handles empty numeric IDs safely, avoiding collisions/overwrites.
+  - Topic/subtopic upserts update names/order/path on re-ingest (rather than silently ignoring).
+  - SVG generation now uses shorter SVG timeout/retry, validates extracted `<svg>`, and falls back to deterministic inline SVG when model output fails.
+
+**AI Materials student frontend pagination (not admin panel)**:
+- File:
+  - `microservices/sugarclass-aimaterials/app/frontend/src/components/V8ContentViewer.jsx`
+- Key UI behavior:
+  - Added explicit left/right pagination controls in header.
+  - Pagination works across `Learn`, `Quiz`, `Cards`, and `Real Life` tabs.
+  - `Learn` now displays one concept page at a time.
+  - `Quiz` now displays one question page at a time.
+  - `Cards` now displays one flashcard at a time.
+  - `Real Life` now displays one application item at a time.
+  - TOC concept click switches to Learn view and moves to selected concept page.
+
+**Operational notes for next session**:
+- Backend Python changes require restarting the `sugarclass-aimaterials` backend/container.
+- Frontend React changes require rebuilding/restarting the `sugarclass-aimaterials` frontend/container.
+- To apply splitter fixes to already-ingested PDFs, re-run V8 ingestion for those uploads (existing rows are not automatically re-split retroactively).
+- Validation:
+  - Python compile check passed for modified backend files.
+  - Frontend build could not be fully executed in this environment because `vite` is not installed locally.
+
 ---
 
 ## 8. Integration Protocol

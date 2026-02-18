@@ -7,15 +7,12 @@ import {
     RefreshCw,
     CheckCircle2,
     XCircle,
-    Clock,
     ChevronLeft,
     ChevronRight,
     ChevronDown,
     Folder,
     FolderOpen,
     FileText,
-    Database,
-    BookOpen,
     Layers,
     HelpCircle,
     Image as ImageIcon,
@@ -23,16 +20,11 @@ import {
     Sparkles,
     Loader2,
     AlertCircle,
-    Play,
-    BarChart3,
     Eye,
-    Terminal,
     Info,
     Search,
     Edit2,
     Trash2,
-    AlertTriangle,
-    XIcon,
     Menu,
     ListOrdered
 } from "lucide-react";
@@ -188,6 +180,31 @@ interface V8GenerateOptions {
     apply_to_full_topic: boolean;
     custom_prompt: string;
 }
+
+const sanitizeSvgMarkup = (svgMarkup?: string) => {
+    if (!svgMarkup) return '';
+    return svgMarkup
+        .replace(/<\?xml[\s\S]*?\?>/gi, '')
+        .replace(/<!doctype[\s\S]*?>/gi, '')
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+        .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+        .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '')
+        .trim();
+};
+
+const sanitizeHtmlMarkup = (htmlMarkup?: string) => {
+    if (!htmlMarkup) return '';
+    return htmlMarkup
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+        .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+        .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '')
+        .trim();
+};
+
+const svgMarkupToDataUrl = (svgMarkup: string) => {
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+};
 
 // ===========================================================================
 // V8 GENERATE MODAL COMPONENT
@@ -425,15 +442,11 @@ const V8GenerateModal = ({
 const V8ContentBrowser = ({
     subjects: propSubjects,
     loadingSubjects: propLoadingSubjects,
-    onRefresh,
-    isMobile,
-    isTablet
+    isMobile
 }: {
     subjects: any[];
     loadingSubjects: boolean;
-    onRefresh: () => void;
     isMobile: boolean;
-    isTablet: boolean;
 }) => {
     // Use internal state for V8 subjects (fetched from V8 API)
     const [subjects, setSubjects] = useState<any[]>(propSubjects || []);
@@ -445,7 +458,6 @@ const V8ContentBrowser = ({
     const [subtopics, setSubtopics] = useState<V8Subtopic[]>([]);
     const [loadingSubtopics, setLoadingSubtopics] = useState(false);
     const [editingConcept, setEditingConcept] = useState<any>(null);
-    const [isSavingConcept, setIsSavingConcept] = useState(false);
     const [selectedSubtopicId, setSelectedSubtopicId] = useState<string | null>(null);
     const [subtopicStatus, setSubtopicStatus] = useState<V8SubtopicStatus | null>(null);
     const [fullSubtopic, setFullSubtopic] = useState<V8FullSubtopic | null>(null);
@@ -465,7 +477,6 @@ const V8ContentBrowser = ({
     const [generating, setGenerating] = useState(false);
     const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
     const [taskStatus, setTaskStatus] = useState<V8Task | null>(null);
-    const [showLogs, setShowLogs] = useState(true);
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [generateOptions, setGenerateOptions] = useState({
         generate_concepts: true,
@@ -714,7 +725,6 @@ const V8ContentBrowser = ({
 
         setGenerating(true);
         setTaskStatus(null);
-        setShowLogs(true);
         setShowGenerateModal(false);
 
         try {
@@ -759,7 +769,6 @@ const V8ContentBrowser = ({
     };
 
     const handleSaveConcept = async (conceptId: number, data: any) => {
-        setIsSavingConcept(true);
         try {
             await serviceFetch('aimaterials', `/api/admin/v8/concepts/${conceptId}`, {
                 method: 'PUT',
@@ -774,8 +783,6 @@ const V8ContentBrowser = ({
         } catch (err) {
             console.error('Error saving concept', err);
             alert('Failed to save concept');
-        } finally {
-            setIsSavingConcept(false);
         }
     };
 
@@ -1347,6 +1354,8 @@ const V8ContentBrowser = ({
                         <V8ContentDetails
                             status={subtopicStatus}
                             subtopic={fullSubtopic}
+                            isParentSidebarVisible={isSidebarVisible}
+                            onToggleParentSidebar={() => setIsSidebarVisible(!isSidebarVisible)}
                             onRegenerate={() => openGenerateModal(true)}
                             regenerating={generating}
                             onEditConcept={(concept: any) => setEditingConcept(concept)}
@@ -1371,7 +1380,7 @@ const V8ContentBrowser = ({
                             content={{
                                 id: editingConcept.id,
                                 subtopic_id: parseInt(selectedSubtopicId || '0'),
-                                subtopic_name: subtopicStatus?.subtopic_id,
+                                subtopic_name: fullSubtopic?.name || subtopicStatus?.subtopic_id,
                                 html_content: (() => {
                                     const desc = editingConcept.description ? `<p style="font-weight: 600; color: #1e293b; font-size: 1.1rem; margin-bottom: 20px;">${editingConcept.description}</p>` : '';
                                     const bullets = editingConcept.generated?.bullets || '';
@@ -1891,7 +1900,12 @@ const V8ContentDetails = ({
 
                             {/* Concept Display */}
                             <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px', background: '#fcfaf7' }} id="concept-scroll-area">
-                                {subtopic.concepts?.map(concept => (
+                                {subtopic.concepts?.map(concept => {
+                                    const sanitizedSvgMarkup = sanitizeSvgMarkup(concept.generated?.svg);
+                                    const sanitizedBulletsMarkup = sanitizeHtmlMarkup(concept.generated?.bullets)
+                                        .replace(/\$\$([^$]+)\$\$/g, '<span style="font-family: serif; font-style: italic; color: #927559;">$1</span>')
+                                        .replace(/\$([^$]+)\$/g, '<span style="font-family: serif; font-style: italic; color: #927559;">$1</span>');
+                                    return (
                                     <section key={concept.id} id={`concept-${concept.id}`} style={{ marginBottom: '80px', animation: 'fadeIn 0.8s ease' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
                                             <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '16px', letterSpacing: '-0.04em' }}>
@@ -1940,12 +1954,10 @@ const V8ContentDetails = ({
                                             }}>
                                                 <div style={{ fontSize: '1.05rem', lineHeight: 1.9, color: '#334155' }}>
                                                     {concept.description && <p style={{ marginBottom: '24px', fontWeight: 700, color: '#1a1a1b', fontSize: '1.2rem', letterSpacing: '-0.01em' }}>{concept.description}</p>}
-                                                    {concept.generated?.bullets && (
+                                                    {sanitizedBulletsMarkup && (
                                                         <div
                                                             dangerouslySetInnerHTML={{
-                                                                __html: concept.generated.bullets
-                                                                    .replace(/\$\$([^$]+)\$\$/g, '<span style="font-family: serif; font-style: italic; color: #927559;">$1</span>')
-                                                                    .replace(/\$([^$]+)\$/g, '<span style="font-family: serif; font-style: italic; color: #927559;">$1</span>')
+                                                                __html: sanitizedBulletsMarkup
                                                             }}
                                                             style={{
                                                                 fontSize: '1.05rem',
@@ -1964,10 +1976,15 @@ const V8ContentDetails = ({
                                                 overflow: 'hidden'
                                             }}>
                                                 <div style={{ background: 'white', borderRadius: '20px', padding: '24px', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(0,0,0,0.03)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.01)' }}>
-                                                    {concept.generated?.svg ? (
-                                                        <div
-                                                            dangerouslySetInnerHTML={{ __html: concept.generated.svg }}
-                                                            style={{ width: '100%', height: '100%' }}
+                                                    {sanitizedSvgMarkup ? (
+                                                        <img
+                                                            src={svgMarkupToDataUrl(sanitizedSvgMarkup)}
+                                                            alt={`${concept.title} diagram`}
+                                                            style={{
+                                                                width: '100%',
+                                                                height: '100%',
+                                                                objectFit: 'contain'
+                                                            }}
                                                         />
                                                     ) : (
                                                         <div style={{ opacity: 0.2, textAlign: 'center' }}>
@@ -1979,7 +1996,8 @@ const V8ContentDetails = ({
                                             </div>
                                         </div>
                                     </section>
-                                ))}
+                                );
+                                })}
                             </div>
                         </>
                     )}

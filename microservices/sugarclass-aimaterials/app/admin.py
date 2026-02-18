@@ -132,11 +132,14 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
     uploaded_files = []
     md_file = None
+    uploaded_md_files: List[str] = []
+    converted_md_files: List[str] = []
     pdf_converted = False
     conversion_errors = []
 
     for file in files:
         file_path = batch_dir / file.filename
+        lower_filename = file.filename.lower()
 
         # Save uploaded file
         with open(file_path, "wb") as buffer:
@@ -150,15 +153,23 @@ async def upload_files(files: List[UploadFile] = File(...)):
                     output_dir=batch_dir
                 )
                 uploaded_files.append(f"{file.filename} (converted to .md)")
-                md_file = md_path.name
+                converted_md_files.append(md_path.name)
                 pdf_converted = True
             except Exception as e:
                 conversion_errors.append(f"{file.filename}: {str(e)}")
                 uploaded_files.append(f"{file.filename} (conversion failed)")
         else:
             uploaded_files.append(file.filename)
-            if file.filename.endswith('.md'):
-                md_file = file.filename
+            if lower_filename.endswith('.md'):
+                uploaded_md_files.append(file.filename)
+
+    # Pick deterministic main markdown file:
+    # 1) Prefer explicitly uploaded .md
+    # 2) Fallback to first converted PDF markdown
+    if uploaded_md_files:
+        md_file = uploaded_md_files[0]
+    elif converted_md_files:
+        md_file = converted_md_files[0]
 
     # Return error if all PDFs failed to convert
     if conversion_errors and not md_file:
@@ -181,6 +192,8 @@ async def upload_files(files: List[UploadFile] = File(...)):
         "files": uploaded_files,
         "metadata": metadata,
         "main_markdown": md_file,
+        "uploaded_markdowns": uploaded_md_files,
+        "converted_markdowns": converted_md_files,
         "pdf_converted": pdf_converted,
         "conversion_errors": conversion_errors if conversion_errors else None,
         # Flatten metadata for frontend convenience
