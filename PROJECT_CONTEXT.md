@@ -107,7 +107,11 @@ To maintain SSO across iframes without complex cross-domain cookies:
 - Frontend: React with Vite
 - Backend: FastAPI (Python)
 - Database: SQLite (shared with AI Tutor)
-- Features: Content enhancement, exercise generation, admin CRUD
+- Features: Content enhancement, exercise generation, admin CRUD, and V8 content pipeline
+- API Surfaces:
+  - Legacy admin: `/api/admin/*` (upload, content CRUD/regeneration, exercises)
+  - V8 admin: `/api/admin/v8/*` (subject/topic/subtopic management, V8 generation, V8 editors)
+  - V8 public: `/api/v8/*` (read-only content access)
 
 ---
 
@@ -164,7 +168,25 @@ The main dashboard uses a **1:1:1 Balanced Grid**. Every column weight should be
 - **AI Writer**: Production-ready with active news fetching and writing assistance
 - **AI Tutor**: Full RAG system with frontend, vector search, and automatic content synchronization
 - **AI Examiner**: Complete exam preparation platform with material management and question editing
-- **AI Materials**: Full content management system with AI enhancement and exercise generation
+- **AI Materials**: Full content management system with AI enhancement, exercise generation, and V8 generation/editing workflow
+
+### Admin Panel Status (Verified)
+- **Admin access control**: Enforced in shell frontend via `auth.me()` + `is_superuser` check.
+- **Implemented admin module**: `AI Materials` is the only fully functional admin module.
+- **Placeholder admin modules**: `AI Tutor`, `AI Writer`, `AI Examiner`, `Users`, `Groups`, and `Logs` currently render `ComingSoon` pages.
+- **AI Materials admin UI**:
+  - Three tabs in `frontend/src/app/admin/aimaterials/page.tsx`: `Uploader`, `Database`, `V8 Content`
+  - Upload flow: `/api/admin/upload` → `/api/admin/v8/ingest` with polling via `/api/admin/v8/tasks/{task_id}`
+  - Database tab: subject rename/delete through `/api/admin/db/subjects/*`
+  - V8 tab: full subject/topic/subtopic browse/edit/generate via `/api/admin/v8/*`
+
+### Integration Notes (Verified)
+- Shell admin calls microservices through `serviceFetch` and forwards `Authorization: Bearer <token>` from `localStorage.token`.
+- Gateway routes AI Materials as:
+  - `/services/aimaterials/` → AI Materials frontend
+  - `/services/aimaterials/api/*` → AI Materials backend `/api/*`
+- Known caveat: Admin dashboard link `?tab=database` is present, but `admin/aimaterials` currently does not read query params to set initial tab.
+- Known caveat: `frontend/src/lib/microservices.ts` production detection checks only `localhost`, so `127.0.0.1` may be treated as production path mode.
 
 ### Recent Features (2026-02)
 
@@ -235,6 +257,7 @@ To add a new module:
 - Authentication token via `postMessage`
 - User profile data
 - Session management
+- For shell-admin microservice calls, JWT is passed via `Authorization` header through `serviceFetch`.
 
 ### Modules → Shell
 - Progress updates via `/api/v1/progress`
@@ -247,4 +270,4 @@ To add a new module:
 
 ---
 
-*Last Updated: 2026-02-12*
+*Last Updated: 2026-02-18*

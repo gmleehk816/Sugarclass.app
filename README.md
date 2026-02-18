@@ -31,7 +31,8 @@ sugarclass.app/
 | **AI Tutor Backend** | 8002 | RAG tutoring, quizzes |
 | **AI Examiner Frontend** | 3403 | Exam preparation UI |
 | **AI Examiner Backend** | 8003 | Material upload, quiz generation |
-| **AI Materials Backend** | 8004 | Enhanced content, Exercise CRUD |
+| **AI Materials Frontend** | 3404 | Materials viewer UI (embedded route) |
+| **AI Materials Backend** | 8004 | Enhanced content, Exercise CRUD, V8 generation APIs |
 | **AI Writer DB (Postgres)** | 5602 | News/drafts storage |
 | **AI Tutor Content DB** | 5600 | Syllabus content |
 | **AI Tutor Agent DB** | 5601 | Sessions, mastery |
@@ -74,7 +75,8 @@ docker-compose up -d --build
 - **AI Writer**: http://localhost:3401/aiwriter
 - **AI Tutor**: http://localhost:3402/aitutor
 - **AI Examiner**: http://localhost:3403/examiner
-- **AI Materials**: http://localhost:8004 (Embedded)
+- **AI Materials (embedded route)**: http://localhost:3404/services/aimaterials
+- **AI Materials API**: http://localhost:8004
 - **AI Tutor API**: http://localhost:8002/docs
 - **Qdrant Dashboard**: http://localhost:6333/dashboard
 
@@ -111,6 +113,7 @@ An AI-powered content enhancement service that:
 - Rewrites textbook content into structured HTML/SVG
 - Generates educational images via Diffusion models
 - Provides a full Admin CRUD for exercises and questions
+- Exposes V8 admin APIs (`/api/admin/v8/*`) and V8 public read APIs (`/api/v8/*`)
 - Features content regeneration with customizable options (focus, temperature, sections)
 - Includes content browser with subject/topic/subtopic navigation
 - Supports background task processing with progress tracking
@@ -157,8 +160,10 @@ docker-compose down
 1. **Shell Architecture**: The main dashboard hosts child apps via `<ServiceFrame>` iframes.
 2. **SSO Handshake**: The shell sends tokens to iframes via `postMessage`.
 3. **Microservice Paths**: All microservices are in `./microservices/{service-name}/`.
-4. **Database Isolation**: Each microservice has its own database (no shared state).
+4. **Database Sharing**: AI Materials and AI Tutor share the content DB path; other services are isolated.
 5. **Port Mapping**: Dashboard=8000/3400, Writer=8001/3401, Tutor=8002/3402, Examiner=8003/3403, Materials=8004/3404.
+6. **Shell Admin API Calls**: The shell admin uses `serviceFetch` and forwards `Authorization: Bearer <token>` from `localStorage.token`.
+7. **Gateway Routing (prod)**: `/services/aimaterials/` routes to AI Materials frontend and `/services/aimaterials/api/*` routes to AI Materials backend `/api/*`.
 
 ---
 
@@ -177,12 +182,22 @@ docker-compose down
 - Content browser component with tree view navigation
 - Backend CRUD API for content management
 - LLM-powered content regeneration with background tasks
+- V8 ingestion flow (`/api/admin/upload` → `/api/admin/v8/ingest`) with background task polling
 
 ### AI Tutor Enhancements
 - Full frontend interface with React/Vite
 - Data sync agent for automatic content updates
 - Enhanced RAG capabilities with Qdrant integration
 - Session management with Redis caching
+
+---
+
+## 🛡 Admin Panel Status (Verified)
+
+- **Implemented now**: AI Materials admin (`/admin/aimaterials`) with Uploader, Database, and V8 Content tabs.
+- **Currently placeholders**: `/admin/tutor`, `/admin/writer`, `/admin/examiner`, `/admin/users`, `/admin/groups`, `/admin/logs`.
+- **Admin gating**: Shell checks `auth.me()` and requires `is_superuser`; backend admin routes additionally verify JWT with shared `SECRET_KEY`.
+- **Known caveat**: Admin dashboard links to `/admin/aimaterials?tab=database`, but the page currently defaults to `uploader` and does not read query params for initial tab.
 
 ---
 
