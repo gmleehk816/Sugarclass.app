@@ -68,10 +68,20 @@ except ImportError:
 REQUEST_INTERVAL = float(os.getenv("V8_REQUEST_INTERVAL", "2.0"))
 MAX_RETRIES = int(os.getenv("V8_MAX_RETRIES", "3"))
 REQUEST_TIMEOUT = int(os.getenv("V8_REQUEST_TIMEOUT", "120"))
-SVG_REQUEST_TIMEOUT = int(os.getenv("V8_SVG_REQUEST_TIMEOUT", "45"))
+SVG_REQUEST_TIMEOUT = int(os.getenv("V8_SVG_REQUEST_TIMEOUT", "90"))   # Increased from 45s — SVG gen is slow under load
 SVG_MAX_RETRIES = int(os.getenv("V8_SVG_MAX_RETRIES", "2"))
-RETRY_DELAY = float(os.getenv("V8_RETRY_DELAY", "5.0"))
-ALLOW_SVG_FALLBACK = os.getenv("V8_ALLOW_SVG_FALLBACK", "false").lower() in ("1", "true", "yes")
+RETRY_DELAY = float(os.getenv("V8_RETRY_DELAY", "10.0"))               # Increased from 5s for better 429 recovery
+ALLOW_SVG_FALLBACK = os.getenv("V8_ALLOW_SVG_FALLBACK", "true").lower() in ("1", "true", "yes")  # Enabled by default
+
+# Grok image generation
+GROK_API_KEY = os.getenv("GROK_API_KEY") or os.getenv("LLM_API_KEY") or os.getenv("GEMINI_API_KEY")
+GROK_API_URL = os.getenv("GROK_API_URL", "https://hb.dockerspeeds.asia")
+
+# Feature flags (ported from physics builder)
+CACHE_DIR = Path(os.getenv("V8_CACHE_DIR", "/tmp/v8_cache"))
+ENABLE_CACHE = os.getenv("V8_ENABLE_CACHE", "true").lower() in ("1", "true", "yes")
+ENABLE_REWRITE = os.getenv("V8_ENABLE_REWRITE", "true").lower() in ("1", "true", "yes")
+ENABLE_IMAGES = os.getenv("V8_ENABLE_IMAGES", "false").lower() in ("1", "true", "yes")  # off by default (needs Grok key)
 
 # ============================================================================
 # DATA STRUCTURES
@@ -236,6 +246,14 @@ class DatabaseManager:
             INSERT INTO v8_formulas (subtopic_id, formula, description, order_num)
             VALUES (?, ?, ?, ?)
         """, (subtopic_id, formula, description, order_num))
+        self.conn.commit()
+
+    def save_rewritten_content(self, subtopic_id: str, rewritten_text: str):
+        """Save rewritten content for a subtopic"""
+        self.conn.execute("""
+            INSERT OR REPLACE INTO v8_rewritten_content (subtopic_id, rewritten_text)
+            VALUES (?, ?)
+        """, (str(subtopic_id), rewritten_text))
         self.conn.commit()
 
     def mark_subtopic_processed(self, subtopic_id: int):
@@ -550,8 +568,13 @@ class GeminiClient:
 
         self.last_request_time = time.time()
 
-    def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT, max_retries: Optional[int] = None) -> Optional[str]:
-        """Generate content from Gemini API"""
+    def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT, max_retries: Optional[int] = None, cancel_event=None) -> Optional[str]:
+        """Generate content from Gemini API.
+        
+        Args:
+            cancel_event: optional threading.Event — if set, retry sleeps return immediately
+                          so the caller can check for cancellation without waiting.
+        """
         request_data = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
@@ -559,7 +582,17 @@ class GeminiClient:
         }
         retries = max_retries if max_retries is not None else MAX_RETRIES
 
+        def _sleep(seconds: float):
+            """Sleep that wakes immediately if cancel_event is set."""
+            if cancel_event is not None:
+                cancel_event.wait(timeout=seconds)
+            else:
+                time.sleep(seconds)
+
         for attempt in range(1, retries + 1):
+            # Check cancel before each attempt
+            if cancel_event is not None and cancel_event.is_set():
+                return None
             try:
                 self._wait_for_rate_limit()
 
@@ -575,9 +608,19 @@ class GeminiClient:
                     if "choices" in data and len(data["choices"]) > 0:
                         return data["choices"][0]["message"]["content"]
 
-                elif response.status_code in (429, 500, 502, 503, 504):
+                elif response.status_code == 429:
+                    # Rate limited — read Retry-After header, then use exponential backoff
+                    retry_after = int(response.headers.get("Retry-After", 0))
+                    wait = max(retry_after, RETRY_DELAY * (2 ** (attempt - 1)))
+                    print(f"    [RATE LIMIT 429] Attempt {attempt}/{retries}, waiting {wait:.0f}s (Retry-After={retry_after}s)...")
                     if attempt < retries:
-                        time.sleep(RETRY_DELAY)
+                        _sleep(wait)
+                        continue
+                    return None
+                elif response.status_code in (500, 502, 503, 504):
+                    print(f"    [ERROR] HTTP {response.status_code}, attempt {attempt}/{retries}")
+                    if attempt < retries:
+                        _sleep(RETRY_DELAY)
                         continue
                     return None
                 else:
@@ -587,7 +630,7 @@ class GeminiClient:
             except Exception as e:
                 print(f"    [ERROR] {str(e)}")
                 if attempt < retries:
-                    time.sleep(RETRY_DELAY)
+                    _sleep(RETRY_DELAY)
                     continue
                 return None
 
@@ -833,6 +876,172 @@ Return ONLY valid JSON:
             except json.JSONDecodeError:
                 print("    Warning: Failed to parse flashcard JSON")
         return None
+
+    def rewrite_content(self, original_text: str) -> Optional[str]:
+        """Rewrite raw content into clean, readable educational prose (ported from physics builder)"""
+        prompt = f"""You are an expert educational content editor. Rewrite the following textbook content to make it MORE readable and educational while preserving ALL the original information.
+
+**ORIGINAL CONTENT:**
+{original_text[:8000]}
+
+**REQUIREMENTS:**
+1. Keep ALL the original information — do not skip any content
+2. Clean up OCR errors and fix broken words
+3. Use CLEAR markdown structure with proper spacing:
+   - Use ## for main topics
+   - Use ### for subtopics
+   - Add blank lines between paragraphs and sections
+   - Use bullet points for lists, numbered lists for steps
+4. Format key elements:
+   - Use **bold** for key terms and formulas
+   - Use `code blocks` for formulas and equations
+   - Use > for important notes
+5. For worked examples: use **Step 1:**, **Step 2:** etc., show calculations in code blocks
+6. Add horizontal rules (---) between major sections
+7. Make it suitable for students (clear, concise, well-structured)
+
+Return the complete rewritten content in markdown format."""
+
+        return self.generate(prompt, timeout=180)
+
+    def generate_reallife_images(self, topic: str, content: str, grok_client: 'GrokImageClient') -> List[Dict]:
+        """Generate real-life image prompts via LLM then fetch images via Grok (ported from physics builder)"""
+        # Step 1: Ask LLM to generate 3 relevant image prompts for this topic
+        prompt = f"""Generate 3 real-life photography prompts for educational images about this topic.
+
+Topic: {topic}
+Content summary: {content[:1000]}
+
+For each image provide:
+1. id: short snake_case identifier (e.g. "everyday_example")
+2. title: short display title
+3. description: one sentence description
+4. prompt: detailed photography prompt for image generation
+
+Return ONLY valid JSON:
+{{
+  "images": [
+    {{
+      "id": "everyday_example",
+      "title": "Everyday Example",
+      "description": "Real-world application of the concept",
+      "prompt": "Real photo: ..."
+    }}
+  ]
+}}"""
+
+        result = self.generate(prompt)
+        images_config = []
+        if result:
+            try:
+                result = re.sub(r'```json\n?', '', result)
+                result = re.sub(r'```\n?', '', result)
+                data = json.loads(result)
+                images_config = data.get('images', [])
+            except (json.JSONDecodeError, Exception):
+                print("    Warning: Failed to parse image prompts JSON")
+
+        if not images_config:
+            # Fallback: generic prompts
+            images_config = [
+                {'id': 'real_world', 'title': 'Real World Application',
+                 'description': f'Real-world example of {topic}',
+                 'prompt': f'Real photo showing {topic} in everyday life, educational photography'},
+            ]
+
+        # Step 2: Generate each image via Grok
+        results = []
+        for cfg in images_config[:3]:  # max 3 images
+            url = grok_client.generate_image(cfg.get('prompt', ''))
+            results.append({
+                'id': cfg.get('id', 'image'),
+                'url': url or '',
+                'prompt': cfg.get('prompt', ''),
+                'title': cfg.get('title', ''),
+                'description': cfg.get('description', ''),
+            })
+        return results
+
+
+# ============================================================================
+# GROK IMAGE CLIENT (ported from physics builder)
+# ============================================================================
+
+class GrokImageClient:
+    """Handle Grok Image API for real-life educational images"""
+
+    def __init__(self, api_key: str = GROK_API_KEY, base_url: str = GROK_API_URL):
+        self.api_key = api_key
+        self.base_url = base_url.rstrip('/')
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+    def generate_image(self, prompt: str) -> Optional[str]:
+        """Generate image using Grok Image API, returns URL or None"""
+        if not self.api_key:
+            print("    [GROK] No API key configured")
+            return None
+
+        url = f"{self.base_url}/v1/images/generations"
+        request_data = {
+            "model": "grok-2-image-1212",
+            "prompt": prompt,
+            "n": 1,
+            "size": "1024x1024"
+        }
+
+        try:
+            response = requests.post(url, headers=self.headers, json=request_data, timeout=60)
+            if response.status_code == 200:
+                data = response.json()
+                if "data" in data and len(data["data"]) > 0:
+                    return data["data"][0].get("url", "")
+            else:
+                print(f"    [GROK] HTTP {response.status_code}")
+        except Exception as e:
+            print(f"    [GROK] Error: {e}")
+        return None
+
+
+# ============================================================================
+# SUBTOPIC CACHE (ported from physics builder)
+# ============================================================================
+
+class SubtopicCache:
+    """JSON cache per subtopic, keyed by MD5 hash of content. Skips all API calls on re-runs."""
+
+    def __init__(self, subtopic_id: int, content_hash: str, cache_dir: Path = CACHE_DIR):
+        self.cache_dir = cache_dir
+        self.content_hash = content_hash
+        self.cache_file = cache_dir / f"subtopic_{subtopic_id}_{content_hash[:8]}.json"
+
+    def load(self) -> Optional[Dict]:
+        """Load cached data if hash matches, else return None"""
+        if not self.cache_file.exists():
+            return None
+        try:
+            with open(self.cache_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if data.get('content_hash') != self.content_hash:
+                print(f"    [CACHE] Hash mismatch, invalidating cache")
+                return None
+            return data
+        except Exception as e:
+            print(f"    [CACHE] Error loading: {e}")
+            return None
+
+    def save(self, data: Dict):
+        """Save data to cache file"""
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            payload = {'content_hash': self.content_hash, 'saved_at': time.time(), **data}
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+            print(f"    [CACHE] Saved to {self.cache_file.name}")
+        except Exception as e:
+            print(f"    [CACHE] Error saving: {e}")
 
 
 # ============================================================================

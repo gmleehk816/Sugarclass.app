@@ -17,7 +17,17 @@ import sqlite3
 import json
 import uuid
 import os
+import time
+import hashlib
+import threading
 from datetime import datetime
+
+# ============================================================================
+# CANCEL EVENT REGISTRY
+# Maps task_id -> threading.Event so cancel_task() can wake sleeping workers
+# instantly without waiting for the next DB poll.
+# ============================================================================
+_cancel_events: Dict[str, threading.Event] = {}
 
 from .deps import get_current_admin
 
@@ -770,6 +780,12 @@ async def cancel_task(task_id: str):
             VALUES (?, 'warning', ?)
         """, (task_id, "Cancellation requested by user"))
         conn.commit()
+
+        # Signal the worker thread immediately so it wakes from any sleep
+        event = _cancel_events.get(task_id)
+        if event:
+            event.set()
+
         return {"task_id": task_id, "status": "cancelling", "message": "Cancellation requested"}
     finally:
         conn.close()
@@ -1009,6 +1025,9 @@ async def update_reallife_image(
 
 def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
     """Background task to generate V8 content"""
+    # Register a cancel event for this task so cancel_task() can wake us instantly
+    _cancel_event = threading.Event()
+    _cancel_events[task_id] = _cancel_event
 
     def update_task(status: str, progress: int, message: str, error: str = None):
         conn = None
@@ -1063,6 +1082,10 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
         pass
 
     def is_cancel_requested() -> bool:
+        # Fast path: check the in-memory event first (set by cancel_task() immediately)
+        if _cancel_event.is_set():
+            return True
+        # Fallback: check DB (catches cases where the event wasn't registered, e.g. after restart)
         conn = None
         try:
             conn = get_db_connection()
@@ -1475,6 +1498,9 @@ async def v8_ingest(request: V8IngestRequest, background_tasks: BackgroundTasks)
 
 def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, syllabus: str, target_subject_id: Optional[str] = None):
     """Background task: full V8 pipeline — parse markdown, create hierarchy, generate all V8 content"""
+    # Register a cancel event for this task so cancel_task() can wake us instantly
+    _cancel_event = threading.Event()
+    _cancel_events[task_id] = _cancel_event
 
     def update_task(status: str, progress: int, message: str, error: str = None):
         conn = None
@@ -1528,22 +1554,18 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
         pass
 
     def is_cancel_requested() -> bool:
+        # Fast path: check the in-memory event first (set by cancel_task() immediately)
+        if _cancel_event.is_set():
+            return True
+        # Fallback: check DB
         conn = None
         try:
             conn = get_db_connection()
             try:
-                row = conn.execute("""
-                    SELECT status, cancel_requested
-                    FROM v8_processing_tasks
-                    WHERE task_id = ?
-                """, (task_id,)).fetchone()
+                row = conn.execute("SELECT status, cancel_requested FROM v8_processing_tasks WHERE task_id = ?", (task_id,)).fetchone()
             except Exception:
-                row = conn.execute("""
-                    SELECT status
-                    FROM v8_processing_tasks
-                    WHERE task_id = ?
-                """, (task_id,)).fetchone()
-
+                row = conn.execute("SELECT status FROM v8_processing_tasks WHERE task_id = ?", (task_id,)).fetchone()
+            
             if not row:
                 return False
 
@@ -1742,7 +1764,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 content_saved = False
                 try:
                     conn.execute("""
-                        INSERT INTO content_raw (subtopic_id, title, markdown_content, source_file, char_count)
+                        INSERT OR REPLACE INTO content_raw (subtopic_id, title, markdown_content, source_file, char_count)
                         VALUES (?, ?, ?, ?, ?)
                     """, (st_db_id, subtopic_name, subtopic_content, str(md_path), len(subtopic_content)))
                     conn.commit()
@@ -1750,7 +1772,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 except Exception as e1:
                     try:
                         conn.execute("""
-                            INSERT INTO content_raw (subtopic_id, markdown_content)
+                            INSERT OR REPLACE INTO content_raw (subtopic_id, markdown_content)
                             VALUES (?, ?)
                         """, (st_db_id, subtopic_content))
                         conn.commit()
@@ -1781,7 +1803,14 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
 
         # Log API configuration for debugging
         from .processors.content_processor_v8 import API_BASE_URL, API_KEY, MODEL
+        from .processors.content_processor_v8 import SubtopicCache, GrokImageClient, ENABLE_CACHE, ENABLE_REWRITE, ENABLE_IMAGES, GROK_API_KEY
         add_log('info', f"LLM Config: model={MODEL}, url={API_BASE_URL[:60]}..., key={'set (' + API_KEY[:8] + '...)' if API_KEY else 'NOT SET'}")
+        add_log('info', f"Features: cache={ENABLE_CACHE}, rewrite={ENABLE_REWRITE}, images={ENABLE_IMAGES}")
+
+        # Initialize Grok client if images are enabled
+        grok_client = GrokImageClient() if (ENABLE_IMAGES and GROK_API_KEY) else None
+        if ENABLE_IMAGES and not grok_client:
+            add_log('warning', 'Image generation disabled: GROK_API_KEY not set')
 
         total_success = 0
         total_failed = 0
@@ -1812,9 +1841,29 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             update_task('running', subtopic_progress_base, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Analyzing...')
             abort_if_cancelled(subtopic_progress_base, f"{st_name} analysis")
 
+            # --- Cache check (skip all API calls if content unchanged) ---
+            st_hash = hashlib.md5(st_content.encode('utf-8', errors='ignore')).hexdigest()
+            if ENABLE_CACHE:
+                cache = SubtopicCache(st_db_id, st_hash)
+                cached = cache.load()
+                if cached:
+                    add_log('info', f"  [CACHE HIT] Skipping API calls for: {st_name}")
+                    processor.db.mark_subtopic_processed(st_db_id)
+                    total_success += 1
+                    update_task('running', subtopic_progress_end, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Done (cached)')
+                    if i < len(subtopic_db_ids) - 1:
+                        time.sleep(3)
+                    continue
+            else:
+                cache = None
+
             try:
                 # Use the content for this subtopic (or full markdown if content is too short)
-                content_for_analysis = st_content if len(st_content) > 200 else markdown_content[:5000]
+                # Use a lower threshold (100 chars) and prefix the subtopic name for context
+                if len(st_content) > 100:
+                    content_for_analysis = st_content
+                else:
+                    content_for_analysis = f"# {st_name}\n\n" + markdown_content[:4000]
                 add_log('info', f"  Content length: {len(content_for_analysis)} chars")
 
                 # Analyze structure
@@ -1924,6 +1973,39 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 else:
                     add_log('warning', f"  ✗ Flashcard generation returned empty")
 
+                # --- Step 6: Rewrite content (if enabled) ---
+                if ENABLE_REWRITE:
+                    update_task('running', flashcards_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Rewriting content...')
+                    abort_if_cancelled(flashcards_phase_progress, f"{st_name} rewrite")
+                    add_log('info', f"  Calling LLM: rewrite_content...")
+                    rewritten = processor.gemini.rewrite_content(content_for_analysis)
+                    if rewritten:
+                        processor.db.save_rewritten_content(st_db_id, rewritten)
+                        add_log('info', f"  ✓ Rewritten content saved ({len(rewritten)} chars)")
+                    else:
+                        add_log('warning', f"  ✗ Content rewrite returned empty")
+
+                # --- Step 7: Real-life images (if enabled and Grok configured) ---
+                if ENABLE_IMAGES and grok_client:
+                    update_task('running', flashcards_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating images...')
+                    abort_if_cancelled(flashcards_phase_progress, f"{st_name} image generation")
+                    add_log('info', f"  Calling LLM+Grok: generate_reallife_images...")
+                    try:
+                        images = processor.gemini.generate_reallife_images(st_name, content_for_analysis[:2000], grok_client)
+                        for img in images:
+                            if img.get('url'):
+                                processor.db.save_reallife_image(
+                                    st_db_id, img['id'], img['url'],
+                                    img.get('prompt', ''), img.get('title', ''), img.get('description', '')
+                                )
+                        add_log('info', f"  ✓ Images: {len([img for img in images if img.get('url')])} generated")
+                    except Exception as img_err:
+                        add_log('warning', f"  ✗ Image generation failed: {img_err}")
+
+                # --- Save to cache ---
+                if cache is not None:
+                    cache.save({'subtopic_name': st_name, 'completed': True})
+
                 # Mark as processed
                 abort_if_cancelled(subtopic_progress_end, f"{st_name} finalization")
                 processor.db.mark_subtopic_processed(st_db_id)
@@ -1941,6 +2023,10 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 continue
 
             update_task('running', subtopic_progress_end, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Done')
+
+            # Brief cooldown between subtopics — use event.wait so cancel wakes us instantly
+            if i < len(subtopic_db_ids) - 1:
+                _cancel_event.wait(timeout=3)
 
         add_log('info', f"Generation summary: {total_success} succeeded, {total_failed} failed out of {len(subtopic_db_ids)}")
         if total_success == 0 and total_failed > 0:
@@ -1970,6 +2056,8 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 hierarchy_conn.close()
             except Exception:
                 pass
+        # Clean up the cancel event registry to avoid memory leaks
+        _cancel_events.pop(task_id, None)
 
 
 def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list) -> list:

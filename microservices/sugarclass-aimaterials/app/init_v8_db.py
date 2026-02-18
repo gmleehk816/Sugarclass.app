@@ -124,6 +124,15 @@ def migrate_to_v8():
             FOREIGN KEY (subtopic_id) REFERENCES subtopics(id) ON DELETE CASCADE
         )""",
 
+        # V8 Rewritten Content (ported from physics builder)
+        """CREATE TABLE IF NOT EXISTS v8_rewritten_content (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subtopic_id TEXT NOT NULL UNIQUE,
+            rewritten_text TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (subtopic_id) REFERENCES subtopics(id) ON DELETE CASCADE
+        )""",
+
         # V8 Processing Tasks
         """CREATE TABLE IF NOT EXISTS v8_processing_tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

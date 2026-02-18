@@ -104,7 +104,7 @@ app.include_router(admin_router, tags=["Admin"])
 
 @app.on_event("startup")
 async def startup_event():
-    """Log database path on startup."""
+    """Log database path on startup and clean up orphaned tasks."""
     import logging
     logger = logging.getLogger("uvicorn")
     logger.info(f"AI Materials V8 DB_PATH: {DB_PATH}")
@@ -113,15 +113,30 @@ async def startup_event():
     if os.path.exists(DB_PATH):
         logger.info(f"Database size: {os.path.getsize(DB_PATH)} bytes")
 
-        # Check V8 tables
         try:
             conn = sqlite3.connect(DB_PATH)
+
+            # Check V8 tables
             cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'v8_%'")
             v8_tables = cursor.fetchall()
             logger.info(f"V8 tables found: {len(v8_tables)}")
+
+            # Clean up orphaned tasks — any task still 'running' or 'cancelling'
+            # when the server starts has no live worker thread (restart killed it).
+            result = conn.execute("""
+                UPDATE v8_processing_tasks
+                SET status = 'cancelled',
+                    cancelled_at = CURRENT_TIMESTAMP,
+                    message = 'Cancelled: server restarted while task was in progress'
+                WHERE status IN ('running', 'cancelling')
+            """)
+            if result.rowcount > 0:
+                logger.warning(f"Cleaned up {result.rowcount} orphaned task(s) stuck in running/cancelling state")
+            conn.commit()
             conn.close()
         except Exception as e:
-            logger.error(f"Error checking V8 tables: {e}")
+            logger.error(f"Error during startup cleanup: {e}")
+
 
 # ============================================================================
 # Static Files
@@ -257,6 +272,72 @@ async def get_db_stats():
     finally:
         conn.close()
 
+@app.get("/api/content/{subtopic_id}/with-rewrite")
+async def get_content_with_rewrite(subtopic_id: str):
+    """
+    Return raw content + V8 rewritten content for a subtopic.
+    Used by ContentArea.jsx in the student-facing frontend.
+    """
+    import markdown as md_lib
+
+    conn = get_db_connection()
+    try:
+        # 1. Get subtopic metadata
+        subtopic = conn.execute(
+            "SELECT id, name, topic_id FROM subtopics WHERE id = ?",
+            (subtopic_id,)
+        ).fetchone()
+        if not subtopic:
+            raise HTTPException(status_code=404, detail="Subtopic not found")
+
+        subtopic = row_to_dict(subtopic)
+
+        # 2. Get raw content
+        raw_row = conn.execute(
+            "SELECT markdown_content, title, created_at FROM content_raw WHERE subtopic_id = ? ORDER BY id DESC LIMIT 1",
+            (subtopic_id,)
+        ).fetchone()
+
+        raw_html = ""
+        if raw_row:
+            raw_md = raw_row["markdown_content"] or ""
+            raw_html = md_lib.markdown(
+                raw_md,
+                extensions=["tables", "fenced_code", "nl2br"]
+            )
+
+        # 3. Get V8 rewritten content (from new table)
+        rewrite_row = conn.execute(
+            "SELECT rewritten_text, created_at FROM v8_rewritten_content WHERE subtopic_id = ? LIMIT 1",
+            (subtopic_id,)
+        ).fetchone()
+
+        rewrite_data: Dict[str, Any] = {"has_rewrite": False}
+        if rewrite_row and rewrite_row["rewritten_text"]:
+            rewrite_html = md_lib.markdown(
+                rewrite_row["rewritten_text"],
+                extensions=["tables", "fenced_code", "nl2br"]
+            )
+            rewrite_data = {
+                "has_rewrite": True,
+                "html": rewrite_html,
+                "learning_objectives": None,   # not stored separately in V8 pipeline
+                "key_takeaways": None,          # not stored separately in V8 pipeline
+                "model_used": "V8 Pipeline",
+                "created_at": rewrite_row["created_at"] or "",
+            }
+
+        return {
+            "subtopic_id": subtopic_id,
+            "subtopic_name": subtopic["name"],
+            "raw_content": {"html": raw_html},
+            "rewrite": rewrite_data,
+        }
+
+    finally:
+        conn.close()
+
+
 @app.get("/api/db/subjects/{subject_id}/chapters")
 async def get_db_chapters(subject_id: str):
     """Get main chapters for a subject."""
@@ -308,7 +389,11 @@ async def serve_frontend():
 
 @app.get("/{path:path}", response_class=HTMLResponse)
 async def serve_frontend_catchall(path: str):
-    """Serve React frontend for client-side routing."""
+    """Serve React frontend for client-side routing. API paths are not served here."""
+    # Don't serve frontend HTML for API routes — let FastAPI return 404 naturally
+    if path.startswith("api/"):
+        raise HTTPException(status_code=404, detail=f"API endpoint not found: /{path}")
+
     frontend_dir = STATIC_DIR / "frontend"
     requested_path = frontend_dir / path
 
@@ -323,6 +408,7 @@ async def serve_frontend_catchall(path: str):
                 status_code=404,
                 detail="Frontend not built. Run build script first."
             )
+
 
 # ============================================================================
 # Main Entry Point

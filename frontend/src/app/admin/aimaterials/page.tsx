@@ -185,17 +185,14 @@ type DbSubject = {
 function sanitizeId(name: string): string {
     return name.toLowerCase()
         .replace(/[^\w\s-]/g, '')
+        .trim()
         .replace(/[-\s]+/g, '_')
-        .replace(/^_+|_+$/g, '')
         .substring(0, 50);
 }
 
 // Must stay aligned with backend _sanitize_code (admin_v8.py)
 function sanitizeIngestCode(name: string): string {
-    return name.toLowerCase()
-        .replace(/[^\w\s-]/g, '')
-        .trim()
-        .replace(/[-\s]+/g, '_');
+    return sanitizeId(name);
 }
 
 type AdminV8TaskStatus = 'idle' | 'pending' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
@@ -220,7 +217,7 @@ function matchSubjectsToTree(dbSubjects: DbSubject[]) {
     const matched = new Set<string>();
     const subjectIdMap: Record<string, DbSubject> = {};
 
-    // Build a lookup: subject ID â†’ DbSubject
+    // Build a lookup: subject ID → DbSubject
     for (const sub of dbSubjects) {
         subjectIdMap[sub.id] = sub;
     }
@@ -230,15 +227,18 @@ function matchSubjectsToTree(dbSubjects: DbSubject[]) {
 
     for (const [level, subjects] of Object.entries(DATATREE)) {
         treeWithData[level] = {};
+        const levelCode = sanitizeId(level || 'IGCSE');
+
         for (const [subjectName, boards] of Object.entries(subjects)) {
             const boardEntries = boards.map(boardName => {
-                const targetId = sanitizeId(boardName);
+                // IMPORTANT: V8 IDs are prefixed with syllabus code: e.g. "igcse_physics_0625"
+                const targetId = `${levelCode}_${sanitizeId(boardName)}`;
                 const db = subjectIdMap[targetId];
                 if (db) matched.add(db.id);
                 return { name: boardName, dbSubject: db };
             });
 
-            const subjectId = sanitizeId(subjectName);
+            const subjectId = `${levelCode}_${sanitizeId(subjectName)}`;
             const subjectDb = subjectIdMap[subjectId];
             if (subjectDb) matched.add(subjectDb.id);
 
@@ -1672,8 +1672,10 @@ const AIMaterialsAdmin = () => {
             // Suggestions from upload/PDF conversion are only fallbacks.
             const treeSelectedSubject = (selectedBoard || selectedSubject || '').trim();
             const treeSelectedSyllabus = (selectedLevel || '').trim();
-            const normalizedSubject = (subjectName || treeSelectedSubject).trim();
-            const normalizedSyllabus = (syllabus || treeSelectedSyllabus).trim();
+
+            const normalizedSubject = (treeSelectedSubject || subjectName).trim();
+            const normalizedSyllabus = (treeSelectedSyllabus || syllabus).trim();
+
             const extractedSubject = normalizedSubject || (uploadRes.suggested_subject || '').trim();
             const extractedSyllabus = normalizedSyllabus || (uploadRes.suggested_syllabus || '').trim();
             const targetSubjectId = extractedSubject
