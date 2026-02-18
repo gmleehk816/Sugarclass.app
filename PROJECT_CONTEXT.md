@@ -297,6 +297,15 @@ The main dashboard uses a **1:1:1 Balanced Grid**. Every column weight should be
 - `python -m py_compile microservices/sugarclass-aimaterials/app/admin_v8.py microservices/sugarclass-aimaterials/app/init_v8_db.py` passed.
 - TypeScript/lint validation could not run in this environment due to missing local `typescript`/`eslint` packages in `frontend`.
 
+**Ops utility added (2026-02-18)**:
+- File:
+  - `force-cancel-aimaterials-task.sh`
+- Purpose:
+  - Force-cancel stuck AI Materials V8 ingestion tasks directly in the running backend container DB (`/app/database/rag_content.db`) and restart `aimaterials-backend`.
+- Usage:
+  - `./force-cancel-aimaterials-task.sh --task-id <task_id>`
+  - `./force-cancel-aimaterials-task.sh --all-active`
+
 ---
 
 ## 8. Integration Protocol
