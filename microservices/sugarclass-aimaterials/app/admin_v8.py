@@ -1814,65 +1814,90 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
 
         total_success = 0
         total_failed = 0
+        completed_count = 0
+        progress_lock = threading.Lock()
 
-        for i, (st_db_id, st_name, st_content) in enumerate(subtopic_db_ids):
-            subtopic_progress_base = 20 + int(75 * i / len(subtopic_db_ids))
-            subtopic_progress_end = 20 + int(75 * (i + 1) / len(subtopic_db_ids))
-            subtopic_progress_span = max(1, subtopic_progress_end - subtopic_progress_base)
+        from .processors.content_processor_v8 import PARALLEL_WORKERS
+        num_workers = max(1, min(PARALLEL_WORKERS, len(subtopic_db_ids)))
+        add_log('info', f"Parallel workers: {num_workers} (V8_PARALLEL_WORKERS={PARALLEL_WORKERS})")
 
-            concepts_phase_start = min(
-                subtopic_progress_end,
-                subtopic_progress_base + max(1, int(subtopic_progress_span * 0.15))
-            )
-            concepts_phase_end = min(
-                subtopic_progress_end,
-                max(concepts_phase_start, subtopic_progress_base + max(2, int(subtopic_progress_span * 0.75)))
-            )
-            quiz_phase_progress = min(
-                subtopic_progress_end,
-                max(concepts_phase_end, subtopic_progress_base + max(2, int(subtopic_progress_span * 0.85)))
-            )
-            flashcards_phase_progress = min(
-                subtopic_progress_end,
-                max(quiz_phase_progress, subtopic_progress_base + max(3, int(subtopic_progress_span * 0.92)))
-            )
+        # --- Thread-local V8Processor pool ---
+        _thread_local = threading.local()
 
-            add_log('info', f"[{i+1}/{len(subtopic_db_ids)}] Processing: {st_name}")
-            update_task('running', subtopic_progress_base, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Analyzing...')
-            abort_if_cancelled(subtopic_progress_base, f"{st_name} analysis")
+        def _get_thread_processor():
+            """Get or create a V8Processor for the current thread."""
+            if not hasattr(_thread_local, 'processor'):
+                _thread_local.processor = V8Processor()
+            return _thread_local.processor
 
-            # --- Cache check (skip all API calls if content unchanged) ---
-            st_hash = hashlib.md5(st_content.encode('utf-8', errors='ignore')).hexdigest()
-            if ENABLE_CACHE:
-                cache = SubtopicCache(st_db_id, st_hash)
-                cached = cache.load()
-                if cached:
-                    add_log('info', f"  [CACHE HIT] Skipping API calls for: {st_name}")
-                    processor.db.mark_subtopic_processed(st_db_id)
-                    total_success += 1
-                    update_task('running', subtopic_progress_end, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Done (cached)')
-                    if i < len(subtopic_db_ids) - 1:
-                        time.sleep(3)
-                    continue
-            else:
-                cache = None
+        def _process_single_subtopic(args):
+            """Process a single subtopic — runs in a worker thread."""
+            nonlocal total_success, total_failed, completed_count
+            i, (st_db_id, st_name, st_content) = args
+            n = len(subtopic_db_ids)
 
             try:
-                # Use the content for this subtopic (or full markdown if content is too short)
-                # Use a lower threshold (100 chars) and prefix the subtopic name for context
+                # Check for cancellation at start
+                if _cancel_event.is_set() or is_cancel_requested():
+                    return
+
+                proc = _get_thread_processor()
+                add_log('info', f"[{i+1}/{n}] Processing: {st_name}")
+
+                # --- Progress calculation ---
+                subtopic_progress_base = 20 + int(75 * i / n)
+                subtopic_progress_end = 20 + int(75 * (i + 1) / n)
+                subtopic_progress_span = max(1, subtopic_progress_end - subtopic_progress_base)
+
+                concepts_phase_start = min(
+                    subtopic_progress_end,
+                    subtopic_progress_base + max(1, int(subtopic_progress_span * 0.15))
+                )
+                concepts_phase_end = min(
+                    subtopic_progress_end,
+                    max(concepts_phase_start, subtopic_progress_base + max(2, int(subtopic_progress_span * 0.75)))
+                )
+                quiz_phase_progress = min(
+                    subtopic_progress_end,
+                    max(concepts_phase_end, subtopic_progress_base + max(2, int(subtopic_progress_span * 0.85)))
+                )
+                flashcards_phase_progress = min(
+                    subtopic_progress_end,
+                    max(quiz_phase_progress, subtopic_progress_base + max(3, int(subtopic_progress_span * 0.92)))
+                )
+
+                # --- Cache check ---
+                st_hash = hashlib.md5(st_content.encode('utf-8', errors='ignore')).hexdigest()
+                if ENABLE_CACHE:
+                    cache = SubtopicCache(st_db_id, st_hash)
+                    cached = cache.load()
+                    if cached:
+                        add_log('info', f"  [CACHE HIT] Skipping API calls for: {st_name}")
+                        proc.db.mark_subtopic_processed(st_db_id)
+                        with progress_lock:
+                            total_success += 1
+                            completed_count += 1
+                            done = completed_count
+                        update_task('running', subtopic_progress_end, f'[{done}/{n}] {st_name}: Done (cached)')
+                        return
+                else:
+                    cache = None
+
+                # --- Content for analysis ---
                 if len(st_content) > 100:
                     content_for_analysis = st_content
                 else:
                     content_for_analysis = f"# {st_name}\n\n" + markdown_content[:4000]
                 add_log('info', f"  Content length: {len(content_for_analysis)} chars")
 
-                # Analyze structure
-                abort_if_cancelled(subtopic_progress_base, f"{st_name} analyze_structure")
+                # --- Analyze structure ---
+                if _cancel_event.is_set():
+                    return
                 add_log('info', f"  Calling LLM: analyze_structure...")
-                concepts = processor.gemini.analyze_structure(content_for_analysis)
+                concepts = proc.gemini.analyze_structure(content_for_analysis)
                 if not concepts:
                     add_log('warning', f"  LLM returned no concepts, using fallbacks")
-                    concepts = processor.generator._get_fallback_concepts(st_name)
+                    concepts = proc.generator._get_fallback_concepts(st_name)
                 else:
                     add_log('info', f"  LLM returned {len(concepts)} concepts")
 
@@ -1894,28 +1919,20 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                         icon=concept_data.get('icon', '📚'),
                         order_num=ci
                     )
-                    processor.db.save_concepts(st_db_id, [concept])
+                    proc.db.save_concepts(st_db_id, [concept])
 
                 add_log('info', f"  Saved {len(concepts)} concepts to DB")
-                update_task('running', concepts_phase_start, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating concept visuals...')
 
-                # Generate SVGs and bullets for each concept
-                saved_concepts = processor.db.get_concepts(st_db_id)
+                # --- Generate SVGs and bullets for each concept ---
+                saved_concepts = proc.db.get_concepts(st_db_id)
                 concept_count = max(1, len(saved_concepts))
                 for ci, concept in enumerate(saved_concepts):
-                    concept_progress = concepts_phase_start + int(
-                        (concepts_phase_end - concepts_phase_start) * ((ci + 1) / concept_count)
-                    )
-                    abort_if_cancelled(concept_progress, f"{st_name} concept {ci+1}/{len(saved_concepts)}")
-                    update_task(
-                        'running',
-                        concept_progress,
-                        f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Concept {ci+1}/{len(saved_concepts)}'
-                    )
+                    if _cancel_event.is_set():
+                        return
                     add_log('info', f"  Calling LLM: SVG for '{concept['title']}'...")
-                    svg = processor.gemini.generate_svg(concept['title'], concept['description'])
+                    svg = proc.gemini.generate_svg(concept['title'], concept['description'])
                     if svg:
-                        processor.db.update_generated_content(concept['id'], 'svg', svg)
+                        proc.db.update_generated_content(concept['id'], 'svg', svg)
                         if 'fallback-svg' in svg:
                             add_log('warning', f"    ⚠ SVG fallback used ({len(svg)} chars)")
                         else:
@@ -1924,17 +1941,16 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                         add_log('warning', f"    ✗ SVG generation returned empty")
 
                     add_log('info', f"  Calling LLM: bullets for '{concept['title']}'...")
-                    bullets = processor.gemini.generate_bullets(concept['title'], concept['description'], content_for_analysis)
+                    bullets = proc.gemini.generate_bullets(concept['title'], concept['description'], content_for_analysis)
                     if bullets:
-                        processor.db.update_generated_content(concept['id'], 'bullets', bullets)
+                        proc.db.update_generated_content(concept['id'], 'bullets', bullets)
                         add_log('info', f"    ✓ Bullets generated ({len(bullets)} chars)")
                     else:
                         add_log('warning', f"    ✗ Bullets generation returned empty")
 
-                update_task('running', quiz_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating quiz...')
-                abort_if_cancelled(quiz_phase_progress, f"{st_name} quiz generation")
-
-                # Generate quiz
+                # --- Generate quiz ---
+                if _cancel_event.is_set():
+                    return
                 conn = get_db_connection()
                 try:
                     conn.execute("DELETE FROM v8_quiz_questions WHERE subtopic_id = ?", (st_db_id,))
@@ -1944,18 +1960,17 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 conn.close()
 
                 add_log('info', f"  Calling LLM: quiz generation...")
-                quiz = processor.gemini.generate_quiz(st_name, content_for_analysis, 5)
+                quiz = proc.gemini.generate_quiz(st_name, content_for_analysis, 5)
                 if quiz and quiz.get('questions'):
                     for qi, q in enumerate(quiz['questions'], 1):
-                        processor.db.save_quiz_question(st_db_id, qi, q)
+                        proc.db.save_quiz_question(st_db_id, qi, q)
                     add_log('info', f"  ✓ Quiz: {len(quiz['questions'])} questions")
                 else:
                     add_log('warning', f"  ✗ Quiz generation returned empty")
 
-                update_task('running', flashcards_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating flashcards...')
-                abort_if_cancelled(flashcards_phase_progress, f"{st_name} flashcard generation")
-
-                # Generate flashcards
+                # --- Generate flashcards ---
+                if _cancel_event.is_set():
+                    return
                 conn = get_db_connection()
                 try:
                     conn.execute("DELETE FROM v8_flashcards WHERE subtopic_id = ?", (st_db_id,))
@@ -1965,36 +1980,36 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 conn.close()
 
                 add_log('info', f"  Calling LLM: flashcard generation...")
-                flashcards = processor.gemini.generate_flashcards(st_name, content_for_analysis, 8)
+                flashcards = proc.gemini.generate_flashcards(st_name, content_for_analysis, 8)
                 if flashcards and flashcards.get('cards'):
                     for fi, card in enumerate(flashcards['cards'], 1):
-                        processor.db.save_flashcard(st_db_id, fi, card.get('front', ''), card.get('back', ''))
+                        proc.db.save_flashcard(st_db_id, fi, card.get('front', ''), card.get('back', ''))
                     add_log('info', f"  ✓ Flashcards: {len(flashcards['cards'])} cards")
                 else:
                     add_log('warning', f"  ✗ Flashcard generation returned empty")
 
-                # --- Step 6: Rewrite content (if enabled) ---
+                # --- Rewrite content (if enabled) ---
                 if ENABLE_REWRITE:
-                    update_task('running', flashcards_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Rewriting content...')
-                    abort_if_cancelled(flashcards_phase_progress, f"{st_name} rewrite")
+                    if _cancel_event.is_set():
+                        return
                     add_log('info', f"  Calling LLM: rewrite_content...")
-                    rewritten = processor.gemini.rewrite_content(content_for_analysis)
+                    rewritten = proc.gemini.rewrite_content(content_for_analysis)
                     if rewritten:
-                        processor.db.save_rewritten_content(st_db_id, rewritten)
+                        proc.db.save_rewritten_content(st_db_id, rewritten)
                         add_log('info', f"  ✓ Rewritten content saved ({len(rewritten)} chars)")
                     else:
                         add_log('warning', f"  ✗ Content rewrite returned empty")
 
-                # --- Step 7: Real-life images (if enabled and Grok configured) ---
+                # --- Real-life images (if enabled and Grok configured) ---
                 if ENABLE_IMAGES and grok_client:
-                    update_task('running', flashcards_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating images...')
-                    abort_if_cancelled(flashcards_phase_progress, f"{st_name} image generation")
+                    if _cancel_event.is_set():
+                        return
                     add_log('info', f"  Calling LLM+Grok: generate_reallife_images...")
                     try:
-                        images = processor.gemini.generate_reallife_images(st_name, content_for_analysis[:2000], grok_client)
+                        images = proc.gemini.generate_reallife_images(st_name, content_for_analysis[:2000], grok_client)
                         for img in images:
                             if img.get('url'):
-                                processor.db.save_reallife_image(
+                                proc.db.save_reallife_image(
                                     st_db_id, img['id'], img['url'],
                                     img.get('prompt', ''), img.get('title', ''), img.get('description', '')
                                 )
@@ -2007,10 +2022,13 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                     cache.save({'subtopic_name': st_name, 'completed': True})
 
                 # Mark as processed
-                abort_if_cancelled(subtopic_progress_end, f"{st_name} finalization")
-                processor.db.mark_subtopic_processed(st_db_id)
+                proc.db.mark_subtopic_processed(st_db_id)
                 add_log('info', f"  ✓ Completed: {st_name}")
-                total_success += 1
+                with progress_lock:
+                    total_success += 1
+                    completed_count += 1
+                    done = completed_count
+                update_task('running', subtopic_progress_end, f'[{done}/{n}] {st_name}: Done')
 
             except TaskCancelledError:
                 raise
@@ -2018,15 +2036,39 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 import traceback
                 add_log('error', f"  ✗ Failed: {st_name}: {str(e)}")
                 add_log('error', f"  Traceback: {traceback.format_exc()[-500:]}")
-                total_failed += 1
-                # Continue with next subtopic instead of stopping
-                continue
+                with progress_lock:
+                    total_failed += 1
+                    completed_count += 1
 
-            update_task('running', subtopic_progress_end, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Done')
+        # --- Run subtopics in parallel ---
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            # Brief cooldown between subtopics — use event.wait so cancel wakes us instantly
-            if i < len(subtopic_db_ids) - 1:
-                _cancel_event.wait(timeout=3)
+        indexed_subtopics = list(enumerate(subtopic_db_ids))
+        executor = ThreadPoolExecutor(max_workers=num_workers, thread_name_prefix="v8_worker")
+        try:
+            futures = {executor.submit(_process_single_subtopic, item): item for item in indexed_subtopics}
+            for future in as_completed(futures):
+                # Check cancellation
+                if _cancel_event.is_set() or is_cancel_requested():
+                    add_log('warning', 'Cancellation detected, shutting down workers...')
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    abort_if_cancelled(completed_count * 100 // max(1, len(subtopic_db_ids)), 'parallel generation')
+                    break
+                # Propagate exceptions from workers
+                try:
+                    future.result()
+                except TaskCancelledError:
+                    add_log('warning', 'Worker cancelled, shutting down...')
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    abort_if_cancelled(completed_count * 100 // max(1, len(subtopic_db_ids)), 'parallel generation')
+                    break
+                except Exception:
+                    pass  # Already handled inside _process_single_subtopic
+        finally:
+            executor.shutdown(wait=True)
+            # Close all thread-local processors
+            # (Python threading.local doesn't expose all threads, but the GC will clean up)
+
 
         add_log('info', f"Generation summary: {total_success} succeeded, {total_failed} failed out of {len(subtopic_db_ids)}")
         if total_success == 0 and total_failed > 0:

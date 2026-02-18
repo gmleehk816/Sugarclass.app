@@ -82,6 +82,7 @@ CACHE_DIR = Path(os.getenv("V8_CACHE_DIR", "/tmp/v8_cache"))
 ENABLE_CACHE = os.getenv("V8_ENABLE_CACHE", "true").lower() in ("1", "true", "yes")
 ENABLE_REWRITE = os.getenv("V8_ENABLE_REWRITE", "true").lower() in ("1", "true", "yes")
 ENABLE_IMAGES = os.getenv("V8_ENABLE_IMAGES", "false").lower() in ("1", "true", "yes")  # off by default (needs Grok key)
+PARALLEL_WORKERS = int(os.getenv("V8_PARALLEL_WORKERS", "3"))  # concurrent subtopics during ingestion
 
 # ============================================================================
 # DATA STRUCTURES
