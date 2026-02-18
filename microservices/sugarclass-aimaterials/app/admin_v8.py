@@ -739,10 +739,29 @@ async def cancel_task(task_id: str):
         if current_status in ("completed", "failed", "cancelled"):
             return {"task_id": task_id, "status": current_status, "message": "Task already finished"}
 
+        if current_status == "pending":
+            # Pending tasks can be cancelled immediately; they have not begun work yet.
+            conn.execute("""
+                UPDATE v8_processing_tasks
+                SET cancel_requested = 1,
+                    status = 'cancelled',
+                    message = 'Task cancelled before start',
+                    started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                    cancelled_at = COALESCE(cancelled_at, CURRENT_TIMESTAMP),
+                    completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+                WHERE task_id = ?
+            """, (task_id,))
+            conn.execute("""
+                INSERT INTO v8_task_logs (task_id, log_level, message)
+                VALUES (?, 'warning', ?)
+            """, (task_id, "Task cancelled before start"))
+            conn.commit()
+            return {"task_id": task_id, "status": "cancelled", "message": "Task cancelled before start"}
+
         conn.execute("""
             UPDATE v8_processing_tasks
             SET cancel_requested = 1,
-                status = CASE WHEN status IN ('pending', 'running') THEN 'cancelling' ELSE status END,
+                status = CASE WHEN status IN ('running', 'pending') THEN 'cancelling' ELSE status END,
                 message = 'Cancellation requested by user'
             WHERE task_id = ?
         """, (task_id,))
@@ -1090,6 +1109,7 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
         # Import here to avoid circular imports
         from .processors.content_processor_v8 import V8Processor, GeminiClient
 
+        abort_if_cancelled(0, 'startup')
         add_log('info', f"Starting V8 generation for subtopic {subtopic_id}")
         update_task('running', 10, 'Initializing...')
         abort_if_cancelled(10, 'initialization')
@@ -1553,6 +1573,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
     try:
         from .processors.content_processor_v8 import ContentSplitter, V8Processor, GeminiClient, ConceptData
 
+        abort_if_cancelled(0, 'startup')
         add_log('info', f"Starting V8 full ingestion for: {subject_name}")
         update_task('running', 5, 'Reading markdown file...')
         abort_if_cancelled(5, 'startup')

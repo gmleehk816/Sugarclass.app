@@ -1599,7 +1599,7 @@ const AIMaterialsAdmin = () => {
                 } else if (taskStatus === 'running') {
                     setStatusMessage(`⚙️ V8 Processing: ${taskProgress}% — ${taskMessage}`.trim());
                 } else if (taskStatus === 'cancelling') {
-                    setStatusMessage('🛑 Cancellation requested. Waiting for current step to stop...');
+                    setStatusMessage('🛑 Cancellation requested. Waiting for current AI call to finish (can take 1-6 minutes).');
                 } else if (taskStatus === 'completed') {
                     setStatusMessage(`✅ V8 ingestion complete! ${taskMessage}`.trim());
                     setTimeout(() => setActiveTab('v8'), 1000);
@@ -1779,12 +1779,19 @@ const AIMaterialsAdmin = () => {
 
         setCancelRequestInFlight(true);
         try {
-            await serviceFetch('aimaterials', `/api/admin/v8/tasks/${currentV8TaskId}/cancel`, {
+            const cancelRes = await serviceFetch('aimaterials', `/api/admin/v8/tasks/${currentV8TaskId}/cancel`, {
                 method: 'POST'
             });
-            setV8TaskStatus('cancelling');
-            setV8TaskMessage('Cancellation requested by user');
-            setStatusMessage('🛑 Cancellation requested. Waiting for current step to stop...');
+            const nextStatus = normalizeV8TaskStatus(cancelRes?.status);
+            if (nextStatus === 'cancelled') {
+                setV8TaskStatus('cancelled');
+                setV8TaskMessage(cancelRes?.message || 'Task cancelled before start');
+                setStatusMessage('🛑 V8 ingestion cancelled.');
+            } else {
+                setV8TaskStatus('cancelling');
+                setV8TaskMessage(cancelRes?.message || 'Cancellation requested by user');
+                setStatusMessage('🛑 Cancellation requested. Waiting for current AI call to finish (can take 1-6 minutes).');
+            }
         } catch (err: any) {
             console.error('Error cancelling V8 ingestion task', err);
             setStatusMessage(`❌ Failed to cancel ingestion: ${err.message || 'Unknown error'}`);

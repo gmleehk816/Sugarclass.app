@@ -252,6 +252,51 @@ The main dashboard uses a **1:1:1 Balanced Grid**. Every column weight should be
   - Python compile check passed for modified backend files.
   - Frontend build could not be fully executed in this environment because `vite` is not installed locally.
 
+### Latest Session Handoff (2026-02-18, Continuation)
+
+**AI Materials ingestion binding + subtopic visibility fixes**:
+- Files:
+  - `frontend/src/app/admin/aimaterials/page.tsx`
+  - `microservices/sugarclass-aimaterials/app/admin_v8.py`
+  - `microservices/sugarclass-aimaterials/app/main.py`
+  - `microservices/sugarclass-aimaterials/app/frontend/src/App.jsx`
+  - `microservices/sugarclass-aimaterials/app/frontend/src/components/ChapterSidebar.orchestrator.jsx`
+- Key changes:
+  - V8 ingestion now prioritizes admin tree/manual selection for syllabus/subject path and passes `target_subject_id` to backend.
+  - Backend V8 ingestion uses `target_subject_id` so ingested content binds to selected folder/subject path.
+  - Added subject-wide subtopic API and frontend mapping so all subject subtopics appear (not only one chapter slice).
+
+**Persistent ingestion monitor + cancellation control (admin UI + backend)**:
+- Files:
+  - `frontend/src/app/admin/aimaterials/page.tsx`
+  - `microservices/sugarclass-aimaterials/app/admin_v8.py`
+  - `microservices/sugarclass-aimaterials/app/schema_v8.sql`
+  - `microservices/sugarclass-aimaterials/app/init_v8_db.py`
+- Key changes:
+  - Live ingestion progress/logs panel moved to global admin scope (visible across tabs, survives navigation within admin page).
+  - Added active-task recovery via `localStorage` and backend lookup (`/api/admin/v8/tasks?only_active=true...`).
+  - Added admin cancel button calling `POST /api/admin/v8/tasks/{task_id}/cancel`.
+  - Implemented cooperative cancellation checkpoints in both generation workers (`run_v8_generation_task`, `run_v8_full_ingestion`), with terminal `cancelled` status and timestamps.
+  - Added/ensured task table columns: `cancel_requested`, `cancelled_at`.
+
+**SVG fallback/latency diagnosis (no structural rewrite yet)**:
+- File:
+  - `microservices/sugarclass-aimaterials/app/processors/content_processor_v8.py`
+- Findings:
+  - SVG path can be slow due to `SVG_REQUEST_TIMEOUT`, retries, request interval/rate limiting, and sequential per-concept calls.
+  - Fallback appears when model response does not contain valid `<svg>...</svg>` extracted by `_extract_svg`.
+
+**Production deploy script fix for stale AI Materials frontend**:
+- File:
+  - `update-vps-remote.sh`
+- Key change:
+  - Frontend change detection now includes `microservices/sugarclass-*/app/frontend/` (AI Materials layout), preventing false backend-only rebuilds when UI files change.
+  - Backend change detection excludes frontend paths so `aimaterials-frontend` rebuild is correctly triggered.
+
+**Validation performed**:
+- `python -m py_compile microservices/sugarclass-aimaterials/app/admin_v8.py microservices/sugarclass-aimaterials/app/init_v8_db.py` passed.
+- TypeScript/lint validation could not run in this environment due to missing local `typescript`/`eslint` packages in `frontend`.
+
 ---
 
 ## 8. Integration Protocol

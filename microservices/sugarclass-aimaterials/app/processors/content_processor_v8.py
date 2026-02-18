@@ -71,6 +71,7 @@ REQUEST_TIMEOUT = int(os.getenv("V8_REQUEST_TIMEOUT", "120"))
 SVG_REQUEST_TIMEOUT = int(os.getenv("V8_SVG_REQUEST_TIMEOUT", "45"))
 SVG_MAX_RETRIES = int(os.getenv("V8_SVG_MAX_RETRIES", "2"))
 RETRY_DELAY = float(os.getenv("V8_RETRY_DELAY", "5.0"))
+ALLOW_SVG_FALLBACK = os.getenv("V8_ALLOW_SVG_FALLBACK", "false").lower() in ("1", "true", "yes")
 
 # ============================================================================
 # DATA STRUCTURES
@@ -694,13 +695,36 @@ Requirements:
 3. Keep it clear and readable for students.
 4. Include labels and at least 2 meaningful visual elements.
 5. Optional animation is allowed but not required.
+6. Include xmlns="http://www.w3.org/2000/svg" on the <svg> root.
 """
         raw = self.generate(prompt, timeout=SVG_REQUEST_TIMEOUT, max_retries=SVG_MAX_RETRIES)
         svg = self._extract_svg(raw)
         if svg:
             return svg
-        print("    [WARN] SVG generation failed or returned invalid SVG, using fallback diagram.")
-        return self._build_fallback_svg(title, description_text)
+
+        # One strict retry focused only on XML-correct SVG output.
+        strict_prompt = f"""Return ONLY valid raw SVG markup.
+
+Topic: {title}
+Description: {description_text}
+
+STRICT REQUIREMENTS:
+- Output must start with <svg and end with </svg>.
+- Do not output markdown fences, JSON, prose, or explanations.
+- Include xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 500 320".
+- Keep labels readable and educational.
+"""
+        strict_raw = self.generate(strict_prompt, timeout=SVG_REQUEST_TIMEOUT, max_retries=1)
+        strict_svg = self._extract_svg(strict_raw)
+        if strict_svg:
+            return strict_svg
+
+        if ALLOW_SVG_FALLBACK:
+            print("    [WARN] SVG generation failed or returned invalid SVG, using fallback diagram.")
+            return self._build_fallback_svg(title, description_text)
+
+        print("    [WARN] SVG generation failed or returned invalid SVG; fallback disabled.")
+        return None
 
     def generate_bullets(self, title: str, description: str, full_content: str) -> Optional[str]:
         """Generate PowerPoint-style bullets"""
