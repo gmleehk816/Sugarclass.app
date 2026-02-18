@@ -11,7 +11,9 @@ import V8ContentViewer from './V8ContentViewer';
 function MiddleArea({
   selectedTopic,
   selectedSubtopicId,
-  subjectId
+  subjectId,
+  isParentSidebarVisible,
+  onToggleParentSidebar
 }) {
   const [loading, setLoading] = useState(false);
   const [v8Status, setV8Status] = useState(null);
@@ -45,7 +47,11 @@ function MiddleArea({
           <div className="loading-text">Loading V8 Content...</div>
         </div>
       ) : selectedSubtopicId ? (
-        <V8ContentViewer subtopicId={selectedSubtopicId} />
+        <V8ContentViewer
+          subtopicId={selectedSubtopicId}
+          isParentSidebarVisible={isParentSidebarVisible}
+          onToggleParentSidebar={onToggleParentSidebar}
+        />
       ) : (
         <div className="v8-empty">
           <div className="empty-icon">📚</div>

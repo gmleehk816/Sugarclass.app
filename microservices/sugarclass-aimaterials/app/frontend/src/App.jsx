@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Menu, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from './api';
 
 // V8 Components
@@ -32,6 +33,7 @@ function App() {
   const [viewMode, setViewMode] = useState('content');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   // Default to chapter navigation
   const useChapterNavigation = true;
@@ -197,8 +199,18 @@ function App() {
         />
       )}
 
-      {/* LEFT SIDEBAR */}
-      <div className={`materials-sidebar materials-sidebar-left ${mobileSidebarOpen ? 'mobile-open' : ''}`}>
+      {/* LEFT SIDEBAR (Collapsible) */}
+      <div
+        className={`materials-sidebar materials-sidebar-left ${mobileSidebarOpen ? 'mobile-open' : ''}`}
+        style={{
+          width: isSidebarVisible ? '280px' : '0',
+          minWidth: isSidebarVisible ? '220px' : '0',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          opacity: isSidebarVisible ? 1 : 0,
+          pointerEvents: isSidebarVisible ? 'auto' : 'none',
+          position: 'relative'
+        }}
+      >
         <ChapterSidebar
           selectedChapter={selectedChapter}
           onSelectChapter={(chapter) => {
@@ -214,12 +226,44 @@ function App() {
         />
       </div>
 
+      {/* SIDEBAR TOGGLE BUTTON (Floating) */}
+      <button
+        onClick={() => setIsSidebarVisible(!isSidebarVisible)}
+        className="sidebar-toggle-btn"
+        style={{
+          position: 'absolute',
+          left: isSidebarVisible ? '265px' : '15px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 100,
+          width: '32px',
+          height: '32px',
+          borderRadius: '50%',
+          background: 'white',
+          border: '1px solid #e2e8f0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          color: '#64748b'
+        }}
+        title={isSidebarVisible ? "Hide Sidebar" : "Show Sidebar"}
+      >
+        {isSidebarVisible ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+      </button>
+
       {/* MAIN CONTENT */}
-      <MiddleArea
-        selectedTopic={selectedTopic}
-        selectedSubtopicId={selectedSubtopicId}
-        subjectId={selectedSubject}
-      />
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <MiddleArea
+          selectedTopic={selectedTopic}
+          selectedSubtopicId={selectedSubtopicId}
+          subjectId={selectedSubject}
+          isParentSidebarVisible={isSidebarVisible}
+          onToggleParentSidebar={() => setIsSidebarVisible(!isSidebarVisible)}
+        />
+      </div>
     </div>
   );
 }

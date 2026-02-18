@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Menu, ListOrdered } from 'lucide-react';
 import { api } from '../api';
 
 // ============================================================================
 // V8 CONTENT VIEWER - Matches V8 Generator HTML Layout
 // ============================================================================
 
-const V8ContentViewer = ({ subtopicId }) => {
+const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSidebar }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [v8Data, setV8Data] = useState(null);
@@ -13,6 +14,7 @@ const V8ContentViewer = ({ subtopicId }) => {
   const [activeSection, setActiveSection] = useState(null);
   const [flippedCards, setFlippedCards] = useState({});
   const [quizAnswers, setQuizAnswers] = useState({});
+  const [isTocVisible, setIsTocVisible] = useState(true);
 
   useEffect(() => {
     if (!subtopicId) return;
@@ -85,7 +87,13 @@ const V8ContentViewer = ({ subtopicId }) => {
       {/* Top Header */}
       <header style={styles.topHeader}>
         <div style={styles.headerBrand}>
-          <div style={styles.logoIcon}>V8</div>
+          <div
+            style={styles.logoIcon}
+            onClick={onToggleParentSidebar}
+            title={isParentSidebarVisible ? "Hide Navigation" : "Show Navigation"}
+          >
+            {isParentSidebarVisible ? "V8" : <Menu size={20} />}
+          </div>
           <div style={styles.headerTitle}>
             <span>{v8Data.name || 'V8 Content'}</span>
             <span style={styles.headerSubtitle}>Interactive Learning</span>
@@ -116,12 +124,35 @@ const V8ContentViewer = ({ subtopicId }) => {
           >
             Real Life
           </button>
+
+          {activeView === 'content' && (
+            <button
+              onClick={() => setIsTocVisible(!isTocVisible)}
+              style={{
+                ...styles.navBtn,
+                background: isTocVisible ? 'rgba(146, 117, 89, 0.1)' : 'transparent',
+                color: isTocVisible ? '#927559' : '#64748b',
+                marginLeft: '12px'
+              }}
+              title={isTocVisible ? "Hide Index" : "Show Index"}
+            >
+              <ListOrdered size={18} />
+            </button>
+          )}
         </nav>
       </header>
 
       <div style={styles.layoutContainer}>
-        {/* Sidebar */}
-        <aside style={styles.sidebar}>
+        {/* Sidebar (TOC) */}
+        <aside style={{
+          ...styles.sidebar,
+          width: isTocVisible ? '300px' : '0',
+          minWidth: isTocVisible ? '220px' : '0',
+          opacity: isTocVisible ? 1 : 0,
+          pointerEvents: isTocVisible ? 'auto' : 'none',
+          padding: isTocVisible ? '2rem 1.5rem' : '0',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}>
           <div style={styles.sidebarSectionTitle}>Table of Contents</div>
           <ul style={styles.tocList}>
             {v8Data.concepts.map((concept) => (
@@ -373,9 +404,13 @@ const styles = {
   container: {
     fontFamily: "'Outfit', sans-serif",
     background: '#fcfaf7',
-    minHeight: '100vh',
+    height: '100%',
+    width: '100%',
     color: '#1a1a1b',
     lineHeight: 1.6,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   },
 
   loading: {
@@ -504,12 +539,13 @@ const styles = {
 
   // Layout
   layoutContainer: {
-    display: 'grid',
-    gridTemplateColumns: '300px 1fr',
-    minHeight: 'calc(100vh - 72px)',
-    maxWidth: '1800px',
-    margin: '0 auto',
+    display: 'flex',
+    flex: 1,
+    height: 'calc(100vh - 72px)',
+    maxWidth: '100%',
+    margin: '0',
     gap: '0',
+    overflow: 'hidden',
   },
 
   // Bullet content styling
@@ -520,14 +556,10 @@ const styles = {
   },
 
   sidebar: {
-    width: '300px',
     background: 'rgba(255, 255, 255, 0.5)',
     borderRight: '1px solid rgba(0, 0, 0, 0.04)',
-    padding: '2rem 1.5rem',
     overflowY: 'auto',
-    height: 'calc(100vh - 72px)',
-    position: 'sticky',
-    top: '72px',
+    height: '100%',
   },
 
   sidebarSectionTitle: {
@@ -578,6 +610,7 @@ const styles = {
     flex: 1,
     padding: '3rem 4rem',
     overflowY: 'auto',
+    height: '100%',
   },
 
   // Section

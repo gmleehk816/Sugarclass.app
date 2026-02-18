@@ -44,6 +44,13 @@
     margin: 0 auto;
 }
 
+.contentFull {
+    padding: 16px;
+    max-width: none;
+    width: 100%;
+    margin: 0;
+}
+
 @media (max-width: 1024px) {
     .adminLayout {
         padding-left: 0;

@@ -8,6 +8,7 @@ import {
     CheckCircle2,
     XCircle,
     Clock,
+    ChevronLeft,
     ChevronRight,
     ChevronDown,
     Folder,
@@ -30,7 +31,10 @@ import {
     Search,
     Edit2,
     Trash2,
-    AlertTriangle
+    AlertTriangle,
+    XIcon,
+    Menu,
+    ListOrdered
 } from "lucide-react";
 import { DATATREE, matchSubjectsToTree, DbSubject, sanitizeId } from '../lib/treeUtils';
 import ChunkEditor from './ChunkEditor';
@@ -109,50 +113,65 @@ interface V8Task {
 // STYLES
 // ===========================================================================
 
+const premiumColors = {
+    primary: '#1e293b',
+    accent: '#7c3aed',
+    accentSoft: 'rgba(124, 58, 237, 0.08)',
+    text: '#1e293b',
+    textSoft: '#64748b',
+    border: 'rgba(0,0,0,0.06)',
+    bg: '#fcfaf7',
+    sidebarBg: '#ffffff'
+};
+
 const inputStyle = {
     width: '100%',
-    padding: '10px 14px',
-    border: '1px solid #e2e8f0',
-    borderRadius: '8px',
-    fontSize: '0.95rem',
-    fontFamily: 'inherit' as const,
-    background: 'white',
+    padding: '12px 16px',
+    border: `1.5px solid ${premiumColors.border}`,
+    borderRadius: '14px',
+    fontSize: '0.9rem',
+    fontFamily: "'Outfit', sans-serif",
+    background: '#f8fafc',
+    transition: 'all 0.2s ease',
 };
 
 const cardStyle = (isMobile?: boolean) => ({
     background: 'white',
-    padding: isMobile ? '16px' : '24px',
-    borderRadius: '16px',
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    padding: isMobile ? '20px' : '32px',
+    borderRadius: '24px',
+    border: `1px solid ${premiumColors.border}`,
+    boxShadow: '0 10px 30px -5px rgba(0,0,0,0.04)',
 });
 
 const buttonPrimary = {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    borderRadius: '10px',
-    background: '#be123c',
+    gap: '10px',
+    padding: '12px 24px',
+    borderRadius: '14px',
+    background: premiumColors.primary,
     color: 'white',
     border: 'none',
-    fontWeight: 600,
+    fontWeight: 700,
     fontSize: '0.9rem',
     cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 8px 16px -4px rgba(30, 41, 59, 0.25)',
 };
 
 const buttonSecondary = {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    borderRadius: '10px',
+    gap: '10px',
+    padding: '12px 24px',
+    borderRadius: '14px',
     background: 'white',
-    color: '#374151',
-    border: '1px solid #e2e8f0',
-    fontWeight: 600,
+    color: premiumColors.primary,
+    border: `1.5px solid ${premiumColors.border}`,
+    fontWeight: 700,
     fontSize: '0.9rem',
     cursor: 'pointer',
+    transition: 'all 0.2s ease',
 };
 
 // ===========================================================================
@@ -207,8 +226,8 @@ const V8GenerateModal = ({
         }}>
             <div style={{
                 background: 'white',
-                borderRadius: '24px',
-                padding: isMobile ? '16px' : '32px',
+                borderRadius: '32px', // Match main viewer
+                padding: isMobile ? '24px' : '48px',
                 width: '100%',
                 margin: '0 auto',
                 maxHeight: '90vh',
@@ -368,9 +387,9 @@ const V8GenerateModal = ({
                             disabled={generating}
                             style={{
                                 padding: '12px 32px',
-                                borderRadius: '12px',
+                                borderRadius: '16px',
                                 border: 'none',
-                                background: generating ? '#94a3b8' : 'linear-gradient(135deg, #be123c 0%, #9f1239 100%)',
+                                background: generating ? '#94a3b8' : '#1e293b',
                                 color: 'white',
                                 cursor: generating ? 'not-allowed' : 'pointer',
                                 fontWeight: 700,
@@ -430,6 +449,7 @@ const V8ContentBrowser = ({
     const [selectedSubtopicId, setSelectedSubtopicId] = useState<string | null>(null);
     const [subtopicStatus, setSubtopicStatus] = useState<V8SubtopicStatus | null>(null);
     const [fullSubtopic, setFullSubtopic] = useState<V8FullSubtopic | null>(null);
+    const [isSidebarVisible, setIsSidebarVisible] = useState(true); // New state
     const [loadingContent, setLoadingContent] = useState(false);
 
     // Editing state for Quiz, Flashcards, Real Life
@@ -885,414 +905,465 @@ const V8ContentBrowser = ({
 
     return (
         <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : (isTablet ? '280px 1fr' : '320px 280px 1fr'),
-            gap: '24px',
-            alignItems: 'start',
-            height: isMobile ? 'auto' : 'calc(100vh - 200px)',
-            minHeight: '600px',
+            display: 'flex',
+            height: 'calc(100vh - 120px)', // Adjusted for header+padding
+            background: premiumColors.sidebarBg,
+            borderRadius: '16px', // Reduced for more space
+            overflow: 'hidden',
+            border: `1px solid ${premiumColors.border}`,
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)',
+            fontFamily: "'Outfit', sans-serif",
         }}>
-            {/* Left Sidebar: Hierarchical Subjects Tree */}
+            {/* Sidebar Pane: Subjects & Topics */}
             <div style={{
-                ...cardStyle(isMobile),
-                display: 'flex',
+                width: isMobile ? '100%' : (isSidebarVisible ? '300px' : '0'), // Collapsible
+                borderRight: isSidebarVisible ? `1px solid ${premiumColors.border}` : 'none',
+                display: isMobile && !isSidebarVisible ? 'none' : 'flex',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 flexDirection: 'column',
-                gap: '16px',
-                height: isMobile ? 'auto' : '100%',
-                overflowY: 'auto'
+                overflow: 'hidden',
+                background: 'white',
+                position: 'relative',
+                zIndex: 20
             }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Sparkles size={18} color="#be123c" /> Subjects
-                    </h3>
-                    <button
-                        onClick={loadSubjects}
-                        disabled={loadingSubjects}
-                        style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: '#64748b',
-                            display: 'flex',
-                            alignItems: 'center',
-                            transition: 'transform 0.2s',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.transform = 'rotate(180deg)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.transform = 'rotate(0deg)')}
-                    >
-                        <RefreshCw size={16} className={loadingSubjects ? 'animate-spin' : ''} />
-                    </button>
-                </div>
-
-                {/* Search */}
-                <div style={{ position: 'relative' }}>
-                    <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input
-                        type="text"
-                        placeholder="Search subjects..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        style={{
-                            ...inputStyle,
-                            paddingLeft: '34px',
-                            fontSize: '0.85rem'
-                        }}
-                    />
-                </div>
-
-                {loadingSubjects ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: '12px', color: '#94a3b8' }}>
-                        <Loader2 className="animate-spin" size={24} />
-                        <span style={{ fontSize: '0.85rem' }}>Loading hierarchy...</span>
+                {/* Subject Selector Header */}
+                <div style={{
+                    padding: '32px 24px 20px',
+                    borderBottom: `1px solid ${premiumColors.border}`,
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Sparkles size={18} color="#be123c" /> Subjects
+                        </h3>
+                        <button
+                            onClick={loadSubjects}
+                            disabled={loadingSubjects}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: '#64748b',
+                                display: 'flex',
+                                alignItems: 'center',
+                                transition: 'transform 0.2s',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.transform = 'rotate(180deg)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.transform = 'rotate(0deg)')}
+                        >
+                            <RefreshCw size={16} className={loadingSubjects ? 'animate-spin' : ''} />
+                        </button>
                     </div>
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {Object.entries(treeWithData).map(([level, subjectsMap]) => {
-                            const stats = levelStats(level);
-                            const isExpanded = expandedLevels.has(level);
 
-                            const visibleSubjects = Object.entries(subjectsMap).filter(([name, data]) => {
-                                if (searchQuery) return filterMatches(name) || data.boards.some(b => filterMatches(b.name));
-                                return data.dbSubject || data.boards.some(b => b.dbSubject);
-                            });
+                    {/* Search */}
+                    <div style={{ position: 'relative' }}>
+                        <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                        <input
+                            type="text"
+                            placeholder="Search subjects..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={{
+                                ...inputStyle,
+                                paddingLeft: '34px',
+                                fontSize: '0.85rem'
+                            }}
+                        />
+                    </div>
 
-                            if (visibleSubjects.length === 0) return null;
+                    {loadingSubjects ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: '12px', color: '#94a3b8' }}>
+                            <Loader2 className="animate-spin" size={24} />
+                            <span style={{ fontSize: '0.85rem' }}>Loading hierarchy...</span>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {Object.entries(treeWithData).map(([level, subjectsMap]) => {
+                                const stats = levelStats(level);
+                                const isExpanded = expandedLevels.has(level);
 
-                            return (
-                                <div key={level} style={{ marginBottom: '2px' }}>
-                                    <button
-                                        onClick={() => toggleLevel(level)}
-                                        style={{
-                                            width: '100%', padding: '10px', border: 'none',
-                                            background: isExpanded ? '#fff1f2' : 'transparent',
-                                            cursor: 'pointer', textAlign: 'left',
-                                            display: 'flex', alignItems: 'center', gap: '8px',
-                                            borderRadius: '10px', transition: 'all 0.2s',
-                                        }}
-                                    >
-                                        {isExpanded ? <ChevronDown size={14} color="#be123c" /> : <ChevronRight size={14} color="#64748b" />}
-                                        <Folder size={16} color={isExpanded ? "#be123c" : "#64748b"} />
-                                        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: isExpanded ? '#9f1239' : '#1e293b' }}>{level}</span>
-                                        <span style={{
-                                            marginLeft: 'auto', fontSize: '0.65rem', padding: '2px 6px',
-                                            borderRadius: '8px', background: stats.withContent > 0 ? '#fee2e2' : '#f1f5f9',
-                                            color: stats.withContent > 0 ? '#be123c' : '#94a3b8', fontWeight: 600,
-                                        }}>
-                                            {stats.withContent}/{stats.total}
-                                        </span>
-                                    </button>
+                                const visibleSubjects = Object.entries(subjectsMap).filter(([name, data]) => {
+                                    if (searchQuery) return filterMatches(name) || data.boards.some(b => filterMatches(b.name));
+                                    return data.dbSubject || data.boards.some(b => b.dbSubject);
+                                });
 
-                                    {isExpanded && (
-                                        <div style={{ paddingLeft: '20px', marginLeft: '12px', borderLeft: '1px solid #fecaca', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                            {visibleSubjects.map(([sName, sData]) => {
-                                                const hasBoards = sData.boards.length > 0;
-                                                const sKey = `${level}/${sName}`;
-                                                const isEx = expandedSubjects.has(sKey);
+                                if (visibleSubjects.length === 0) return null;
 
-                                                if (!hasBoards) {
-                                                    const db = sData.dbSubject;
+                                return (
+                                    <div key={level} style={{ marginBottom: '2px' }}>
+                                        <button
+                                            onClick={() => toggleLevel(level)}
+                                            style={{
+                                                width: '100%', padding: '10px', border: 'none',
+                                                background: isExpanded ? '#fff1f2' : 'transparent',
+                                                cursor: 'pointer', textAlign: 'left',
+                                                display: 'flex', alignItems: 'center', gap: '8px',
+                                                borderRadius: '10px', transition: 'all 0.2s',
+                                            }}
+                                        >
+                                            {isExpanded ? <ChevronDown size={14} color="#be123c" /> : <ChevronRight size={14} color="#64748b" />}
+                                            <Folder size={16} color={isExpanded ? "#be123c" : "#64748b"} />
+                                            <span style={{ fontWeight: 700, fontSize: '0.85rem', color: isExpanded ? '#9f1239' : '#1e293b' }}>{level}</span>
+                                            <span style={{
+                                                marginLeft: 'auto', fontSize: '0.65rem', padding: '2px 6px',
+                                                borderRadius: '8px', background: stats.withContent > 0 ? '#fee2e2' : '#f1f5f9',
+                                                color: stats.withContent > 0 ? '#be123c' : '#94a3b8', fontWeight: 600,
+                                            }}>
+                                                {stats.withContent}/{stats.total}
+                                            </span>
+                                        </button>
+
+                                        {isExpanded && (
+                                            <div style={{ paddingLeft: '20px', marginLeft: '12px', borderLeft: '1px solid #fecaca', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                {visibleSubjects.map(([sName, sData]) => {
+                                                    const hasBoards = sData.boards.length > 0;
+                                                    const sKey = `${level}/${sName}`;
+                                                    const isEx = expandedSubjects.has(sKey);
+
+                                                    if (!hasBoards) {
+                                                        const db = sData.dbSubject;
+                                                        return (
+                                                            <div
+                                                                key={sKey}
+                                                                onClick={() => db && setSelectedSubjectId(db.id)}
+                                                                style={{
+                                                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                                                    padding: '6px 10px', borderRadius: '8px',
+                                                                    cursor: db ? 'pointer' : 'default',
+                                                                    background: selectedSubjectId === db?.id ? '#fef2f2' : 'transparent',
+                                                                    opacity: db ? 1 : 0.4,
+                                                                    position: 'relative'
+                                                                }}
+                                                            >
+                                                                <FileText size={14} color={selectedSubjectId === db?.id ? '#be123c' : '#94a3b8'} />
+                                                                <span style={{ fontSize: '0.8rem', fontWeight: selectedSubjectId === db?.id ? 700 : 500, color: selectedSubjectId === db?.id ? '#9f1239' : '#475569' }}>
+                                                                    {db?.name || sName}
+                                                                </span>
+                                                                {db && selectedSubjectId === db.id && (
+                                                                    <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
+                                                                        <button onClick={(e) => { e.stopPropagation(); setItemToRename({ id: db.id, type: 'subject', name: db.name }); setNewName(db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><Edit2 size={12} /></button>
+                                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteSubject(db.id, db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#f87171' }}><Trash2 size={12} /></button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    const boardsWithC = sData.boards.filter(b => b.dbSubject).length;
                                                     return (
-                                                        <div
-                                                            key={sKey}
-                                                            onClick={() => db && setSelectedSubjectId(db.id)}
-                                                            style={{
-                                                                display: 'flex', alignItems: 'center', gap: '8px',
-                                                                padding: '6px 10px', borderRadius: '8px',
-                                                                cursor: db ? 'pointer' : 'default',
-                                                                background: selectedSubjectId === db?.id ? '#fef2f2' : 'transparent',
-                                                                opacity: db ? 1 : 0.4,
-                                                                position: 'relative'
-                                                            }}
-                                                        >
-                                                            <FileText size={14} color={selectedSubjectId === db?.id ? '#be123c' : '#94a3b8'} />
-                                                            <span style={{ fontSize: '0.8rem', fontWeight: selectedSubjectId === db?.id ? 700 : 500, color: selectedSubjectId === db?.id ? '#9f1239' : '#475569' }}>
-                                                                {db?.name || sName}
-                                                            </span>
-                                                            {db && selectedSubjectId === db.id && (
-                                                                <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
-                                                                    <button onClick={(e) => { e.stopPropagation(); setItemToRename({ id: db.id, type: 'subject', name: db.name }); setNewName(db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><Edit2 size={12} /></button>
-                                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteSubject(db.id, db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#f87171' }}><Trash2 size={12} /></button>
+                                                        <div key={sKey}>
+                                                            <button
+                                                                onClick={() => toggleSubject(sKey)}
+                                                                style={{
+                                                                    width: '100%', padding: '6px 10px', border: 'none',
+                                                                    background: isEx ? '#fff5f5' : 'transparent',
+                                                                    cursor: 'pointer', textAlign: 'left',
+                                                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                                                    borderRadius: '8px',
+                                                                }}
+                                                            >
+                                                                {isEx ? <ChevronDown size={12} color="#be123c" /> : <ChevronRight size={12} color="#94a3b8" />}
+                                                                <Folder size={14} color={boardsWithC > 0 ? "#be123c" : "#cbd5e1"} />
+                                                                <span style={{ fontSize: '0.8rem', color: boardsWithC > 0 ? '#1e293b' : '#94a3b8', fontWeight: 600 }}>{sName}</span>
+                                                            </button>
+                                                            {isEx && (
+                                                                <div style={{ paddingLeft: '16px', marginLeft: '10px', borderLeft: '1px solid #fee2e2', marginTop: '2px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                    {sData.boards.map(board => {
+                                                                        const db = board.dbSubject;
+                                                                        return (
+                                                                            <div
+                                                                                key={board.name}
+                                                                                onClick={() => db && setSelectedSubjectId(db.id)}
+                                                                                style={{
+                                                                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                                                                    padding: '4px 8px', borderRadius: '6px',
+                                                                                    cursor: db ? 'pointer' : 'default',
+                                                                                    background: selectedSubjectId === db?.id ? '#fef2f2' : 'transparent',
+                                                                                    opacity: db ? 1 : 0.4
+                                                                                }}
+                                                                            >
+                                                                                <FileText size={12} color={selectedSubjectId === db?.id ? '#be123c' : '#cbd5e1'} />
+                                                                                <span style={{ fontSize: '0.75rem', fontWeight: selectedSubjectId === db?.id ? 700 : 500, color: selectedSubjectId === db?.id ? '#9f1239' : '#64748b' }}>
+                                                                                    {db?.name || board.name}
+                                                                                </span>
+                                                                                {db && selectedSubjectId === db.id && (
+                                                                                    <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
+                                                                                        <button onClick={(e) => { e.stopPropagation(); setItemToRename({ id: db.id, type: 'subject', name: db.name }); setNewName(db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><Edit2 size={10} /></button>
+                                                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteSubject(db.id, db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#f87171' }}><Trash2 size={10} /></button>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
                                                                 </div>
                                                             )}
                                                         </div>
                                                     );
-                                                }
-
-                                                const boardsWithC = sData.boards.filter(b => b.dbSubject).length;
-                                                return (
-                                                    <div key={sKey}>
-                                                        <button
-                                                            onClick={() => toggleSubject(sKey)}
-                                                            style={{
-                                                                width: '100%', padding: '6px 10px', border: 'none',
-                                                                background: isEx ? '#fff5f5' : 'transparent',
-                                                                cursor: 'pointer', textAlign: 'left',
-                                                                display: 'flex', alignItems: 'center', gap: '6px',
-                                                                borderRadius: '8px',
-                                                            }}
-                                                        >
-                                                            {isEx ? <ChevronDown size={12} color="#be123c" /> : <ChevronRight size={12} color="#94a3b8" />}
-                                                            <Folder size={14} color={boardsWithC > 0 ? "#be123c" : "#cbd5e1"} />
-                                                            <span style={{ fontSize: '0.8rem', color: boardsWithC > 0 ? '#1e293b' : '#94a3b8', fontWeight: 600 }}>{sName}</span>
-                                                        </button>
-                                                        {isEx && (
-                                                            <div style={{ paddingLeft: '16px', marginLeft: '10px', borderLeft: '1px solid #fee2e2', marginTop: '2px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                                {sData.boards.map(board => {
-                                                                    const db = board.dbSubject;
-                                                                    return (
-                                                                        <div
-                                                                            key={board.name}
-                                                                            onClick={() => db && setSelectedSubjectId(db.id)}
-                                                                            style={{
-                                                                                display: 'flex', alignItems: 'center', gap: '6px',
-                                                                                padding: '4px 8px', borderRadius: '6px',
-                                                                                cursor: db ? 'pointer' : 'default',
-                                                                                background: selectedSubjectId === db?.id ? '#fef2f2' : 'transparent',
-                                                                                opacity: db ? 1 : 0.4
-                                                                            }}
-                                                                        >
-                                                                            <FileText size={12} color={selectedSubjectId === db?.id ? '#be123c' : '#cbd5e1'} />
-                                                                            <span style={{ fontSize: '0.75rem', fontWeight: selectedSubjectId === db?.id ? 700 : 500, color: selectedSubjectId === db?.id ? '#9f1239' : '#64748b' }}>
-                                                                                {db?.name || board.name}
-                                                                            </span>
-                                                                            {db && selectedSubjectId === db.id && (
-                                                                                <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
-                                                                                    <button onClick={(e) => { e.stopPropagation(); setItemToRename({ id: db.id, type: 'subject', name: db.name }); setNewName(db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><Edit2 size={10} /></button>
-                                                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteSubject(db.id, db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#f87171' }}><Trash2 size={10} /></button>
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-
-                        {/* Unmatched Subjects */}
-                        {unmatched.length > 0 && (
-                            <div style={{ marginTop: '12px' }}>
-                                <div style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', borderRadius: '10px' }}>
-                                    <FolderOpen size={16} color="#64748b" />
-                                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#475569' }}>Unlinked</span>
-                                    <span style={{ marginLeft: 'auto', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '8px', background: '#e2e8f0', color: '#64748b' }}>{unmatched.length}</span>
-                                </div>
-                                <div style={{ paddingLeft: '12px', marginLeft: '12px', borderLeft: '1px solid #e2e8f0', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                    {unmatched.map(db => (
-                                        <div
-                                            key={db.id}
-                                            onClick={() => setSelectedSubjectId(db.id)}
-                                            style={{
-                                                display: 'flex', alignItems: 'center', gap: '8px',
-                                                padding: '6px 10px', borderRadius: '8px',
-                                                cursor: 'pointer',
-                                                background: selectedSubjectId === db.id ? '#f3f4f6' : 'transparent',
-                                            }}
-                                        >
-                                            <FileText size={14} color={selectedSubjectId === db.id ? '#475569' : '#94a3b8'} />
-                                            <span style={{ fontSize: '0.8rem', fontWeight: selectedSubjectId === db.id ? 700 : 500, color: selectedSubjectId === db.id ? '#1e293b' : '#64748b' }}>{db.name}</span>
-                                            {selectedSubjectId === db.id && (
-                                                <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
-                                                    <button onClick={(e) => { e.stopPropagation(); setItemToRename({ id: db.id, type: 'subject', name: db.name }); setNewName(db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><Edit2 size={12} /></button>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteSubject(db.id, db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#f87171' }}><Trash2 size={12} /></button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* Topic/Subtopic Tree */}
-            <div style={cardStyle(isMobile)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                    <Layers size={18} color="#8b5cf6" />
-                    <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Topics & Subtopics</h3>
-                </div>
-
-                {!selectedSubjectId ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>
-                        Select a subject
-                    </div>
-                ) : loadingTopics ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>
-                        <Loader2 size={20} className="animate-spin" />
-                    </div>
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '500px', overflowY: 'auto' }}>
-                        {topics.map((topic) => (
-                            <div key={topic.id}>
-                                {/* Topic Header */}
-                                <div
-                                    onClick={() => setSelectedTopicId(selectedTopicId === topic.id ? null : topic.id)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px 12px',
-                                        borderRadius: '8px',
-                                        border: 'none',
-                                        background: selectedTopicId === topic.id ? '#f5f3ff' : 'transparent',
-                                        cursor: 'pointer',
-                                        textAlign: 'left',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                    }}
-                                >
-                                    {selectedTopicId === topic.id ? (
-                                        <ChevronDown size={14} color="#8b5cf6" />
-                                    ) : (
-                                        <ChevronRight size={14} color="#94a3b8" />
-                                    )}
-                                    <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#374151', flex: 1 }}>
-                                        {topic.topic_id} - {topic.name}
-                                    </span>
-
-                                    <div style={{ display: 'flex', gap: '4px', marginRight: '8px' }}>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setItemToRename({ id: topic.id, type: 'topic', name: topic.name }); setNewName(topic.name); }}
-                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#64748b' }}
-                                        >
-                                            <Edit size={12} />
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteTopic(topic.id, topic.name); }}
-                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#ef4444' }}
-                                        >
-                                            <XCircle size={12} />
-                                        </button>
-                                    </div>
-                                    <span style={{
-                                        marginLeft: 'auto',
-                                        fontSize: '0.7rem',
-                                        padding: '2px 6px',
-                                        borderRadius: '10px',
-                                        background: topic.processed_count > 0 ? '#dcfce7' : '#f3f4f6',
-                                        color: topic.processed_count > 0 ? '#16a34a' : '#9ca3af',
-                                    }}>
-                                        {topic.processed_count}/{topic.subtopic_count}
-                                    </span>
-                                </div>
-
-                                {/* Subtopics */}
-                                {selectedTopicId === topic.id && (
-                                    <div style={{ paddingLeft: '20px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                        {loadingSubtopics ? (
-                                            <div style={{ padding: '10px', textAlign: 'center' }}>
-                                                <Loader2 size={16} className="animate-spin" />
+                                                })}
                                             </div>
-                                        ) : subtopics.map((subtopic) => (
+                                        )}
+                                    </div>
+                                );
+                            })}
+
+                            {/* Unmatched Subjects */}
+                            {unmatched.length > 0 && (
+                                <div style={{ marginTop: '12px' }}>
+                                    <div style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', borderRadius: '10px' }}>
+                                        <FolderOpen size={16} color="#64748b" />
+                                        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#475569' }}>Unlinked</span>
+                                        <span style={{ marginLeft: 'auto', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '8px', background: '#e2e8f0', color: '#64748b' }}>{unmatched.length}</span>
+                                    </div>
+                                    <div style={{ paddingLeft: '12px', marginLeft: '12px', borderLeft: '1px solid #e2e8f0', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        {unmatched.map(db => (
                                             <div
-                                                key={subtopic.id}
-                                                onClick={() => setSelectedSubtopicId(subtopic.id)}
+                                                key={db.id}
+                                                onClick={() => setSelectedSubjectId(db.id)}
                                                 style={{
-                                                    padding: '8px 12px',
-                                                    borderRadius: '6px',
-                                                    border: 'none',
-                                                    background: selectedSubtopicId === subtopic.id ? '#e0e7ff' : 'transparent',
+                                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                                    padding: '6px 10px', borderRadius: '8px',
                                                     cursor: 'pointer',
-                                                    textAlign: 'left',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '8px',
+                                                    background: selectedSubjectId === db.id ? '#f3f4f6' : 'transparent',
                                                 }}
                                             >
-                                                <FileText size={14} color={subtopic.processed_at ? '#6366f1' : '#d1d5db'} />
-                                                <span style={{ fontSize: '0.8rem', color: '#4b5563', flex: 1 }}>
-                                                    {subtopic.subtopic_id} {subtopic.name}
-                                                </span>
-
-                                                <div style={{ display: 'flex', gap: '4px', marginRight: '4px' }}>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setItemToRename({ id: subtopic.id, type: 'subtopic', name: subtopic.name }); setNewName(subtopic.name); }}
-                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#64748b' }}
-                                                    >
-                                                        <Edit size={12} />
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDeleteSubtopic(subtopic.id, subtopic.name); }}
-                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#ef4444' }}
-                                                    >
-                                                        <XCircle size={12} />
-                                                    </button>
-                                                </div>
-                                                {subtopic.v8_concepts_count > 0 && (
-                                                    <CheckCircle2 size={12} color="#22c55e" style={{ marginLeft: 'auto' }} />
+                                                <FileText size={14} color={selectedSubjectId === db.id ? '#475569' : '#94a3b8'} />
+                                                <span style={{ fontSize: '0.8rem', fontWeight: selectedSubjectId === db.id ? 700 : 500, color: selectedSubjectId === db.id ? '#1e293b' : '#64748b' }}>{db.name}</span>
+                                                {selectedSubjectId === db.id && (
+                                                    <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
+                                                        <button onClick={(e) => { e.stopPropagation(); setItemToRename({ id: db.id, type: 'subject', name: db.name }); setNewName(db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><Edit2 size={12} /></button>
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteSubject(db.id, db.name); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#f87171' }}><Trash2 size={12} /></button>
+                                                    </div>
                                                 )}
                                             </div>
                                         ))}
                                     </div>
-                                )}
-                            </div>
-                        ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Topic/Subtopic Tree */}
+                <div style={cardStyle(isMobile)}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                        <Layers size={18} color="#8b5cf6" />
+                        <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Topics & Subtopics</h3>
                     </div>
-                )}
+
+                    {!selectedSubjectId ? (
+                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>
+                            Select a subject
+                        </div>
+                    ) : loadingTopics ? (
+                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>
+                            <Loader2 size={20} className="animate-spin" />
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '500px', overflowY: 'auto' }}>
+                            {topics.map((topic) => (
+                                <div key={topic.id}>
+                                    {/* Topic Header */}
+                                    <div
+                                        onClick={() => setSelectedTopicId(selectedTopicId === topic.id ? null : topic.id)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 12px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: selectedTopicId === topic.id ? '#f5f3ff' : 'transparent',
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                        }}
+                                    >
+                                        {selectedTopicId === topic.id ? (
+                                            <ChevronDown size={14} color="#8b5cf6" />
+                                        ) : (
+                                            <ChevronRight size={14} color="#94a3b8" />
+                                        )}
+                                        <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#374151', flex: 1 }}>
+                                            {topic.topic_id} - {topic.name}
+                                        </span>
+
+                                        <div style={{ display: 'flex', gap: '4px', marginRight: '8px' }}>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setItemToRename({ id: topic.id, type: 'topic', name: topic.name }); setNewName(topic.name); }}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#64748b' }}
+                                            >
+                                                <Edit size={12} />
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleDeleteTopic(topic.id, topic.name); }}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#ef4444' }}
+                                            >
+                                                <XCircle size={12} />
+                                            </button>
+                                        </div>
+                                        <span style={{
+                                            marginLeft: 'auto',
+                                            fontSize: '0.7rem',
+                                            padding: '2px 6px',
+                                            borderRadius: '10px',
+                                            background: topic.processed_count > 0 ? '#dcfce7' : '#f3f4f6',
+                                            color: topic.processed_count > 0 ? '#16a34a' : '#9ca3af',
+                                        }}>
+                                            {topic.processed_count}/{topic.subtopic_count}
+                                        </span>
+                                    </div>
+
+                                    {/* Subtopics */}
+                                    {selectedTopicId === topic.id && (
+                                        <div style={{ paddingLeft: '20px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                            {loadingSubtopics ? (
+                                                <div style={{ padding: '10px', textAlign: 'center' }}>
+                                                    <Loader2 size={16} className="animate-spin" />
+                                                </div>
+                                            ) : subtopics.map((subtopic) => (
+                                                <div
+                                                    key={subtopic.id}
+                                                    onClick={() => setSelectedSubtopicId(subtopic.id)}
+                                                    style={{
+                                                        padding: '8px 12px',
+                                                        borderRadius: '6px',
+                                                        border: 'none',
+                                                        background: selectedSubtopicId === subtopic.id ? '#e0e7ff' : 'transparent',
+                                                        cursor: 'pointer',
+                                                        textAlign: 'left',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '8px',
+                                                    }}
+                                                >
+                                                    <FileText size={14} color={subtopic.processed_at ? '#6366f1' : '#d1d5db'} />
+                                                    <span style={{ fontSize: '0.8rem', color: '#4b5563', flex: 1 }}>
+                                                        {subtopic.subtopic_id} {subtopic.name}
+                                                    </span>
+
+                                                    <div style={{ display: 'flex', gap: '4px', marginRight: '4px' }}>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setItemToRename({ id: subtopic.id, type: 'subtopic', name: subtopic.name }); setNewName(subtopic.name); }}
+                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#64748b' }}
+                                                        >
+                                                            <Edit size={12} />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleDeleteSubtopic(subtopic.id, subtopic.name); }}
+                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#ef4444' }}
+                                                        >
+                                                            <XCircle size={12} />
+                                                        </button>
+                                                    </div>
+                                                    {subtopic.v8_concepts_count > 0 && (
+                                                        <CheckCircle2 size={12} color="#22c55e" style={{ marginLeft: 'auto' }} />
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* V8 Content Details */}
+            {/* Main Content Area - Right Pane */}
             <div style={{
-                marginTop: '12px',
-                width: '100%',
                 flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                minHeight: '600px'
+                overflow: 'hidden',
+                background: premiumColors.bg,
+                position: 'relative'
             }}>
-                {!selectedSubtopicId ? (
-                    <div style={{ ...cardStyle(isMobile), padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
-                        <Eye size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
-                        <div style={{ fontSize: '1rem' }}>Select a subtopic to view V8 content</div>
-                    </div>
-                ) : loadingContent ? (
-                    <div style={{ ...cardStyle(isMobile), padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
-                        <Loader2 size={32} className="animate-spin" />
-                    </div>
-                ) : subtopicStatus && !subtopicStatus.has_concepts ? (
-                    <div style={{ ...cardStyle(isMobile), padding: '40px 20px', textAlign: 'center' }}>
-                        <AlertCircle size={48} color="#f59e0b" style={{ marginBottom: '16px' }} />
-                        <div style={{ fontSize: '1rem', color: '#374151', marginBottom: '8px' }}>
-                            No V8 content yet
+                {/* Sidebar Toggle Button */}
+                {!isMobile && (
+                    <button
+                        onClick={() => setIsSidebarVisible(!isSidebarVisible)}
+                        style={{
+                            position: 'absolute',
+                            left: '0',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            zIndex: 100,
+                            width: '24px',
+                            height: '48px',
+                            background: 'white',
+                            border: `1px solid ${premiumColors.border}`,
+                            borderLeft: 'none',
+                            borderRadius: '0 12px 12px 0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: premiumColors.primary,
+                            boxShadow: '4px 0 10px rgba(0,0,0,0.05)',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                    >
+                        {isSidebarVisible ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                )}
+                {/* Scrollable Content Container */}
+                <div style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    padding: isMobile ? '16px' : (subtopicStatus && fullSubtopic ? '0' : '40px'), // Reduced padding when content is shown
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '40px'
+                }}>
+                    {!selectedSubtopicId ? (
+                        <div style={{ ...cardStyle(isMobile), padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
+                            <Eye size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
+                            <div style={{ fontSize: '1rem' }}>Select a subtopic to view V8 content</div>
                         </div>
-                        <div style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '20px' }}>
-                            Click "Generate V8" to create concepts, quiz questions, and flashcards.
+                    ) : loadingContent ? (
+                        <div style={{ ...cardStyle(isMobile), padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
+                            <Loader2 size={32} className="animate-spin" />
                         </div>
-                        <button
-                            onClick={() => openGenerateModal(false)}
-                            disabled={generating}
-                            style={buttonPrimary}
-                        >
-                            <Zap size={16} />
-                            Generate V8 Content
-                        </button>
-                    </div>
-                ) : subtopicStatus && fullSubtopic ? (
-                    <V8ContentDetails
-                        status={subtopicStatus}
-                        subtopic={fullSubtopic}
-                        onRegenerate={() => openGenerateModal(true)}
-                        regenerating={generating}
-                        onEditConcept={(concept: any) => setEditingConcept(concept)}
-                        onEditQuiz={(q: any) => setEditingQuiz(q)}
-                        onEditFlashcard={(c: any) => setEditingFlashcard(c)}
-                        onEditRealLife={(img: any) => setEditingRealLife(img)}
-                        onEditSVG={(concept: any) => { setEditingSVGConcept(concept); setCustomSVGPrompt(''); }}
-                    />
-                ) : null}
+                    ) : subtopicStatus && !subtopicStatus.has_concepts ? (
+                        <div style={{ ...cardStyle(isMobile), padding: '40px 20px', textAlign: 'center' }}>
+                            <AlertCircle size={48} color="#f59e0b" style={{ marginBottom: '16px' }} />
+                            <div style={{ fontSize: '1rem', color: '#374151', marginBottom: '8px' }}>
+                                No V8 content yet
+                            </div>
+                            <div style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '20px' }}>
+                                Click "Generate V8" to create concepts, quiz questions, and flashcards.
+                            </div>
+                            <button
+                                onClick={() => openGenerateModal(false)}
+                                disabled={generating}
+                                style={buttonPrimary}
+                            >
+                                <Zap size={16} />
+                                Generate V8 Content
+                            </button>
+                        </div>
+                    ) : subtopicStatus && fullSubtopic ? (
+                        <V8ContentDetails
+                            status={subtopicStatus}
+                            subtopic={fullSubtopic}
+                            onRegenerate={() => openGenerateModal(true)}
+                            regenerating={generating}
+                            onEditConcept={(concept: any) => setEditingConcept(concept)}
+                            onEditQuiz={(q: any) => setEditingQuiz(q)}
+                            onEditFlashcard={(c: any) => setEditingFlashcard(c)}
+                            onEditRealLife={(img: any) => setEditingRealLife(img)}
+                            onEditSVG={(concept: any) => { setEditingSVGConcept(concept); setCustomSVGPrompt(''); }}
+                        />
+                    ) : null}
+                </div>
             </div>
 
-            {/* Chunk Editor Modal for V8 Concepts */}
+            {/* Modals & Overlays - Correctly Scoped */}
             {editingConcept && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200,
+                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000,
                     padding: isMobile ? '0' : '40px'
                 }}>
                     <div style={{ width: '100%', maxWidth: '1000px', height: '100%', maxHeight: '90vh' }}>
@@ -1316,7 +1387,6 @@ const V8ContentBrowser = ({
                 </div>
             )}
 
-            {/* V8 Generation Options Modal */}
             {showGenerateModal && (
                 <V8GenerateModal
                     options={generateOptions}
@@ -1329,34 +1399,23 @@ const V8ContentBrowser = ({
                 />
             )}
 
-            {/* Rename Modal */}
             {itemToRename && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+                    background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2100
                 }}>
-                    <div style={{ background: 'white', padding: '24px', borderRadius: '16px', width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-                        <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', fontWeight: 700 }}>Rename {itemToRename.type}</h3>
+                    <div style={{ background: 'white', padding: '32px', borderRadius: '24px', width: '400px', boxShadow: '0 30px 60px -12px rgba(0,0,0,0.15)' }}>
+                        <h3 style={{ margin: '0 0 20px 0', fontSize: '1.25rem', fontWeight: 800 }}>Rename {itemToRename.type}</h3>
                         <input
                             value={newName}
                             onChange={(e) => setNewName(e.target.value)}
-                            style={{ ...inputStyle, marginBottom: '20px' }}
+                            style={{ ...inputStyle, marginBottom: '24px' }}
                             placeholder={`Enter new ${itemToRename.type} name`}
                             autoFocus
                         />
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                            <button
-                                onClick={() => setItemToRename(null)}
-                                style={{ ...buttonSecondary, padding: '8px 16px' }}
-                                disabled={isProcessingAction}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleRename}
-                                style={{ ...buttonPrimary, padding: '8px 24px' }}
-                                disabled={isProcessingAction || !newName.trim() || newName.trim() === itemToRename.name}
-                            >
+                            <button onClick={() => setItemToRename(null)} style={buttonSecondary} disabled={isProcessingAction}>Cancel</button>
+                            <button onClick={handleRename} style={buttonPrimary} disabled={isProcessingAction || !newName.trim() || newName.trim() === itemToRename.name}>
                                 {isProcessingAction ? 'Renaming...' : 'Rename'}
                             </button>
                         </div>
@@ -1364,51 +1423,47 @@ const V8ContentBrowser = ({
                 </div>
             )}
 
-            {/* SVG Regeneration Modal */}
             {editingSVGConcept && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200,
+                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2200,
                     padding: isMobile ? '0' : '20px'
                 }}>
-                    <div style={{ background: 'white', padding: '32px', borderRadius: '24px', width: '100%', maxWidth: '500px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Refine SVG</h3>
-                            <button onClick={() => setEditingSVGConcept(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><XCircle size={24} /></button>
+                    <div style={{ background: 'white', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '550px', boxShadow: '0 40px 80px -20px rgba(0,0,0,0.25)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Refine Visualization</h3>
+                            <button onClick={() => setEditingSVGConcept(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: premiumColors.textSoft }}><XCircle size={28} /></button>
                         </div>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem', color: '#64748b' }}>Existing Generation Prompt</label>
-                            <div style={{ padding: '12px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.9rem', color: '#475569', minHeight: '60px' }}>
+                        <div style={{ marginBottom: '24px' }}>
+                            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem', color: premiumColors.textSoft }}>Context</label>
+                            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '16px', border: `1px solid ${premiumColors.border}`, fontSize: '0.9rem', color: premiumColors.text, minHeight: '60px', lineHeight: 1.5 }}>
                                 {editingSVGConcept.description}
                             </div>
                         </div>
-
-                        <div style={{ marginBottom: '24px' }}>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem', color: '#7c3aed' }}>Refinement Prompt (Optional)</label>
+                        <div style={{ marginBottom: '32px' }}>
+                            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem', color: premiumColors.accent }}>Design Guidance</label>
                             <textarea
                                 value={customSVGPrompt}
                                 onChange={(e) => setCustomSVGPrompt(e.target.value)}
-                                placeholder="E.g. Make it more colorful, add labels for energy levels, or change the animation speed..."
-                                style={{ ...inputStyle, minHeight: '120px', padding: '12px', border: '1.5px solid #ddd', fontSize: '0.95rem' }}
+                                placeholder="e.g. Enhance mechanical detail, use a warm color palette, or slow down the animation..."
+                                style={{ ...inputStyle, minHeight: '140px', background: 'white' }}
                             />
                         </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                            <button onClick={() => setEditingSVGConcept(null)} style={{ ...buttonSecondary, padding: '10px 20px' }}>Cancel</button>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px' }}>
+                            <button onClick={() => setEditingSVGConcept(null)} style={buttonSecondary}>Cancel</button>
                             <button
                                 onClick={() => handleRegenerateSVG(editingSVGConcept.id, customSVGPrompt)}
-                                style={{ ...buttonPrimary, padding: '10px 24px' }}
+                                style={buttonPrimary}
                                 disabled={isRegeneratingSVG}
                             >
                                 {isRegeneratingSVG ? (
                                     <>
-                                        <Loader2 size={16} className="animate-spin" />
-                                        <span>Starting...</span>
+                                        <Loader2 size={18} className="animate-spin" />
+                                        <span>Re-imagining...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Zap size={16} />
+                                        <RefreshCw size={18} />
                                         <span>Regenerate SVG</span>
                                     </>
                                 )}
@@ -1418,169 +1473,167 @@ const V8ContentBrowser = ({
                 </div>
             )}
 
-            {/* Quiz Question Editor Modal */}
             {editingQuiz && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200,
-                    padding: isMobile ? '0' : '20px'
+                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2300,
+                    padding: isMobile ? '0' : '40px'
                 }}>
-                    <div style={{ background: 'white', padding: '32px', borderRadius: '24px', width: '100%', maxWidth: '600px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', maxHeight: '95vh', overflowY: 'auto' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Edit Quiz Question</h3>
-                            <button onClick={() => setEditingQuiz(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><XCircle size={24} /></button>
+                    <div style={{ background: 'white', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 30px 60px -12px rgba(0,0,0,0.25)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Refine Question</h3>
+                            <button onClick={() => setEditingQuiz(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: premiumColors.textSoft }}><XCircle size={28} /></button>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Question Text</label>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Question Prompt</label>
                                 <textarea
                                     value={editingQuiz.question_text}
                                     onChange={(e) => setEditingQuiz({ ...editingQuiz, question_text: e.target.value })}
-                                    style={{ ...inputStyle, minHeight: '100px', padding: '12px' }}
+                                    style={{ ...inputStyle, minHeight: '100px' }}
                                 />
                             </div>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Options</label>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                                    {['A', 'B', 'C', 'D'].map(key => (
-                                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <strong style={{ fontSize: '0.9rem' }}>{key}:</strong>
-                                            <input
-                                                value={editingQuiz.options[key] || ''}
-                                                onChange={(e) => setEditingQuiz({
-                                                    ...editingQuiz,
-                                                    options: { ...editingQuiz.options, [key]: e.target.value }
-                                                })}
-                                                style={{ ...inputStyle, padding: '8px 12px' }}
-                                            />
-                                        </div>
-                                    ))}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                {Object.keys(editingQuiz.options || {}).map((key) => (
+                                    <div key={key}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 600, color: premiumColors.textSoft }}>Option {key}</label>
+                                        <input
+                                            value={editingQuiz.options[key]}
+                                            onChange={(e) => {
+                                                const newOpts = { ...editingQuiz.options, [key]: e.target.value };
+                                                setEditingQuiz({ ...editingQuiz, options: newOpts });
+                                            }}
+                                            style={inputStyle}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Correct Answer</label>
+                                    <select
+                                        value={editingQuiz.correct_answer}
+                                        onChange={(e) => setEditingQuiz({ ...editingQuiz, correct_answer: e.target.value })}
+                                        style={inputStyle}
+                                    >
+                                        {['A', 'B', 'C', 'D'].map(key => (
+                                            <option key={key} value={key}>Option {key}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Explanation</label>
+                                    <textarea
+                                        value={editingQuiz.explanation || ''}
+                                        onChange={(e) => setEditingQuiz({ ...editingQuiz, explanation: e.target.value })}
+                                        style={{ ...inputStyle, minHeight: '60px' }}
+                                    />
                                 </div>
                             </div>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Correct Answer</label>
-                                <select
-                                    value={editingQuiz.correct_answer}
-                                    onChange={(e) => setEditingQuiz({ ...editingQuiz, correct_answer: e.target.value })}
-                                    style={{ ...inputStyle, padding: '8px 12px' }}
-                                >
-                                    {['A', 'B', 'C', 'D'].map(key => (
-                                        <option key={key} value={key}>Option {key}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Explanation</label>
-                                <textarea
-                                    value={editingQuiz.explanation || ''}
-                                    onChange={(e) => setEditingQuiz({ ...editingQuiz, explanation: e.target.value })}
-                                    style={{ ...inputStyle, minHeight: '80px', padding: '12px' }}
-                                />
-                            </div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '32px' }}>
-                            <button onClick={() => setEditingQuiz(null)} style={{ ...buttonSecondary, padding: '10px 20px' }}>Cancel</button>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '40px' }}>
+                            <button onClick={() => setEditingQuiz(null)} style={buttonSecondary}>Cancel</button>
                             <button
                                 onClick={() => handleSaveQuizQuestion(editingQuiz.id, editingQuiz)}
-                                style={{ ...buttonPrimary, padding: '10px 24px' }}
+                                style={buttonPrimary}
                                 disabled={isSaving}
                             >
-                                {isSaving ? 'Saving...' : 'Save Changes'}
+                                {isSaving ? 'Synchronizing...' : 'Update Question'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Flashcard Editor Modal */}
             {editingFlashcard && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200,
+                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2400,
+                    padding: isMobile ? '0' : '40px'
                 }}>
-                    <div style={{ background: 'white', padding: '32px', borderRadius: '24px', width: '100%', maxWidth: '500px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Edit Flashcard</h3>
-                            <button onClick={() => setEditingFlashcard(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><XCircle size={24} /></button>
+                    <div style={{ background: 'white', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '600px', boxShadow: '0 30px 60px -12px rgba(0,0,0,0.25)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Edit Flashcard</h3>
+                            <button onClick={() => setEditingFlashcard(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: premiumColors.textSoft }}><XCircle size={28} /></button>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Front (Term/Concept)</label>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Front (Concept)</label>
                                 <textarea
                                     value={editingFlashcard.front}
                                     onChange={(e) => setEditingFlashcard({ ...editingFlashcard, front: e.target.value })}
-                                    style={{ ...inputStyle, minHeight: '80px', padding: '12px' }}
+                                    style={{ ...inputStyle, minHeight: '100px' }}
                                 />
                             </div>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Back (Definition/Explanation)</label>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Back (Explanation)</label>
                                 <textarea
                                     value={editingFlashcard.back}
                                     onChange={(e) => setEditingFlashcard({ ...editingFlashcard, back: e.target.value })}
-                                    style={{ ...inputStyle, minHeight: '120px', padding: '12px' }}
+                                    style={{ ...inputStyle, minHeight: '120px' }}
                                 />
                             </div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '32px' }}>
-                            <button onClick={() => setEditingFlashcard(null)} style={{ ...buttonSecondary, padding: '10px 20px' }}>Cancel</button>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '40px' }}>
+                            <button onClick={() => setEditingFlashcard(null)} style={buttonSecondary}>Cancel</button>
                             <button
                                 onClick={() => handleSaveFlashcard(editingFlashcard.id, editingFlashcard)}
-                                style={{ ...buttonPrimary, padding: '10px 24px' }}
+                                style={buttonPrimary}
                                 disabled={isSaving}
                             >
-                                {isSaving ? 'Saving...' : 'Save Changes'}
+                                {isSaving ? 'Synchronizing...' : 'Update Card'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Real Life Image Editor Modal */}
             {editingRealLife && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200,
+                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2500,
+                    padding: isMobile ? '0' : '40px'
                 }}>
-                    <div style={{ background: 'white', padding: '32px', borderRadius: '24px', width: '100%', maxWidth: '600px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Edit Example Details</h3>
-                            <button onClick={() => setEditingRealLife(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><XCircle size={24} /></button>
+                    <div style={{ background: 'white', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '650px', boxShadow: '0 30px 60px -12px rgba(0,0,0,0.25)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Refine Real-world Insight</h3>
+                            <button onClick={() => setEditingRealLife(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: premiumColors.textSoft }}><XCircle size={28} /></button>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Title</label>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Insight Title</label>
                                 <input
                                     value={editingRealLife.title}
                                     onChange={(e) => setEditingRealLife({ ...editingRealLife, title: e.target.value })}
-                                    style={{ ...inputStyle, padding: '12px' }}
+                                    style={inputStyle}
                                 />
                             </div>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Description</label>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Description</label>
                                 <textarea
                                     value={editingRealLife.description}
                                     onChange={(e) => setEditingRealLife({ ...editingRealLife, description: e.target.value })}
-                                    style={{ ...inputStyle, minHeight: '120px', padding: '12px' }}
+                                    style={{ ...inputStyle, minHeight: '120px' }}
                                 />
                             </div>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>Image Type / Category</label>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Application Category</label>
                                 <input
                                     value={editingRealLife.image_type || ''}
                                     onChange={(e) => setEditingRealLife({ ...editingRealLife, image_type: e.target.value })}
-                                    style={{ ...inputStyle, padding: '12px' }}
-                                    placeholder="e.g. Schematic, Real-world example"
+                                    style={inputStyle}
+                                    placeholder="e.g. Industrial Automation, Aerospace Engineering..."
                                 />
                             </div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '32px' }}>
-                            <button onClick={() => setEditingRealLife(null)} style={{ ...buttonSecondary, padding: '10px 20px' }}>Cancel</button>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '40px' }}>
+                            <button onClick={() => setEditingRealLife(null)} style={buttonSecondary}>Cancel</button>
                             <button
                                 onClick={() => handleSaveRealLifeImage(editingRealLife.id, editingRealLife)}
-                                style={{ ...buttonPrimary, padding: '10px 24px' }}
+                                style={buttonPrimary}
                                 disabled={isSaving}
                             >
-                                {isSaving ? 'Saving...' : 'Save Changes'}
+                                {isSaving ? 'Synchronizing...' : 'Update Insight'}
                             </button>
                         </div>
                     </div>
@@ -1589,10 +1642,6 @@ const V8ContentBrowser = ({
         </div>
     );
 };
-
-// ===========================================================================
-// V8 CONTENT DETAILS COMPONENT
-// ===========================================================================
 
 const V8ContentDetails = ({
     status,
@@ -1603,7 +1652,9 @@ const V8ContentDetails = ({
     onEditQuiz,
     onEditFlashcard,
     onEditRealLife,
-    onEditSVG
+    onEditSVG,
+    isParentSidebarVisible,
+    onToggleParentSidebar
 }: {
     status: V8SubtopicStatus;
     subtopic: V8FullSubtopic;
@@ -1614,9 +1665,13 @@ const V8ContentDetails = ({
     onEditFlashcard: (card: any) => void;
     onEditRealLife: (image: any) => void;
     onEditSVG: (concept: any) => void;
+    isParentSidebarVisible?: boolean;
+    onToggleParentSidebar?: () => void;
 }) => {
     const [activeTab, setActiveTab] = useState<'concepts' | 'quiz' | 'flashcards' | 'reallife'>('concepts');
     const [activeConceptId, setActiveConceptId] = useState<number | null>(null);
+    const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
+    const [isTocVisible, setIsTocVisible] = useState(true); // Internal TOC state
 
     // Initial concept selection
     useEffect(() => {
@@ -1627,421 +1682,503 @@ const V8ContentDetails = ({
 
     if (!subtopic) return null;
 
+    const toggleCard = (cardId: number) => {
+        setFlippedCards(prev => ({ ...prev, [cardId]: !prev[cardId] }));
+    };
+
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            maxHeight: '92vh', // Increased height
-            width: '100%',
-            background: '#ffffff',
-            borderRadius: '24px',
-            overflow: 'hidden',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0,0,0,0.03)', // Premium shadow
-            fontFamily: "'Outfit', sans-serif",
-            color: '#1e293b',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-        }}>
-            {/* V8 Header */}
+        <>
+            <style>{`
+            @keyframes v8FadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        `}</style>
             <div style={{
-                padding: '24px 32px',
-                background: 'white',
-                borderBottom: '1px solid rgba(0,0,0,0.06)',
                 display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
+                flexDirection: 'column',
+                height: '100%',
+                maxHeight: '94vh',
+                width: '100%',
+                background: '#fcfaf7', // Soft background
+                borderRadius: '32px', // More rounded
+                overflow: 'hidden',
+                boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0,0,0,0.02)',
+                fontFamily: "'Outfit', sans-serif",
+                color: '#1a1a1b',
+                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
             }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{
-                        width: '42px', height: '42px', background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-                        borderRadius: '12px', display: 'grid', placeItems: 'center',
-                        color: '#927559', fontWeight: 800, fontSize: '14px',
-                        boxShadow: '0 8px 16px rgba(30, 41, 59, 0.2)'
-                    }}>V8</div>
-                    <div>
-                        <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>{subtopic.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#927559', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '2px' }}>Interactive Designer Preview</div>
+                {/* V8 Header */}
+                <div style={{
+                    padding: '24px 40px',
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    backdropFilter: 'blur(12px)',
+                    borderBottom: '1px solid rgba(0,0,0,0.04)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    zIndex: 10
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                        <div style={{
+                            width: '44px', height: '44px', background: '#1e293b',
+                            borderRadius: '14px', display: 'grid', placeItems: 'center',
+                            color: '#927559', fontWeight: 800, fontSize: '15px',
+                            boxShadow: '0 8px 16px rgba(30, 41, 59, 0.2)',
+                            cursor: 'pointer'
+                        }} onClick={onToggleParentSidebar} title={isParentSidebarVisible ? "Hide Side Panel" : "Show Side Panel"}>
+                            {isParentSidebarVisible ? "V8" : <Menu size={20} />}
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: 800, fontSize: '1.4rem', color: '#1e293b', letterSpacing: '-0.03em', lineHeight: 1.2 }}>{subtopic.name}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#927559', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '2px' }}>Interactive Designer Preview</div>
+                        </div>
                     </div>
-                </div>
 
-                <div style={{ display: 'flex', gap: '12px' }}>
-                    <button
-                        onClick={onRegenerate}
-                        disabled={regenerating}
-                        className="hover:scale-105 transition-transform"
-                        style={{
-                            padding: '10px 20px',
-                            borderRadius: '14px',
-                            border: '1.5px solid #7c3aed',
-                            background: regenerating ? '#f8fafc' : 'white',
-                            color: '#7c3aed',
-                            fontSize: '0.85rem',
-                            fontWeight: 700,
-                            cursor: regenerating ? 'not-allowed' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px',
-                            boxShadow: '0 4px 6px -1px rgba(124, 58, 237, 0.1)'
-                        }}
-                    >
-                        {regenerating ? (
-                            <Loader2 size={18} className="animate-spin" color="#7c3aed" />
-                        ) : (
-                            <RefreshCw size={18} color="#7c3aed" strokeWidth={2.5} />
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        {activeTab === 'concepts' && (
+                            <button
+                                onClick={() => setIsTocVisible(!isTocVisible)}
+                                style={{
+                                    padding: '10px 18px',
+                                    borderRadius: '14px',
+                                    border: '1.5px solid #e2e8f0',
+                                    background: 'white',
+                                    color: isTocVisible ? '#927559' : '#64748b',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <ListOrdered size={18} />
+                                {isTocVisible ? 'Hide Index' : 'Show Index'}
+                            </button>
                         )}
-                        {regenerating ? 'Syncing...' : 'Regenerate Chunk'}
-                    </button>
-                </div>
-            </div>
-
-            {/* Navigation Tabs */}
-            <div style={{
-                padding: '16px 32px',
-                background: '#f8fafc',
-                display: 'flex',
-                gap: '12px',
-                borderBottom: '1px solid rgba(0,0,0,0.05)',
-                justifyContent: 'center'
-            }}>
-                {[
-                    { id: 'concepts', label: 'Learn', Icon: Layers, color: '#4f46e5' },
-                    { id: 'quiz', label: 'Quiz', Icon: HelpCircle, color: '#d97706' },
-                    { id: 'flashcards', label: 'Cards', Icon: FileText, color: '#db2777' },
-                    { id: 'reallife', label: 'Real Life', Icon: ImageIcon, color: '#059669' }
-                ].map(tab => {
-                    const TabIcon = tab.Icon;
-                    return (
                         <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
+                            onClick={onRegenerate}
+                            disabled={regenerating}
+                            className="hover:scale-105 transition-transform"
                             style={{
-                                padding: '12px 28px',
-                                borderRadius: '16px',
-                                border: 'none',
-                                background: activeTab === tab.id ? 'white' : 'transparent',
-                                color: activeTab === tab.id ? tab.color : '#64748b',
-                                fontWeight: 800,
-                                fontSize: '1rem',
-                                cursor: 'pointer',
+                                padding: '10px 20px',
+                                borderRadius: '14px',
+                                border: '1.5px solid #7c3aed',
+                                background: regenerating ? '#f8fafc' : 'white',
+                                color: '#7c3aed',
+                                fontSize: '0.85rem',
+                                fontWeight: 700,
+                                cursor: regenerating ? 'not-allowed' : 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '10px',
-                                boxShadow: activeTab === tab.id ? '0 12px 20px -5px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04)' : 'none',
-                                transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                                opacity: activeTab === tab.id ? 1 : 0.6,
-                                transform: activeTab === tab.id ? 'scale(1.05)' : 'scale(1)'
+                                boxShadow: '0 4px 6px -1px rgba(124, 58, 237, 0.1)'
                             }}
                         >
-                            <TabIcon size={22} color={activeTab === tab.id ? tab.color : '#94a3b8'} strokeWidth={2.5} />
-                            {tab.label}
+                            {regenerating ? (
+                                <Loader2 size={18} className="animate-spin" color="#7c3aed" />
+                            ) : (
+                                <RefreshCw size={18} color="#7c3aed" strokeWidth={2.5} />
+                            )}
+                            {regenerating ? 'Syncing...' : 'Regenerate Chunk'}
                         </button>
-                    );
-                })}
-            </div>
+                    </div>
+                </div>
 
-            {/* Main Content Area */}
-            <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-                {activeTab === 'concepts' && (
-                    <>
-                        {/* Inner Sidebar (TOC) */}
-                        <div style={{
-                            width: '260px',
-                            borderRight: '1px solid rgba(0,0,0,0.05)',
-                            padding: '24px 16px',
-                            overflowY: 'auto',
-                            background: 'white'
-                        }}>
-                            <div style={{
-                                fontSize: '0.7rem',
-                                fontWeight: 800,
-                                color: '#927559',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.15em',
-                                marginBottom: '16px',
-                                paddingLeft: '12px'
-                            }}>Contents</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                {subtopic.concepts?.map(concept => (
-                                    <button
-                                        key={concept.id}
-                                        onClick={() => {
-                                            setActiveConceptId(concept.id);
-                                            document.getElementById(`concept-${concept.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                        }}
-                                        style={{
-                                            padding: '12px 16px',
-                                            borderRadius: '12px',
-                                            border: 'none',
-                                            background: activeConceptId === concept.id ? 'rgba(146, 117, 89, 0.08)' : 'transparent',
-                                            color: activeConceptId === concept.id ? '#0f172a' : '#64748b',
-                                            textAlign: 'left',
-                                            fontSize: '0.85rem',
-                                            fontWeight: activeConceptId === concept.id ? 700 : 500,
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '12px',
-                                            transition: 'all 0.2s',
-                                            borderLeft: activeConceptId === concept.id ? '3px solid #927559' : '3px solid transparent'
-                                        }}
-                                    >
-                                        <span style={{ fontSize: '1.1rem' }}>{concept.icon || '📚'}</span>
-                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{concept.title}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                {/* Navigation Tabs */}
+                <div style={{
+                    padding: '16px 40px',
+                    background: 'rgba(248, 250, 252, 0.5)',
+                    display: 'flex',
+                    gap: '8px',
+                    borderBottom: '1px solid rgba(0,0,0,0.04)',
+                    justifyContent: 'center'
+                }}>
+                    {[
+                        { id: 'concepts', label: 'Learn', Icon: Layers, color: '#927559' }, // Theme color
+                        { id: 'quiz', label: 'Quiz', Icon: HelpCircle, color: '#0f172a' },
+                        { id: 'flashcards', label: 'Cards', Icon: FileText, color: '#0f172a' },
+                        { id: 'reallife', label: 'Real Life', Icon: ImageIcon, color: '#0f172a' }
+                    ].map(tab => {
+                        const TabIcon = tab.Icon;
+                        const isActive = activeTab === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id as any)}
+                                style={{
+                                    padding: '10px 24px',
+                                    borderRadius: '14px',
+                                    border: 'none',
+                                    background: isActive ? 'white' : 'transparent',
+                                    color: isActive ? '#927559' : '#64748b',
+                                    fontWeight: isActive ? 800 : 600,
+                                    fontSize: '0.95rem',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    boxShadow: isActive ? '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)' : 'none',
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    transform: isActive ? 'scale(1.02)' : 'scale(1)',
+                                }}
+                            >
+                                <TabIcon size={20} color={isActive ? '#927559' : '#94a3b8'} strokeWidth={2.5} />
+                                {tab.label}
+                            </button>
+                        );
+                    })}
+                </div>
 
-                        {/* Concept Display */}
-                        <div style={{ flex: 1, overflowY: 'auto', padding: '32px', background: '#fcfafb' }} id="concept-scroll-area">
-                            {subtopic.concepts?.map(concept => (
-                                <section key={concept.id} id={`concept-${concept.id}`} style={{ marginBottom: '64px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                                        <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '12px', letterSpacing: '-0.02em' }}>
-                                            <span style={{
-                                                width: '40px', height: '40px', background: 'white', borderRadius: '10px',
-                                                display: 'grid', placeItems: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
-                                            }}>{concept.icon || '📚'}</span>
-                                            {concept.title}
-                                        </h3>
+                {/* Main Content Area */}
+                <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+                    {activeTab === 'concepts' && (
+                        <>
+                            {/* Inner Sidebar (TOC) */}
+                            <aside style={{
+                                width: isTocVisible ? '220px' : '0', // Collapsible
+                                opacity: isTocVisible ? 1 : 0,
+                                transform: isTocVisible ? 'translateX(0)' : 'translateX(-20px)',
+                                pointerEvents: isTocVisible ? 'auto' : 'none',
+                                borderRight: isTocVisible ? '1px solid rgba(0,0,0,0.04)' : 'none',
+                                padding: isTocVisible ? '24px 16px' : '0',
+                                overflow: 'hidden',
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                background: 'rgba(255, 255, 255, 0.5)',
+                            }}>
+                                <div style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 800,
+                                    color: '#927559',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.12em',
+                                    marginBottom: '20px',
+                                    paddingLeft: '12px'
+                                }}>Table of Contents</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {subtopic.concepts?.map(concept => (
                                         <button
-                                            onClick={() => onEditConcept(concept)}
-                                            style={{
-                                                padding: '12px', borderRadius: '14px', border: '1px solid #e2e8f0',
-                                                background: 'white', cursor: 'pointer', color: '#4f46e5',
-                                                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                transition: 'all 0.2s'
+                                            key={concept.id}
+                                            onClick={() => {
+                                                setActiveConceptId(concept.id);
+                                                document.getElementById(`concept-${concept.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                             }}
-                                            className="hover:shadow-md hover:border-indigo-200"
-                                            title="Edit Concept"
+                                            style={{
+                                                padding: '12px 16px',
+                                                borderRadius: '14px',
+                                                border: 'none',
+                                                background: activeConceptId === concept.id ? 'rgba(146, 117, 89, 0.08)' : 'transparent',
+                                                color: activeConceptId === concept.id ? '#1e293b' : '#64748b',
+                                                textAlign: 'left',
+                                                fontSize: '0.9rem',
+                                                fontWeight: activeConceptId === concept.id ? 700 : 500,
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                boxShadow: activeConceptId === concept.id ? 'inset 0 0 0 1px rgba(146, 117, 89, 0.15)' : 'none'
+                                            }}
                                         >
-                                            <Edit2 size={20} color="#4f46e5" />
+                                            <span style={{ fontSize: '1.2rem', opacity: activeConceptId === concept.id ? 1 : 0.6 }}>{concept.icon || '📚'}</span>
+                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{concept.title}</span>
                                         </button>
-                                    </div>
+                                    ))}
+                                </div>
+                            </aside>
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
-                                        {/* Left: Text */}
-                                        <div style={{
-                                            background: 'white', padding: '32px', borderRadius: '24px',
-                                            border: '1px solid rgba(0,0,0,0.04)', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.03)'
-                                        }}>
-                                            <div style={{ fontSize: '1rem', lineHeight: 1.8, color: '#334155' }}>
-                                                {concept.description && <p style={{ marginBottom: '20px', fontWeight: 600, color: '#1e293b', fontSize: '1.1rem' }}>{concept.description}</p>}
-                                                {concept.generated?.bullets && (
-                                                    <div
-                                                        dangerouslySetInnerHTML={{ __html: concept.generated.bullets }}
-                                                        style={{
-                                                            fontSize: '0.95rem',
-                                                            color: '#475569'
-                                                        }}
-                                                    />
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Right: Visual */}
-                                        <div style={{
-                                            background: 'white', padding: '24px', borderRadius: '24px',
-                                            border: '1px solid rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            minHeight: '500px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', position: 'relative',
-                                            overflow: 'hidden'
-                                        }}>
-                                            <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10 }}>
+                            {/* Concept Display */}
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px', background: '#fcfaf7' }} id="concept-scroll-area">
+                                {subtopic.concepts?.map(concept => (
+                                    <section key={concept.id} id={`concept-${concept.id}`} style={{ marginBottom: '80px', animation: 'fadeIn 0.8s ease' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                                            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '16px', letterSpacing: '-0.04em' }}>
+                                                <span style={{ opacity: 0.9 }}>{concept.icon || '📚'}</span>
+                                                {concept.title}
+                                            </h3>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
                                                 <button
                                                     onClick={() => onEditSVG(concept)}
                                                     style={{
-                                                        background: 'rgba(255, 255, 255, 0.9)', border: '1px solid #e2e8f0',
-                                                        borderRadius: '50%', width: '36px', height: '36px',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                                                        color: '#7c3aed'
+                                                        padding: '10px 18px', borderRadius: '12px', border: '1px solid #e2e8f0',
+                                                        background: 'white', cursor: 'pointer', color: '#7c3aed',
+                                                        display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 700,
+                                                        transition: 'all 0.2s'
                                                     }}
-                                                    title="Refine SVG"
+                                                    className="hover:shadow-md hover:border-violet-100"
                                                 >
-                                                    <Sparkles size={16} />
+                                                    <Sparkles size={16} /> Refine SVG
                                                 </button>
-                                            </div>
-                                            <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: '#927559', opacity: 0.1 }}></div>
-                                            {concept.generated?.svg ? (
-                                                <div
-                                                    dangerouslySetInnerHTML={{ __html: concept.generated.svg }}
-                                                    style={{ width: '100%', height: '100%' }}
-                                                />
-                                            ) : (
-                                                <div style={{ opacity: 0.2, textAlign: 'center' }}>
-                                                    <Sparkles size={60} style={{ marginBottom: '16px', color: '#927559' }} />
-                                                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Visual Rendering</div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </section>
-                            ))}
-                        </div>
-                    </>
-                )}
-
-                {activeTab === 'quiz' && (
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px', background: '#f8fafc' }}>
-                        {subtopic.quiz?.map((q, idx) => (
-                            <div key={idx} style={{
-                                background: 'white', borderRadius: '28px', padding: '32px',
-                                border: '1px solid rgba(0,0,0,0.03)', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.05)'
-                            }}>
-                                <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
-                                    <span style={{
-                                        background: '#0f172a', color: 'white', padding: '6px 16px',
-                                        borderRadius: '999px', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em'
-                                    }}>Question {q.question_num || idx + 1}</span>
-                                    {q.difficulty && <span style={{
-                                        fontSize: '0.75rem', padding: '6px 16px', borderRadius: '999px', fontWeight: 700,
-                                        background: q.difficulty === 'easy' ? '#ecfdf5' : q.difficulty === 'hard' ? '#fef2f2' : '#fffbeb',
-                                        color: q.difficulty === 'easy' ? '#059669' : q.difficulty === 'hard' ? '#dc2626' : '#d97706',
-                                        textTransform: 'capitalize'
-                                    }}>{q.difficulty}</span>}
-                                    <button
-                                        onClick={() => onEditQuiz(q)}
-                                        style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
-                                    >
-                                        <Edit2 size={16} />
-                                    </button>
-                                </div>
-                                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', marginBottom: '24px', lineHeight: 1.4, letterSpacing: '-0.01em' }}>{q.question_text}</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                    {Object.entries((() => {
-                                        if (typeof q.options === 'string') {
-                                            try { return JSON.parse(q.options); } catch { return {}; }
-                                        }
-                                        return q.options || {};
-                                    })()).map(([key, val]) => (
-                                        <div key={key} style={{
-                                            padding: '16px 20px', borderRadius: '16px', border: '2px solid',
-                                            borderColor: key === q.correct_answer ? '#10b981' : 'rgba(0,0,0,0.03)',
-                                            background: key === q.correct_answer ? '#f0fdf4' : 'white',
-                                            fontSize: '1rem', fontWeight: 600, color: '#4b5563',
-                                            transition: 'all 0.2s'
-                                        }}>
-                                            <strong style={{ color: key === q.correct_answer ? '#059669' : '#927559', marginRight: '8px' }}>{key}.</strong> {val as string}
-                                            {key === q.correct_answer && <CheckCircle2 size={16} style={{ float: 'right', color: '#10b981', marginTop: '4px' }} />}
-                                        </div>
-                                    ))}
-                                </div>
-                                {q.explanation && (
-                                    <div style={{
-                                        marginTop: '24px', padding: '20px', background: 'rgba(146, 117, 89, 0.04)',
-                                        borderRadius: '16px', borderLeft: '5px solid #927559', fontSize: '0.95rem', color: '#475569', lineHeight: 1.6
-                                    }}>
-                                        <div style={{ fontWeight: 800, color: '#927559', marginBottom: '4px', textTransform: 'uppercase', fontSize: '0.75rem' }}>Explanation</div>
-                                        {q.explanation}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {activeTab === 'flashcards' && (
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '32px', background: '#fcfaf7' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
-                            {subtopic.flashcards?.map((card, idx) => (
-                                <div key={idx} style={{
-                                    height: '220px', perspective: '1000px'
-                                }}>
-                                    <div style={{
-                                        position: 'relative', width: '100%', height: '100%',
-                                        background: 'white', borderRadius: '24px', padding: '32px',
-                                        border: '1px solid rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column',
-                                        justifyContent: 'center', alignItems: 'center', textAlign: 'center',
-                                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)',
-                                        transition: 'transform 0.3s ease'
-                                    }} className="hover:scale-[1.02]">
-                                        <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#ec4899', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Front</div>
-                                            <button
-                                                onClick={() => onEditFlashcard(card)}
-                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1' }}
-                                            >
-                                                <Edit2 size={14} />
-                                            </button>
-                                        </div>
-                                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', marginBottom: '16px', lineHeight: 1.3 }}>{card.front}</div>
-                                        <div style={{ width: '40px', height: '1px', background: 'rgba(0,0,0,0.05)', marginBottom: '16px' }}></div>
-                                        <div style={{ fontSize: '0.9rem', color: '#64748b', fontStyle: 'italic', lineHeight: 1.5 }}>{card.back}</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'reallife' && (
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '32px', background: '#f0fdfa' }}>
-                        {subtopic.reallife_images && subtopic.reallife_images.length > 0 ? (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '40px' }}>
-                                {subtopic.reallife_images.map((item, idx) => (
-                                    <div key={idx} style={{
-                                        background: 'white', borderRadius: '32px', padding: '32px',
-                                        border: '1px solid rgba(0,0,0,0.03)', boxShadow: '0 15px 30px -10px rgba(0, 0, 0, 0.05)'
-                                    }}>
-                                        <div style={{ display: 'flex', gap: '40px', alignItems: 'center' }}>
-                                            <div style={{
-                                                width: '400px', height: '280px', flexShrink: 0, borderRadius: '24px',
-                                                overflow: 'hidden', background: '#f1f5f9', boxShadow: '0 10px 20px rgba(0,0,0,0.05)'
-                                            }}>
-                                                {item.image_url ? (
-                                                    <img src={item.image_url} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                ) : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', fontSize: '4rem' }}>🖼️</div>}
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{
-                                                    display: 'inline-block', padding: '6px 16px', borderRadius: '999px',
-                                                    background: idx % 2 === 0 ? '#fff1f2' : '#e0f2fe',
-                                                    color: idx % 2 === 0 ? '#be123c' : '#0369a1',
-                                                    fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '16px'
-                                                }}>
-                                                    {item.image_type || 'Contextual Example'}
-                                                </div>
                                                 <button
-                                                    onClick={() => onEditRealLife(item)}
-                                                    style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+                                                    onClick={() => onEditConcept(concept)}
+                                                    style={{
+                                                        padding: '10px 18px', borderRadius: '12px', border: '1px solid #e2e8f0',
+                                                        background: 'white', cursor: 'pointer', color: '#1e293b',
+                                                        display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 700,
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    className="hover:shadow-md"
                                                 >
-                                                    <Edit2 size={18} />
+                                                    <Edit2 size={16} /> Edit Content
                                                 </button>
-                                                <h4 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', margin: '0 0 16px 0', letterSpacing: '-0.02em' }}>{item.title}</h4>
-                                                <p style={{ fontSize: '1.05rem', color: '#475569', lineHeight: 1.7, marginBottom: '24px' }}>{item.description}</p>
-                                                {item.prompt && (
-                                                    <div style={{
-                                                        marginTop: '24px', padding: '20px', background: '#f8fafc',
-                                                        borderRadius: '20px', borderLeft: '5px solid #3b82f6',
-                                                        boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
-                                                    }}>
-                                                        <strong style={{ fontSize: '0.8rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                            <Sparkles size={14} color="#3b82f6" />
-                                                            Generation Insight
-                                                        </strong>
-                                                        <p style={{ fontSize: '0.95rem', color: '#334155', margin: 0, lineHeight: 1.5 }}>{item.prompt}</p>
-                                                    </div>
-                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: (isTocVisible || isParentSidebarVisible) ? '1.2fr 1fr' : '1fr 1fr',
+                                            gap: '40px',
+                                            alignItems: 'stretch'
+                                        }}>
+                                            {/* Left: Text */}
+                                            <article style={{
+                                                background: 'rgba(255, 255, 255, 0.8)', padding: '32px', borderRadius: '28px',
+                                                border: '1px solid rgba(0,0,0,0.04)', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.03)',
+                                                backdropFilter: 'blur(8px)'
+                                            }}>
+                                                <div style={{ fontSize: '1.05rem', lineHeight: 1.9, color: '#334155' }}>
+                                                    {concept.description && <p style={{ marginBottom: '24px', fontWeight: 700, color: '#1a1a1b', fontSize: '1.2rem', letterSpacing: '-0.01em' }}>{concept.description}</p>}
+                                                    {concept.generated?.bullets && (
+                                                        <div
+                                                            dangerouslySetInnerHTML={{
+                                                                __html: concept.generated.bullets
+                                                                    .replace(/\$\$([^$]+)\$\$/g, '<span style="font-family: serif; font-style: italic; color: #927559;">$1</span>')
+                                                                    .replace(/\$([^$]+)\$/g, '<span style="font-family: serif; font-style: italic; color: #927559;">$1</span>')
+                                                            }}
+                                                            style={{
+                                                                fontSize: '1.05rem',
+                                                                color: '#475569'
+                                                            }}
+                                                        />
+                                                    )}
+                                                </div>
+                                            </article>
+
+                                            {/* Right: Visual */}
+                                            <div style={{
+                                                background: 'rgba(252, 250, 247, 0.7)', padding: '32px', borderRadius: '28px',
+                                                border: '1px solid rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                minHeight: '500px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.01)', position: 'relative',
+                                                overflow: 'hidden'
+                                            }}>
+                                                <div style={{ background: 'white', borderRadius: '20px', padding: '24px', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(0,0,0,0.03)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.01)' }}>
+                                                    {concept.generated?.svg ? (
+                                                        <div
+                                                            dangerouslySetInnerHTML={{ __html: concept.generated.svg }}
+                                                            style={{ width: '100%', height: '100%' }}
+                                                        />
+                                                    ) : (
+                                                        <div style={{ opacity: 0.2, textAlign: 'center' }}>
+                                                            <Sparkles size={64} style={{ marginBottom: '20px', color: '#927559' }} />
+                                                            <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Designer Visual Space</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === 'quiz' && (
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px', display: 'flex', flexDirection: 'column', gap: '32px', background: '#fcfaf7' }}>
+                            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                                <h2 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', marginBottom: '8px', letterSpacing: '-0.04em' }}>❓ Practice Assessment</h2>
+                                <p style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 500 }}>Validating knowledge transfer through curated questions</p>
+                            </div>
+                            {subtopic.quiz?.map((q, idx) => (
+                                <div key={idx} style={{
+                                    background: 'white', borderRadius: '32px', padding: '48px',
+                                    border: '1px solid rgba(0,0,0,0.03)', boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.06)'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                                        <div style={{ display: 'flex', gap: '12px' }}>
+                                            <span style={{
+                                                background: '#1e293b', color: 'white', padding: '6px 16px',
+                                                borderRadius: '999px', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em'
+                                            }}>Question {q.question_num || idx + 1}</span>
+                                            {q.difficulty && <span style={{
+                                                fontSize: '0.75rem', padding: '6px 16px', borderRadius: '999px', fontWeight: 800,
+                                                background: q.difficulty === 'easy' ? '#ecfdf5' : q.difficulty === 'hard' ? '#fef2f2' : '#fffbeb',
+                                                color: q.difficulty === 'easy' ? '#065f46' : q.difficulty === 'hard' ? '#991b1b' : '#92400e',
+                                                textTransform: 'uppercase', letterSpacing: '0.05em'
+                                            }}>{q.difficulty}</span>}
+                                        </div>
+                                        <button
+                                            onClick={() => onEditQuiz(q)}
+                                            style={{ background: 'rgba(30, 41, 59, 0.05)', border: 'none', width: '36px', height: '36px', borderRadius: '10px', display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#64748b' }}
+                                        >
+                                            <Edit2 size={16} />
+                                        </button>
+                                    </div>
+                                    <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#1e293b', marginBottom: '32px', lineHeight: 1.4, letterSpacing: '-0.02em' }}>{q.question_text}</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                        {Object.entries((() => {
+                                            if (typeof q.options === 'string') {
+                                                try { return JSON.parse(q.options); } catch { return {}; }
+                                            }
+                                            return q.options || {};
+                                        })()).map(([key, val]) => (
+                                            <div key={key} style={{
+                                                padding: '20px 24px', borderRadius: '20px', border: '2px solid',
+                                                borderColor: key === q.correct_answer ? '#059669' : 'rgba(0,0,0,0.03)',
+                                                background: key === q.correct_answer ? 'rgba(5, 150, 105, 0.04)' : 'white',
+                                                fontSize: '1.05rem', fontWeight: 600, color: '#1e293b',
+                                                display: 'flex', alignItems: 'center', gap: '12px',
+                                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                                            }}>
+                                                <strong style={{ color: key === q.correct_answer ? '#065f46' : '#927559', fontSize: '1.1rem' }}>{key}.</strong> {val as string}
+                                                {key === q.correct_answer && <CheckCircle2 size={18} style={{ marginLeft: 'auto', color: '#059669' }} />}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {q.explanation && (
+                                        <div style={{
+                                            marginTop: '32px', padding: '24px 32px', background: 'rgba(146, 117, 89, 0.05)',
+                                            borderRadius: '20px', borderLeft: '5px solid #927559', fontSize: '1rem', color: '#475569', lineHeight: 1.7
+                                        }}>
+                                            <div style={{ fontWeight: 800, color: '#927559', marginBottom: '8px', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.1em' }}>Explanation</div>
+                                            {q.explanation}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {activeTab === 'flashcards' && (
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px', background: '#fcfaf7' }}>
+                            <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                                <h2 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', marginBottom: '8px', letterSpacing: '-0.04em' }}>⚡ Flashcards</h2>
+                                <p style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 500 }}>Micro-learning cards for rapid concept recall</p>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '32px' }}>
+                                {subtopic.flashcards?.map((card, idx) => (
+                                    <div
+                                        key={idx}
+                                        style={{ height: '300px', perspective: '1200px', cursor: 'pointer' }}
+                                        onClick={() => toggleCard(idx)}
+                                    >
+                                        <div style={{
+                                            position: 'relative', width: '100%', height: '100%',
+                                            transition: 'transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                                            transformStyle: 'preserve-3d',
+                                            transform: flippedCards[idx] ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                                            borderRadius: '28px',
+                                            boxShadow: '0 15px 35px -5px rgba(0,0,0,0.06)'
+                                        }}>
+                                            {/* Front */}
+                                            <div style={{
+                                                position: 'absolute', width: '100%', height: '100%',
+                                                backfaceVisibility: 'hidden', borderRadius: '28px',
+                                                padding: '40px', display: 'flex', flexDirection: 'column',
+                                                justifyContent: 'center', alignItems: 'center', textAlign: 'center',
+                                                background: 'white', border: '1px solid rgba(0,0,0,0.03)'
+                                            }}>
+                                                <div style={{ position: 'absolute', top: '24px', right: '24px' }}>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onEditFlashcard(card); }}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1' }}
+                                                    >
+                                                        <Edit2 size={16} />
+                                                    </button>
+                                                </div>
+                                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', lineHeight: 1.3, letterSpacing: '-0.02em' }}>{card.front}</div>
+                                                <div style={{ marginTop: '24px', fontSize: '0.75rem', fontWeight: 800, color: '#927559', textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.5 }}>Tap to reveal</div>
+                                            </div>
+                                            {/* Back */}
+                                            <div style={{
+                                                position: 'absolute', width: '100%', height: '100%',
+                                                backfaceVisibility: 'hidden', borderRadius: '28px',
+                                                padding: '40px', display: 'flex', flexDirection: 'column',
+                                                justifyContent: 'center', alignItems: 'center', textAlign: 'center',
+                                                background: '#1e293b', color: 'white', transform: 'rotateY(180deg)'
+                                            }}>
+                                                <div style={{ fontSize: '1.1rem', fontWeight: 500, lineHeight: 1.6, color: 'rgba(255,255,255,0.9)' }}>{card.back}</div>
+                                                <div style={{ marginTop: '24px', fontSize: '0.75rem', fontWeight: 800, color: '#927559', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Solution</div>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                        ) : (
-                            <div style={{ padding: '80px', textAlign: 'center', color: '#94a3b8' }}>
-                                <ImageIcon size={64} style={{ opacity: 0.1, marginBottom: '24px', color: '#10b981' }} />
-                                <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>No real-life examples generated yet.</div>
-                                <div style={{ fontSize: '0.9rem', marginTop: '8px' }}>These will provide visual context for student understanding.</div>
+                        </div>
+                    )}
+
+                    {activeTab === 'reallife' && (
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '40px 60px', background: '#fcfaf7' }}>
+                            <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                                <h2 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', marginBottom: '8px', letterSpacing: '-0.04em' }}>🌍 Real Life Applications</h2>
+                                <p style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 500 }}>Connecting theoretical concepts to tangible world examples</p>
                             </div>
-                        )}
-                    </div>
-                )}
+                            {subtopic.reallife_images && subtopic.reallife_images.length > 0 ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '48px', maxWidth: '1200px', margin: '0 auto' }}>
+                                    {subtopic.reallife_images.map((item, idx) => (
+                                        <div key={idx} style={{
+                                            background: 'white', borderRadius: '40px', padding: '48px',
+                                            border: '1px solid rgba(0,0,0,0.03)', boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.08)'
+                                        }}>
+                                            <div style={{ display: 'flex', gap: '60px', alignItems: 'flex-start' }}>
+                                                <div style={{
+                                                    width: '440px', height: '320px', flexShrink: 0, borderRadius: '32px',
+                                                    overflow: 'hidden', background: '#f1f5f9', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)'
+                                                }}>
+                                                    {item.image_url ? (
+                                                        <img src={item.image_url} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    ) : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', fontSize: '5rem' }}>🌍</div>}
+                                                </div>
+                                                <div style={{ flex: 1, paddingTop: '10px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                                                        <div style={{
+                                                            padding: '6px 16px', borderRadius: '999px',
+                                                            background: idx % 3 === 0 ? '#fff1f2' : idx % 3 === 1 ? '#e0f2fe' : '#fef3c7',
+                                                            color: idx % 3 === 0 ? '#be123c' : idx % 3 === 1 ? '#0369a1' : '#92400e',
+                                                            fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em'
+                                                        }}>
+                                                            {item.image_type || 'Application'}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => onEditRealLife(item)}
+                                                            style={{ background: 'rgba(30, 41, 59, 0.05)', border: 'none', width: '36px', height: '36px', borderRadius: '10px', display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#64748b' }}
+                                                        >
+                                                            <Edit2 size={18} />
+                                                        </button>
+                                                    </div>
+                                                    <h4 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', margin: '0 0 20px 0', letterSpacing: '-0.03em' }}>{item.title}</h4>
+                                                    <p style={{ fontSize: '1.1rem', color: '#475569', lineHeight: 1.8, marginBottom: '32px' }}>{item.description}</p>
+                                                    {item.prompt && (
+                                                        <div style={{
+                                                            marginTop: '32px', padding: '28px', background: 'rgba(146, 117, 89, 0.04)',
+                                                            borderRadius: '24px', borderLeft: '6px solid #927559',
+                                                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.01)'
+                                                        }}>
+                                                            <strong style={{ fontSize: '0.8rem', color: '#927559', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                                                                <Sparkles size={16} /> Key Instructional Insight
+                                                            </strong>
+                                                            <p style={{ fontSize: '1rem', color: '#334155', margin: 0, lineHeight: 1.6, fontWeight: 500 }}>{item.prompt}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div style={{ padding: '120px 40px', textAlign: 'center', color: '#94a3b8', background: 'white', borderRadius: '40px', border: '1px solid rgba(0,0,0,0.03)' }}>
+                                    <ImageIcon size={80} style={{ opacity: 0.1, marginBottom: '32px', color: '#1e293b' }} />
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>No real-life applications discovered yet.</div>
+                                    <div style={{ fontSize: '0.95rem', marginTop: '12px', maxWidth: '400px', margin: '12px auto 0' }}>Request a V8 generation with "Real-world examples" enabled to enrich this subtopic.</div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
-        </div>
+        </>
     );
 };
-
-
 
 export default V8ContentBrowser;

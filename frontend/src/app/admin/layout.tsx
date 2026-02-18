@@ -117,7 +117,7 @@ export default function AdminLayout({
                         {/* Add admin specific actions like user profile or notifications here */}
                     </div>
                 </header>
-                <div className={styles.content}>
+                <div className={`${styles.content} ${pathname.startsWith('/admin/aimaterials') ? styles.contentFull : ''}`}>
                     {children}
                 </div>
             </main>
