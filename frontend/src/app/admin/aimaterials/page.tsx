@@ -190,6 +190,32 @@ function sanitizeId(name: string): string {
         .substring(0, 50);
 }
 
+// Must stay aligned with backend _sanitize_code (admin_v8.py)
+function sanitizeIngestCode(name: string): string {
+    return name.toLowerCase()
+        .replace(/[^\w\s-]/g, '')
+        .trim()
+        .replace(/[-\s]+/g, '_');
+}
+
+type AdminV8TaskStatus = 'idle' | 'pending' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
+
+const V8_ACTIVE_TASK_STORAGE_KEY = 'aimaterials_v8_active_task_id';
+
+function normalizeV8TaskStatus(value: unknown): AdminV8TaskStatus {
+    switch (value) {
+        case 'pending':
+        case 'running':
+        case 'cancelling':
+        case 'completed':
+        case 'failed':
+        case 'cancelled':
+            return value;
+        default:
+            return 'idle';
+    }
+}
+
 function matchSubjectsToTree(dbSubjects: DbSubject[]) {
     const matched = new Set<string>();
     const subjectIdMap: Record<string, DbSubject> = {};
@@ -1452,9 +1478,12 @@ const AIMaterialsAdmin = () => {
     const [subjects, setSubjects] = useState<any[]>([]);
     const [loadingSubjects, setLoadingSubjects] = useState(false);
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+    const [currentV8TaskId, setCurrentV8TaskId] = useState<string | null>(null);
     const [v8TaskLogs, setV8TaskLogs] = useState<{ log_level: string; message: string; created_at: string }[]>([]);
     const [v8TaskProgress, setV8TaskProgress] = useState(0);
-    const [v8TaskStatus, setV8TaskStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
+    const [v8TaskStatus, setV8TaskStatus] = useState<AdminV8TaskStatus>('idle');
+    const [v8TaskMessage, setV8TaskMessage] = useState('');
+    const [cancelRequestInFlight, setCancelRequestInFlight] = useState(false);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -1464,6 +1493,9 @@ const AIMaterialsAdmin = () => {
 
     const isTablet = windowWidth <= 1024;
     const isMobile = windowWidth <= 768;
+    const isV8TaskActive = v8TaskStatus === 'pending' || v8TaskStatus === 'running' || v8TaskStatus === 'cancelling';
+    const canCancelV8Task = !!currentV8TaskId && (v8TaskStatus === 'pending' || v8TaskStatus === 'running' || v8TaskStatus === 'cancelling');
+    const showV8TaskPanel = !!currentV8TaskId || v8TaskStatus !== 'idle' || v8TaskLogs.length > 0;
 
     const fetchSubjects = async () => {
         setLoadingSubjects(true);
@@ -1485,6 +1517,123 @@ const AIMaterialsAdmin = () => {
             fetchSubjects(); // Load subjects for V8 content browser (as fallback)
         }
     }, [activeTab]);
+
+    useEffect(() => {
+        let mounted = true;
+
+        const recoverActiveTask = async () => {
+            if (typeof window === 'undefined') return;
+
+            const storedTaskId = window.localStorage.getItem(V8_ACTIVE_TASK_STORAGE_KEY);
+            if (storedTaskId) {
+                if (mounted) {
+                    setCurrentV8TaskId(storedTaskId);
+                }
+                return;
+            }
+
+            try {
+                const tasksData = await serviceFetch(
+                    'aimaterials',
+                    '/api/admin/v8/tasks?only_active=true&task_type=full_ingestion&limit=1'
+                );
+                const latestTask = Array.isArray(tasksData?.tasks) && tasksData.tasks.length > 0
+                    ? tasksData.tasks[0]
+                    : null;
+
+                if (!mounted || !latestTask?.task_id) return;
+
+                setCurrentV8TaskId(latestTask.task_id);
+                setV8TaskProgress(Number(latestTask.progress || 0));
+                setV8TaskStatus(normalizeV8TaskStatus(latestTask.status));
+                setV8TaskMessage(latestTask.message || '');
+                window.localStorage.setItem(V8_ACTIVE_TASK_STORAGE_KEY, latestTask.task_id);
+            } catch (err) {
+                console.error('Error recovering active V8 task', err);
+            }
+        };
+
+        recoverActiveTask();
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!currentV8TaskId) return;
+
+        let mounted = true;
+        let consecutivePollErrors = 0;
+        let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+        const stopPolling = () => {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        };
+
+        const pollTask = async () => {
+            try {
+                const taskData = await serviceFetch('aimaterials', `/api/admin/v8/tasks/${currentV8TaskId}`);
+                if (!mounted) return;
+
+                consecutivePollErrors = 0;
+
+                const taskStatus = normalizeV8TaskStatus(taskData.status);
+                const taskProgress = Number(taskData.progress || 0);
+                const taskMessage = taskData.message || '';
+
+                setV8TaskStatus(taskStatus);
+                setV8TaskProgress(taskProgress);
+                setV8TaskMessage(taskMessage);
+                if (taskData.logs) {
+                    setV8TaskLogs(taskData.logs);
+                }
+
+                const activeTask = taskStatus === 'pending' || taskStatus === 'running' || taskStatus === 'cancelling';
+                setUploading(activeTask);
+
+                if (taskStatus === 'pending') {
+                    setStatusMessage(`⏳ V8 ingestion queued... ${taskMessage}`.trim());
+                } else if (taskStatus === 'running') {
+                    setStatusMessage(`⚙️ V8 Processing: ${taskProgress}% — ${taskMessage}`.trim());
+                } else if (taskStatus === 'cancelling') {
+                    setStatusMessage('🛑 Cancellation requested. Waiting for current step to stop...');
+                } else if (taskStatus === 'completed') {
+                    setStatusMessage(`✅ V8 ingestion complete! ${taskMessage}`.trim());
+                    setTimeout(() => setActiveTab('v8'), 1000);
+                } else if (taskStatus === 'failed') {
+                    setStatusMessage(`❌ V8 ingestion failed: ${taskData.error || taskMessage || 'Unknown error'}`);
+                } else if (taskStatus === 'cancelled') {
+                    setStatusMessage('🛑 V8 ingestion cancelled.');
+                }
+
+                if (!activeTask) {
+                    if (typeof window !== 'undefined') {
+                        window.localStorage.removeItem(V8_ACTIVE_TASK_STORAGE_KEY);
+                    }
+                    stopPolling();
+                }
+            } catch (pollErr) {
+                if (!mounted) return;
+
+                console.error('Error polling V8 task', pollErr);
+                consecutivePollErrors += 1;
+                if (consecutivePollErrors >= 3) {
+                    setStatusMessage('⚠️ Temporary connection issue while polling V8 task. Processing may still be running.');
+                }
+            }
+        };
+
+        pollTask();
+        pollInterval = setInterval(pollTask, 3000);
+
+        return () => {
+            mounted = false;
+            stopPolling();
+        };
+    }, [currentV8TaskId]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -1521,10 +1670,15 @@ const AIMaterialsAdmin = () => {
 
             // IMPORTANT: user-selected tree/manual values must take precedence.
             // Suggestions from upload/PDF conversion are only fallbacks.
-            const normalizedSubject = subjectName.trim();
-            const normalizedSyllabus = syllabus.trim();
+            const treeSelectedSubject = (selectedBoard || selectedSubject || '').trim();
+            const treeSelectedSyllabus = (selectedLevel || '').trim();
+            const normalizedSubject = (subjectName || treeSelectedSubject).trim();
+            const normalizedSyllabus = (syllabus || treeSelectedSyllabus).trim();
             const extractedSubject = normalizedSubject || (uploadRes.suggested_subject || '').trim();
             const extractedSyllabus = normalizedSyllabus || (uploadRes.suggested_syllabus || '').trim();
+            const targetSubjectId = extractedSubject
+                ? `${sanitizeIngestCode(extractedSyllabus || 'IGCSE')}_${sanitizeIngestCode(extractedSubject)}`
+                : undefined;
 
             // Check for PDF conversion errors
             if (uploadRes.error) {
@@ -1562,6 +1716,7 @@ const AIMaterialsAdmin = () => {
                     filename: uploadRes.main_markdown || mdFile?.name,
                     subject_name: extractedSubject,
                     syllabus: extractedSyllabus || 'IGCSE',
+                    target_subject_id: targetSubjectId,
                 })
             });
 
@@ -1569,58 +1724,14 @@ const AIMaterialsAdmin = () => {
             setFiles([]); // Clear after success
             setV8TaskLogs([]);
             setV8TaskProgress(0);
-            setV8TaskStatus('running');
+            setV8TaskStatus('pending');
+            setV8TaskMessage('Task created');
 
-            // Poll V8 task progress
             if (ingestRes.task_id) {
-                let consecutivePollErrors = 0;
-                let safetyTimeout: ReturnType<typeof setTimeout> | null = null;
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const taskData = await serviceFetch('aimaterials', `/api/admin/v8/tasks/${ingestRes.task_id}`);
-                        consecutivePollErrors = 0;
-                        const progress = taskData.progress || 0;
-                        const status = taskData.status;
-
-                        // Update logs and progress
-                        setV8TaskProgress(progress);
-                        if (taskData.logs) {
-                            setV8TaskLogs(taskData.logs);
-                        }
-
-                        if (status === 'running') {
-                            setV8TaskStatus('running');
-                            setStatusMessage(`⚙️ V8 Processing: ${progress}% — ${taskData.message || ''}`);
-                        } else if (status === 'completed') {
-                            clearInterval(pollInterval);
-                            if (safetyTimeout) clearTimeout(safetyTimeout);
-                            setV8TaskStatus('completed');
-                            setStatusMessage(`✅ V8 ingestion complete! ${taskData.message || ''}`);
-                            setUploading(false);
-                            // Auto-switch to V8 Content tab after a short delay
-                            setTimeout(() => setActiveTab('v8'), 2000);
-                        } else if (status === 'failed') {
-                            clearInterval(pollInterval);
-                            if (safetyTimeout) clearTimeout(safetyTimeout);
-                            setV8TaskStatus('failed');
-                            setStatusMessage(`❌ V8 ingestion failed: ${taskData.error || taskData.message || 'Unknown error'}`);
-                            setUploading(false);
-                        }
-                    } catch (pollErr) {
-                        console.error('Error polling V8 task', pollErr);
-                        consecutivePollErrors += 1;
-                        if (consecutivePollErrors >= 3) {
-                            setStatusMessage('⚠️ Temporary connection issue while polling V8 task. Processing may still be running.');
-                        }
-                    }
-                }, 3000);
-
-                // Safety timeout: stop polling after 30 minutes
-                safetyTimeout = setTimeout(() => {
-                    clearInterval(pollInterval);
-                    setUploading(false);
-                    setStatusMessage('⌛ V8 ingestion is taking longer than expected. You can check progress in the V8 tab shortly.');
-                }, 30 * 60 * 1000);
+                setCurrentV8TaskId(ingestRes.task_id);
+                if (typeof window !== 'undefined') {
+                    window.localStorage.setItem(V8_ACTIVE_TASK_STORAGE_KEY, ingestRes.task_id);
+                }
             } else {
                 setUploading(false);
             }
@@ -1660,6 +1771,38 @@ const AIMaterialsAdmin = () => {
             console.error('Error renaming subject', err);
             setStatusMessage(`Error: ${err.message}`);
         }
+    };
+
+    const handleCancelIngestion = async () => {
+        if (!canCancelV8Task || !currentV8TaskId) return;
+        if (!window.confirm('Cancel the currently running ingestion task?')) return;
+
+        setCancelRequestInFlight(true);
+        try {
+            await serviceFetch('aimaterials', `/api/admin/v8/tasks/${currentV8TaskId}/cancel`, {
+                method: 'POST'
+            });
+            setV8TaskStatus('cancelling');
+            setV8TaskMessage('Cancellation requested by user');
+            setStatusMessage('🛑 Cancellation requested. Waiting for current step to stop...');
+        } catch (err: any) {
+            console.error('Error cancelling V8 ingestion task', err);
+            setStatusMessage(`❌ Failed to cancel ingestion: ${err.message || 'Unknown error'}`);
+        } finally {
+            setCancelRequestInFlight(false);
+        }
+    };
+
+    const handleDismissTaskPanel = () => {
+        if (isV8TaskActive) return;
+        if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(V8_ACTIVE_TASK_STORAGE_KEY);
+        }
+        setCurrentV8TaskId(null);
+        setV8TaskLogs([]);
+        setV8TaskProgress(0);
+        setV8TaskStatus('idle');
+        setV8TaskMessage('');
     };
 
     return (
@@ -1748,6 +1891,152 @@ const AIMaterialsAdmin = () => {
                         </button>
                     </div>
 
+                    {showV8TaskPanel && (
+                        <div style={{
+                            background: v8TaskStatus === 'failed' ? '#fef2f2' :
+                                v8TaskStatus === 'completed' ? '#f0fdf4' :
+                                    v8TaskStatus === 'cancelled' ? '#fff7ed' : '#f8fafc',
+                            borderRadius: '16px',
+                            border: `1px solid ${v8TaskStatus === 'failed' ? '#fecaca' :
+                                v8TaskStatus === 'completed' ? '#bbf7d0' :
+                                    v8TaskStatus === 'cancelled' ? '#fed7aa' : '#e2e8f0'}`,
+                            overflow: 'hidden',
+                        }}>
+                            <div style={{
+                                padding: '16px 20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                borderBottom: '1px solid #f1f5f9',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                                    {(v8TaskStatus === 'pending' || v8TaskStatus === 'running') && <RefreshCw size={18} className="animate-spin" color="#3b82f6" />}
+                                    {v8TaskStatus === 'cancelling' && <AlertTriangle size={18} color="#ea580c" />}
+                                    {v8TaskStatus === 'completed' && <CheckCircle2 size={18} color="#22c55e" />}
+                                    {v8TaskStatus === 'failed' && <XCircle size={18} color="#ef4444" />}
+                                    {v8TaskStatus === 'cancelled' && <Clock size={18} color="#ea580c" />}
+                                    {v8TaskStatus === 'idle' && <Clock size={18} color="#64748b" />}
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>
+                                            {v8TaskStatus === 'pending' && `V8 Ingestion Queued — ${v8TaskProgress}%`}
+                                            {v8TaskStatus === 'running' && `V8 Processing — ${v8TaskProgress}%`}
+                                            {v8TaskStatus === 'cancelling' && `V8 Processing — Cancelling (${v8TaskProgress}%)`}
+                                            {v8TaskStatus === 'completed' && 'V8 Ingestion Complete'}
+                                            {v8TaskStatus === 'failed' && 'V8 Ingestion Failed'}
+                                            {v8TaskStatus === 'cancelled' && 'V8 Ingestion Cancelled'}
+                                            {v8TaskStatus === 'idle' && 'V8 Ingestion Monitor'}
+                                        </div>
+                                        {currentV8TaskId && (
+                                            <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
+                                                Task: {currentV8TaskId}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {canCancelV8Task && (
+                                        <button
+                                            onClick={handleCancelIngestion}
+                                            disabled={cancelRequestInFlight || v8TaskStatus === 'cancelling'}
+                                            style={{
+                                                padding: '8px 12px',
+                                                borderRadius: '10px',
+                                                border: '1px solid #fdba74',
+                                                background: '#fff7ed',
+                                                color: '#9a3412',
+                                                cursor: cancelRequestInFlight || v8TaskStatus === 'cancelling' ? 'not-allowed' : 'pointer',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 700,
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '6px'
+                                            }}
+                                        >
+                                            {(cancelRequestInFlight || v8TaskStatus === 'cancelling') ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                                            {v8TaskStatus === 'cancelling' ? 'Cancelling...' : 'Cancel Ingestion'}
+                                        </button>
+                                    )}
+                                    {!isV8TaskActive && (
+                                        <button
+                                            onClick={handleDismissTaskPanel}
+                                            style={{
+                                                background: 'transparent',
+                                                border: 'none',
+                                                color: '#64748b',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center'
+                                            }}
+                                            title="Dismiss"
+                                        >
+                                            <XIcon size={16} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {isV8TaskActive && (
+                                <div style={{ height: '4px', background: '#e2e8f0' }}>
+                                    <div style={{
+                                        height: '100%',
+                                        width: `${Math.max(0, Math.min(100, v8TaskProgress))}%`,
+                                        background: v8TaskStatus === 'cancelling'
+                                            ? 'linear-gradient(90deg, #f97316, #fb923c)'
+                                            : 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                                        transition: 'width 0.5s ease',
+                                    }} />
+                                </div>
+                            )}
+
+                            {v8TaskMessage && (
+                                <div style={{
+                                    padding: '10px 16px',
+                                    borderBottom: v8TaskLogs.length > 0 ? '1px solid #e2e8f0' : 'none',
+                                    fontSize: '0.85rem',
+                                    color: '#334155'
+                                }}>
+                                    {v8TaskMessage}
+                                </div>
+                            )}
+
+                            {v8TaskLogs.length > 0 && (
+                                <div style={{
+                                    padding: '12px 16px',
+                                    maxHeight: '260px',
+                                    overflowY: 'auto',
+                                    background: '#1e293b',
+                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                                    fontSize: '0.78rem',
+                                    lineHeight: '1.6',
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#64748b' }}>
+                                        <Terminal size={14} />
+                                        <span style={{ fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>Live Logs</span>
+                                    </div>
+                                    {v8TaskLogs.slice().reverse().map((log, idx) => (
+                                        <div
+                                            key={idx}
+                                            style={{
+                                                color: log.log_level === 'error' ? '#f87171' :
+                                                    log.log_level === 'warning' ? '#fbbf24' : '#94a3b8',
+                                                padding: '3px 0',
+                                                borderBottom: idx < v8TaskLogs.length - 1 ? '1px solid #334155' : 'none',
+                                            }}
+                                        >
+                                            <span style={{ color: '#475569', marginRight: '10px' }}>
+                                                {log.created_at ? new Date(log.created_at).toLocaleTimeString() : ''}
+                                            </span>
+                                            {log.message}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {activeTab === 'uploader' ? (
                         <>
                             {/* Upload & Ingest Section */}
@@ -1806,7 +2095,8 @@ const AIMaterialsAdmin = () => {
                                                                 // No board variants (IB, HKDSE) â€” use subject name directly
                                                                 setSubjectName(e.target.value);
                                                             } else {
-                                                                setSubjectName('');
+                                                                // Keep subject selection as fallback even before board is chosen
+                                                                setSubjectName(e.target.value);
                                                             }
                                                         }
                                                     }}
@@ -1968,82 +2258,6 @@ const AIMaterialsAdmin = () => {
                                         )}
                                     </button>
                                 </div>
-
-                                {/* Live V8 Task Progress & Logs */}
-                                {v8TaskStatus !== 'idle' && (
-                                    <div style={{
-                                        marginTop: '20px',
-                                        background: v8TaskStatus === 'failed' ? '#fef2f2' :
-                                            v8TaskStatus === 'completed' ? '#f0fdf4' : '#f8fafc',
-                                        borderRadius: '16px',
-                                        border: `1px solid ${v8TaskStatus === 'failed' ? '#fecaca' : v8TaskStatus === 'completed' ? '#bbf7d0' : '#e2e8f0'}`,
-                                        overflow: 'hidden',
-                                    }}>
-                                        {/* Progress Header */}
-                                        <div style={{
-                                            padding: '16px 20px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '12px',
-                                            borderBottom: '1px solid #f1f5f9',
-                                        }}>
-                                            {v8TaskStatus === 'running' && <RefreshCw size={18} className="animate-spin" color="#3b82f6" />}
-                                            {v8TaskStatus === 'completed' && <CheckCircle2 size={18} color="#22c55e" />}
-                                            {v8TaskStatus === 'failed' && <XCircle size={18} color="#ef4444" />}
-                                            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>
-                                                {v8TaskStatus === 'running' ? `V8 Processing — ${v8TaskProgress}%` :
-                                                    v8TaskStatus === 'completed' ? 'V8 Ingestion Complete!' :
-                                                        'V8 Ingestion Failed'}
-                                            </span>
-                                        </div>
-
-                                        {/* Progress Bar */}
-                                        {v8TaskStatus === 'running' && (
-                                            <div style={{ height: '4px', background: '#e2e8f0' }}>
-                                                <div style={{
-                                                    height: '100%',
-                                                    width: `${v8TaskProgress}%`,
-                                                    background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-                                                    transition: 'width 0.5s ease',
-                                                }} />
-                                            </div>
-                                        )}
-
-                                        {/* Log Panel */}
-                                        {v8TaskLogs.length > 0 && (
-                                            <div style={{
-                                                padding: '12px 16px',
-                                                maxHeight: '300px',
-                                                overflowY: 'auto',
-                                                background: '#1e293b',
-                                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                                                fontSize: '0.78rem',
-                                                lineHeight: '1.6',
-                                            }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#64748b' }}>
-                                                    <Terminal size={14} />
-                                                    <span style={{ fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>Live Logs</span>
-                                                </div>
-                                                {v8TaskLogs.slice().reverse().map((log, idx) => (
-                                                    <div
-                                                        key={idx}
-                                                        style={{
-                                                            color: log.log_level === 'error' ? '#f87171' :
-                                                                log.log_level === 'warning' ? '#fbbf24' : '#94a3b8',
-                                                            padding: '3px 0',
-                                                            borderBottom: idx < v8TaskLogs.length - 1 ? '1px solid #334155' : 'none',
-                                                        }}
-                                                    >
-                                                        <span style={{ color: '#475569', marginRight: '10px' }}>
-                                                            {log.created_at ? new Date(log.created_at).toLocaleTimeString() : ''}
-                                                        </span>
-                                                        {log.message}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
                             </div>
 
                         </>

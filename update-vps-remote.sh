@@ -73,20 +73,24 @@ fi
 detect_changes() {
     local service=$1
     local path_prefix="microservices/sugarclass-$service/"
+    local frontend_path_pattern="^$path_prefix(frontend/|app/frontend/)"
+    local backend_path_pattern="^$path_prefix(app/|backend/|scripts/|Dockerfile|Dockerfile.backend|\.env|requirements\.txt|start\.py)"
 
     # Backend changes:
     # 1. Any file in service root (except frontend/)
     # 2. Specifically Dockerfile, Dockerfile.backend, requirements.txt, .env
     # 3. Any file in app/ or backend/ (if they exist)
-    if echo "$CHANGED_FILES" | grep -qE "^$path_prefix(app/|backend/|scripts/|Dockerfile|\.env|requirements\.txt|start\.py)"; then
+    local backend_changed_files
+    backend_changed_files=$(echo "$CHANGED_FILES" | grep -E "$backend_path_pattern" | grep -vE "$frontend_path_pattern" || true)
+    if [ -n "$backend_changed_files" ]; then
         BACKEND_CHANGED[$service]=true
         echo "  ✓ $service-backend changed"
     fi
 
     # Frontend changes:
     # 1. Any file in frontend/ subdirectory
-    # 2. Dockerfile if inside frontend/
-    if echo "$CHANGED_FILES" | grep -qE "^$path_prefix(frontend/)"; then
+    # 2. AI Materials style frontend path under app/frontend/
+    if echo "$CHANGED_FILES" | grep -qE "$frontend_path_pattern"; then
         FRONTEND_CHANGED[$service]=true
         echo "  ✓ $service-frontend changed"
     fi

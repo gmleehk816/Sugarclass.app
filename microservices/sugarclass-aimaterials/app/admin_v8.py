@@ -83,6 +83,7 @@ class V8IngestRequest(BaseModel):
     filename: str
     subject_name: str
     syllabus: str = "IGCSE"
+    target_subject_id: Optional[str] = None
 
 
 class ConceptUpdateRequest(BaseModel):
@@ -596,6 +597,8 @@ async def generate_v8_content(
     """Generate V8 content for a subtopic (background task)"""
 
     # Check if subtopic exists
+    ensure_v8_tables()
+    ensure_v8_task_columns()
     conn = get_db_connection()
     subtopic = conn.execute("SELECT * FROM subtopics WHERE id = ?", (subtopic_id,)).fetchone()
     conn.close()
@@ -645,9 +648,43 @@ async def generate_v8_content(
     }
 
 
+@router.get("/tasks")
+async def list_tasks(
+    only_active: bool = Query(False),
+    task_type: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=200),
+):
+    """List V8 background tasks."""
+    ensure_v8_tables()
+    ensure_v8_task_columns()
+    conn = get_db_connection()
+    try:
+        clauses = []
+        params: List[Any] = []
+        if only_active:
+            clauses.append("status IN ('pending', 'running', 'cancelling')")
+        if task_type:
+            clauses.append("task_type = ?")
+            params.append(task_type)
+
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = conn.execute(f"""
+            SELECT task_id, subtopic_id, task_type, status, progress, message, error, started_at, completed_at, created_at
+            FROM v8_processing_tasks
+            {where_sql}
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (*params, limit)).fetchall()
+        return {"tasks": [dict(r) for r in rows]}
+    finally:
+        conn.close()
+
+
 @router.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
     """Get background task status"""
+    ensure_v8_tables()
+    ensure_v8_task_columns()
     conn = get_db_connection()
 
     task = conn.execute("""
@@ -675,10 +712,48 @@ async def get_task_status(task_id: str):
         "progress": task['progress'],
         "message": task['message'],
         "error": task['error'],
+        "task_type": task['task_type'],
+        "cancel_requested": bool(task['cancel_requested']) if 'cancel_requested' in task.keys() else False,
         "started_at": task['started_at'],
         "completed_at": task['completed_at'],
         "logs": [dict(row) for row in logs]
     }
+
+
+@router.post("/tasks/{task_id}/cancel")
+async def cancel_task(task_id: str):
+    """Request cancellation for a running/pending V8 task."""
+    ensure_v8_tables()
+    ensure_v8_task_columns()
+    conn = get_db_connection()
+    try:
+        task = conn.execute("""
+            SELECT task_id, status, task_type
+            FROM v8_processing_tasks
+            WHERE task_id = ?
+        """, (task_id,)).fetchone()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        current_status = (task["status"] or "").lower()
+        if current_status in ("completed", "failed", "cancelled"):
+            return {"task_id": task_id, "status": current_status, "message": "Task already finished"}
+
+        conn.execute("""
+            UPDATE v8_processing_tasks
+            SET cancel_requested = 1,
+                status = CASE WHEN status IN ('pending', 'running') THEN 'cancelling' ELSE status END,
+                message = 'Cancellation requested by user'
+            WHERE task_id = ?
+        """, (task_id,))
+        conn.execute("""
+            INSERT INTO v8_task_logs (task_id, log_level, message)
+            VALUES (?, 'warning', ?)
+        """, (task_id, "Cancellation requested by user"))
+        conn.commit()
+        return {"task_id": task_id, "status": "cancelling", "message": "Cancellation requested"}
+    finally:
+        conn.close()
 
 
 # ============================================================================
@@ -927,10 +1002,22 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
             """, (status, progress, message, error, task_id))
             conn.commit()
 
-            if status in ['completed', 'failed']:
+            if status in ['completed', 'failed', 'cancelled']:
                 conn.execute("""
-                    UPDATE v8_processing_tasks SET completed_at = CURRENT_TIMESTAMP WHERE task_id = ?
+                    UPDATE v8_processing_tasks
+                    SET completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+                    WHERE task_id = ?
                 """, (task_id,))
+                if status == 'cancelled':
+                    try:
+                        conn.execute("""
+                            UPDATE v8_processing_tasks
+                            SET cancelled_at = COALESCE(cancelled_at, CURRENT_TIMESTAMP)
+                            WHERE task_id = ?
+                        """, (task_id,))
+                    except Exception:
+                        # Older schemas may not have cancelled_at yet.
+                        pass
                 conn.commit()
         except Exception as e:
             print(f"[V8][{task_id}] update_task failed: {e}")
@@ -953,16 +1040,63 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
             if conn:
                 conn.close()
 
+    class TaskCancelledError(Exception):
+        pass
+
+    def is_cancel_requested() -> bool:
+        conn = None
+        try:
+            conn = get_db_connection()
+            try:
+                row = conn.execute("""
+                    SELECT status, cancel_requested
+                    FROM v8_processing_tasks
+                    WHERE task_id = ?
+                """, (task_id,)).fetchone()
+            except Exception:
+                row = conn.execute("""
+                    SELECT status
+                    FROM v8_processing_tasks
+                    WHERE task_id = ?
+                """, (task_id,)).fetchone()
+
+            if not row:
+                return False
+
+            status = (row['status'] or '').lower()
+            cancel_requested = False
+            if 'cancel_requested' in row.keys():
+                cancel_requested = bool(row['cancel_requested'])
+
+            return cancel_requested or status in ('cancelling', 'cancelled')
+        except Exception as e:
+            print(f"[V8][{task_id}] is_cancel_requested failed: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def abort_if_cancelled(progress: Optional[int] = None, phase: str = ""):
+        if not is_cancel_requested():
+            return
+        phase_suffix = f" during {phase}" if phase else ""
+        add_log('warning', f"Cancellation requested{phase_suffix}. Stopping task.")
+        update_task('cancelled', progress if progress is not None else 0, 'Task cancelled by user')
+        raise TaskCancelledError("Task cancelled by user")
+
     processor = None
+    hierarchy_conn = None
     try:
         # Import here to avoid circular imports
         from .processors.content_processor_v8 import V8Processor, GeminiClient
 
         add_log('info', f"Starting V8 generation for subtopic {subtopic_id}")
         update_task('running', 10, 'Initializing...')
+        abort_if_cancelled(10, 'initialization')
 
         # Load subtopic data
         conn = get_db_connection()
+        hierarchy_conn = conn
         try:
             subtopic = conn.execute("""
                 SELECT s.*, t.name AS topic_name
@@ -1005,6 +1139,7 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
 
         add_log('info', f"Loaded markdown: {len(markdown_content)} chars")
         update_task('running', 20, 'Analyzing structure...')
+        abort_if_cancelled(20, 'structure analysis')
 
         generate_svgs = options.get('generate_svgs', True)
         generate_quiz = options.get('generate_quiz', True)
@@ -1020,6 +1155,7 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
             raise Exception("LLM API key not configured. Set LLM_API_KEY or GEMINI_API_KEY environment variable.")
 
         # Analyze structure
+        abort_if_cancelled(20, 'structure analysis')
         concepts = processor.gemini.analyze_structure(markdown_content)
 
         if not concepts:
@@ -1037,6 +1173,7 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
         conn.execute("DELETE FROM v8_concepts WHERE subtopic_id = ?", (subtopic_id,))
         conn.commit()
         conn.close()
+        hierarchy_conn = None
 
         from .processors.content_processor_v8 import ConceptData
         for i, concept_data in enumerate(concepts):
@@ -1058,6 +1195,9 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
 
         # Generate SVGs and bullets
         for i, concept in enumerate(saved_concepts):
+            concept_progress_start = 40 + int(40 * i / concept_total)
+            abort_if_cancelled(concept_progress_start, f"concept {i+1}/{len(saved_concepts)}")
+
             if generate_svgs:
                 add_log('info', f"Generating SVG for: {concept['title']}")
                 svg = processor.gemini.generate_svg(concept['title'], concept['description'])
@@ -1070,6 +1210,7 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
             else:
                 add_log('info', f"Skipping SVG generation for: {concept['title']}")
 
+            abort_if_cancelled(concept_progress_start, f"bullets for concept {i+1}/{len(saved_concepts)}")
             bullets = processor.gemini.generate_bullets(
                 concept['title'],
                 concept['description'],
@@ -1086,6 +1227,7 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
         if generate_quiz:
             add_log('info', "Generating quiz...")
             update_task('running', 85, 'Generating quiz...')
+            abort_if_cancelled(85, 'quiz generation')
 
             conn = get_db_connection()
             conn.execute("DELETE FROM v8_quiz_questions WHERE subtopic_id = ?", (subtopic_id,))
@@ -1102,6 +1244,7 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
         if generate_flashcards:
             add_log('info', "Generating flashcards...")
             update_task('running', 90, 'Generating flashcards...')
+            abort_if_cancelled(90, 'flashcard generation')
 
             conn = get_db_connection()
             conn.execute("DELETE FROM v8_flashcards WHERE subtopic_id = ?", (subtopic_id,))
@@ -1115,11 +1258,15 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
                 add_log('info', f"✓ Generated {len(flashcards['cards'])} flashcards")
 
         # Mark as processed
+        abort_if_cancelled(95, 'finalization')
         processor.db.mark_subtopic_processed(subtopic_id)
 
         add_log('info', "V8 generation complete!")
         update_task('completed', 100, 'V8 content generation complete!')
 
+    except TaskCancelledError:
+        # Cancellation already recorded via abort_if_cancelled.
+        pass
     except Exception as e:
         import traceback
         error_msg = str(e)
@@ -1129,6 +1276,11 @@ def run_v8_generation_task(task_id: str, subtopic_id: str, options: Dict):
     finally:
         if processor:
             processor.close()
+        if hierarchy_conn:
+            try:
+                hierarchy_conn.close()
+            except Exception:
+                pass
 
 
 def run_svg_regeneration(task_id: str, concept_id: int, concept: Dict, custom_prompt: Optional[str] = None):
@@ -1243,12 +1395,34 @@ def ensure_v8_tables():
         logger = logging.getLogger("uvicorn")
         logger.error(f"[V8 Admin] Error ensuring V8 tables: {e}")
 
+
+def ensure_v8_task_columns():
+    """Ensure task control columns exist on v8_processing_tasks."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cols = conn.execute("PRAGMA table_info(v8_processing_tasks)").fetchall()
+        col_names = {row["name"] for row in cols}
+        if "cancel_requested" not in col_names:
+            conn.execute("ALTER TABLE v8_processing_tasks ADD COLUMN cancel_requested INTEGER DEFAULT 0")
+        if "cancelled_at" not in col_names:
+            conn.execute("ALTER TABLE v8_processing_tasks ADD COLUMN cancelled_at TIMESTAMP")
+        conn.commit()
+    except Exception as e:
+        print(f"[V8] ensure_v8_task_columns failed: {e}")
+        if conn:
+            conn.rollback()
+    finally:
+        if conn:
+            conn.close()
+
 @router.post("/ingest")
 async def v8_ingest(request: V8IngestRequest, background_tasks: BackgroundTasks):
     """Full V8 ingestion: markdown → split → create hierarchy → generate V8 content for ALL subtopics"""
     
     # Defensive check for tables
     ensure_v8_tables()
+    ensure_v8_task_columns()
 
     subject_name = (request.subject_name or "").strip()
     syllabus = (request.syllabus or "").strip() or "IGCSE"
@@ -1272,13 +1446,14 @@ async def v8_ingest(request: V8IngestRequest, background_tasks: BackgroundTasks)
         task_id,
         str(file_path),
         subject_name,
-        syllabus
+        syllabus,
+        request.target_subject_id
     )
 
     return {"task_id": task_id, "status": "pending", "message": "V8 full ingestion started"}
 
 
-def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, syllabus: str):
+def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, syllabus: str, target_subject_id: Optional[str] = None):
     """Background task: full V8 pipeline — parse markdown, create hierarchy, generate all V8 content"""
 
     def update_task(status: str, progress: int, message: str, error: str = None):
@@ -1291,8 +1466,22 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 WHERE task_id = ?
             """, (status, progress, message, error, task_id))
             conn.commit()
-            if status in ['completed', 'failed']:
-                conn.execute("UPDATE v8_processing_tasks SET completed_at = CURRENT_TIMESTAMP WHERE task_id = ?", (task_id,))
+            if status in ['completed', 'failed', 'cancelled']:
+                conn.execute("""
+                    UPDATE v8_processing_tasks
+                    SET completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+                    WHERE task_id = ?
+                """, (task_id,))
+                if status == 'cancelled':
+                    try:
+                        conn.execute("""
+                            UPDATE v8_processing_tasks
+                            SET cancelled_at = COALESCE(cancelled_at, CURRENT_TIMESTAMP)
+                            WHERE task_id = ?
+                        """, (task_id,))
+                    except Exception:
+                        # Older schemas may not have cancelled_at yet.
+                        pass
                 conn.commit()
         except Exception as e:
             print(f"[V8][{task_id}] update_task failed: {e}")
@@ -1315,12 +1504,58 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             if conn:
                 conn.close()
 
+    class TaskCancelledError(Exception):
+        pass
+
+    def is_cancel_requested() -> bool:
+        conn = None
+        try:
+            conn = get_db_connection()
+            try:
+                row = conn.execute("""
+                    SELECT status, cancel_requested
+                    FROM v8_processing_tasks
+                    WHERE task_id = ?
+                """, (task_id,)).fetchone()
+            except Exception:
+                row = conn.execute("""
+                    SELECT status
+                    FROM v8_processing_tasks
+                    WHERE task_id = ?
+                """, (task_id,)).fetchone()
+
+            if not row:
+                return False
+
+            status = (row['status'] or '').lower()
+            cancel_requested = False
+            if 'cancel_requested' in row.keys():
+                cancel_requested = bool(row['cancel_requested'])
+
+            return cancel_requested or status in ('cancelling', 'cancelled')
+        except Exception as e:
+            print(f"[V8][{task_id}] is_cancel_requested failed: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def abort_if_cancelled(progress: Optional[int] = None, phase: str = ""):
+        if not is_cancel_requested():
+            return
+        phase_suffix = f" during {phase}" if phase else ""
+        add_log('warning', f"Cancellation requested{phase_suffix}. Stopping task.")
+        update_task('cancelled', progress if progress is not None else 0, 'Task cancelled by user')
+        raise TaskCancelledError("Task cancelled by user")
+
     processor = None
+    hierarchy_conn = None
     try:
         from .processors.content_processor_v8 import ContentSplitter, V8Processor, GeminiClient, ConceptData
 
         add_log('info', f"Starting V8 full ingestion for: {subject_name}")
         update_task('running', 5, 'Reading markdown file...')
+        abort_if_cancelled(5, 'startup')
 
         # --- Step 1: Read markdown ---
         md_path = Path(file_path)
@@ -1329,6 +1564,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
 
         add_log('info', f"Read {len(markdown_content)} chars from {md_path.name}")
         update_task('running', 10, 'Splitting content into chapters and subtopics...')
+        abort_if_cancelled(10, 'content split')
 
         # --- Step 2: Split into chapters and subtopics ---
         splitter = ContentSplitter(markdown_content)
@@ -1349,9 +1585,11 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             raise Exception("No subtopics detected in the markdown file. Check the heading format.")
 
         update_task('running', 15, f'Creating hierarchy: {len(chapters)} topics, {total_subtopics} subtopics...')
+        abort_if_cancelled(15, 'hierarchy creation')
 
         # --- Step 3: Create/find syllabus and subject ---
         conn = get_db_connection()
+        hierarchy_conn = conn
 
         # Detect schema type: old schema uses TEXT PRIMARY KEY, V8 uses INTEGER AUTOINCREMENT
         col_info = conn.execute("PRAGMA table_info(syllabuses)").fetchall()
@@ -1363,7 +1601,15 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
 
         syllabus_code = _sanitize_code(syllabus)
         subject_code = _sanitize_code(subject_name)
-        subject_text_id = f"{syllabus_code}_{subject_code}"
+        requested_subject_id = (target_subject_id or "").strip().lower()
+        requested_subject_id = re.sub(r'[^a-z0-9_]', '', requested_subject_id)
+        if requested_subject_id:
+            if requested_subject_id.startswith(f"{syllabus_code}_"):
+                subject_text_id = requested_subject_id
+            else:
+                subject_text_id = f"{syllabus_code}_{requested_subject_id}"
+        else:
+            subject_text_id = f"{syllabus_code}_{subject_code}"
 
         if is_v8_schema:
             # V8 schema: INTEGER AUTOINCREMENT ids
@@ -1400,6 +1646,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
         subtopic_db_ids = []  # (db_id, markdown_content) pairs for V8 generation
 
         for ch_idx, chapter in enumerate(chapters):
+            abort_if_cancelled(15, f"topic creation {ch_idx + 1}/{len(chapters)}")
             topic_code = f"T{ch_idx + 1}"
             topic_name = chapter['title']
 
@@ -1433,6 +1680,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             topic_db_id = topic_row['id']
 
             for st_idx, subtopic in enumerate(chapter['subtopics']):
+                abort_if_cancelled(15, f"subtopic mapping {ch_idx + 1}.{st_idx + 1}")
                 subtopic_text_id = (subtopic.get('num') or f"{ch_idx+1}.{st_idx+1}").strip()
                 subtopic_slug = subtopic.get('slug') or _sanitize_code(subtopic['title'])
                 subtopic_name = subtopic['title']
@@ -1497,9 +1745,11 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 subtopic_db_ids.append((st_db_id, subtopic_name, subtopic_content))
 
         conn.close()
+        hierarchy_conn = None
 
         add_log('info', f"Created {len(chapters)} topics, {len(subtopic_db_ids)} subtopics in database")
         update_task('running', 20, f'Starting V8 generation for {len(subtopic_db_ids)} subtopics...')
+        abort_if_cancelled(20, 'generation bootstrap')
 
         # --- Step 5: Generate V8 content for each subtopic ---
         processor = V8Processor()
@@ -1539,6 +1789,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
 
             add_log('info', f"[{i+1}/{len(subtopic_db_ids)}] Processing: {st_name}")
             update_task('running', subtopic_progress_base, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Analyzing...')
+            abort_if_cancelled(subtopic_progress_base, f"{st_name} analysis")
 
             try:
                 # Use the content for this subtopic (or full markdown if content is too short)
@@ -1546,6 +1797,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 add_log('info', f"  Content length: {len(content_for_analysis)} chars")
 
                 # Analyze structure
+                abort_if_cancelled(subtopic_progress_base, f"{st_name} analyze_structure")
                 add_log('info', f"  Calling LLM: analyze_structure...")
                 concepts = processor.gemini.analyze_structure(content_for_analysis)
                 if not concepts:
@@ -1584,6 +1836,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                     concept_progress = concepts_phase_start + int(
                         (concepts_phase_end - concepts_phase_start) * ((ci + 1) / concept_count)
                     )
+                    abort_if_cancelled(concept_progress, f"{st_name} concept {ci+1}/{len(saved_concepts)}")
                     update_task(
                         'running',
                         concept_progress,
@@ -1609,6 +1862,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                         add_log('warning', f"    ✗ Bullets generation returned empty")
 
                 update_task('running', quiz_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating quiz...')
+                abort_if_cancelled(quiz_phase_progress, f"{st_name} quiz generation")
 
                 # Generate quiz
                 conn = get_db_connection()
@@ -1629,6 +1883,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                     add_log('warning', f"  ✗ Quiz generation returned empty")
 
                 update_task('running', flashcards_phase_progress, f'[{i+1}/{len(subtopic_db_ids)}] {st_name}: Generating flashcards...')
+                abort_if_cancelled(flashcards_phase_progress, f"{st_name} flashcard generation")
 
                 # Generate flashcards
                 conn = get_db_connection()
@@ -1649,10 +1904,13 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                     add_log('warning', f"  ✗ Flashcard generation returned empty")
 
                 # Mark as processed
+                abort_if_cancelled(subtopic_progress_end, f"{st_name} finalization")
                 processor.db.mark_subtopic_processed(st_db_id)
                 add_log('info', f"  ✓ Completed: {st_name}")
                 total_success += 1
 
+            except TaskCancelledError:
+                raise
             except Exception as e:
                 import traceback
                 add_log('error', f"  ✗ Failed: {st_name}: {str(e)}")
@@ -1674,6 +1932,9 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             add_log('info', f"V8 full ingestion complete! Processed {len(subtopic_db_ids)} subtopics.")
             update_task('completed', 100, f'V8 ingestion complete: {len(subtopic_db_ids)} subtopics processed')
 
+    except TaskCancelledError:
+        # Cancellation already recorded via abort_if_cancelled.
+        pass
     except Exception as e:
         import traceback
         error_msg = str(e)
@@ -1683,6 +1944,11 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
     finally:
         if processor:
             processor.close()
+        if hierarchy_conn:
+            try:
+                hierarchy_conn.close()
+            except Exception:
+                pass
 
 
 def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list) -> list:

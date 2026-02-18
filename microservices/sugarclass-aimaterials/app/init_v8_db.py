@@ -134,7 +134,9 @@ def migrate_to_v8():
             progress INTEGER DEFAULT 0,
             message TEXT,
             error TEXT,
+            cancel_requested INTEGER DEFAULT 0,
             started_at TIMESTAMP,
+            cancelled_at TIMESTAMP,
             completed_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (subtopic_id) REFERENCES subtopics(id) ON DELETE SET NULL

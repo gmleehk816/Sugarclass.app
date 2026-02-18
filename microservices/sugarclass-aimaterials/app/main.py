@@ -199,6 +199,31 @@ async def get_db_subject_topics(subject_id: str):
     finally:
         conn.close()
 
+@app.get("/api/db/subjects/{subject_id}/subtopics")
+async def get_db_subject_subtopics(subject_id: str):
+    """Get all subtopics for a subject across all topics."""
+    conn = get_db_connection()
+    try:
+        rows = conn.execute("""
+            SELECT
+                s.id,
+                s.id AS subtopic_id,
+                s.name,
+                s.topic_id,
+                s.order_num,
+                s.processed_at,
+                t.name AS topic_name,
+                t.order_num AS topic_order_num,
+                (SELECT COUNT(*) FROM v8_concepts WHERE subtopic_id = s.id) as v8_concepts_count
+            FROM subtopics s
+            JOIN topics t ON t.id = s.topic_id
+            WHERE t.subject_id = ?
+            ORDER BY t.order_num, s.order_num
+        """, (subject_id,)).fetchall()
+        return [row_to_dict(row) for row in rows]
+    finally:
+        conn.close()
+
 @app.get("/api/db/topics/{topic_id}/subtopics")
 async def get_db_subtopics(topic_id: str):
     """Get subtopics for a topic with V8 content status."""

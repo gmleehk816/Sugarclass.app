@@ -180,11 +180,13 @@ CREATE TABLE v8_processing_tasks (
     task_id TEXT NOT NULL UNIQUE,
     subtopic_id INTEGER,
     task_type TEXT NOT NULL,             -- 'full_generation', 'svg_only', 'quiz_only', etc.
-    status TEXT DEFAULT 'pending',       -- 'pending', 'running', 'completed', 'failed'
+    status TEXT DEFAULT 'pending',       -- 'pending', 'running', 'cancelling', 'completed', 'failed', 'cancelled'
     progress INTEGER DEFAULT 0,          -- 0-100
     message TEXT,
     error TEXT,
+    cancel_requested INTEGER DEFAULT 0,  -- 0/1 cooperative cancellation flag
     started_at TIMESTAMP,
+    cancelled_at TIMESTAMP,
     completed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (subtopic_id) REFERENCES subtopics(id) ON DELETE SET NULL

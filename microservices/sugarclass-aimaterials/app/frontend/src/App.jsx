@@ -42,6 +42,26 @@ function App() {
      HELPERS
   ------------------------------------------------------------------------- */
 
+  const mapDbSubtopics = (rows = [], fallbackTopicId = null) => {
+    const list = Array.isArray(rows) ? rows : [];
+    return list.map(s => ({
+      id: String(s.id),
+      full_id: s.id,
+      name: s.name,
+      topic_id: s.topic_id ?? fallbackTopicId,
+      topic_name: s.topic_name,
+      has_v8_content: (s.v8_concepts_count || 0) > 0 || s.processed_at !== null,
+      v8_concepts_count: s.v8_concepts_count || 0,
+      order_num: s.order_num,
+    }));
+  };
+
+  const loadAllSubtopicsForSubject = async (subjectId) => {
+    if (!subjectId) return [];
+    const res = await api.get(`/api/db/subjects/${subjectId}/subtopics`);
+    return mapDbSubtopics(res.data);
+  };
+
   /** Load topics for a subject */
   const loadTopicsForSubject = async (subjectId) => {
     if (!subjectId) return;
@@ -77,21 +97,22 @@ function App() {
       const topicId = String(topic.full_id || topic.id);
       const res = await api.get(`/api/db/topics/${topicId}/subtopics`);
 
-      const subtopicsData = Array.isArray(res.data) ? res.data : [];
-      const allSubtopics = subtopicsData.map(s => ({
-        id: String(s.id),
-        full_id: s.id,
-        name: s.name,
-        topic_id: topic.id,
-        has_v8_content: s.v8_concepts_count > 0 || s.processed_at !== null,
-        v8_concepts_count: s.v8_concepts_count || 0,
-      }));
+      const topicSubtopics = mapDbSubtopics(res.data, topic.id);
+      let sidebarSubtopics = topicSubtopics;
+      if (selectedSubject) {
+        const subjectSubtopics = await loadAllSubtopicsForSubject(selectedSubject);
+        if (subjectSubtopics.length > 0) {
+          sidebarSubtopics = subjectSubtopics;
+        }
+      }
 
-      setSubtopics(allSubtopics);
+      setSubtopics(sidebarSubtopics);
 
       // Auto-select first subtopic
-      if (allSubtopics.length > 0) {
-        setSelectedSubtopicId(allSubtopics[0].full_id);
+      if (topicSubtopics.length > 0) {
+        setSelectedSubtopicId(topicSubtopics[0].full_id);
+      } else if (sidebarSubtopics.length > 0) {
+        setSelectedSubtopicId(sidebarSubtopics[0].full_id);
       }
     } catch (err) {
       console.error('Error fetching subtopics', err);
@@ -122,21 +143,21 @@ function App() {
       const topicId = String(chapter.id);
       const res = await api.get(`/api/db/topics/${topicId}/subtopics`);
 
-      const subtopicsData = Array.isArray(res.data) ? res.data : [];
-      const subtopicsList = subtopicsData.map(s => ({
-        id: String(s.id),
-        full_id: s.id,
-        name: s.name,
-        topic_id: chapter.id,
-        has_v8_content: s.v8_concepts_count > 0 || s.processed_at !== null,
-        v8_concepts_count: s.v8_concepts_count || 0,
-        order_num: s.order_num,
-      }));
+      const chapterSubtopics = mapDbSubtopics(res.data, chapter.id);
+      let sidebarSubtopics = chapterSubtopics;
+      if (selectedSubject) {
+        const subjectSubtopics = await loadAllSubtopicsForSubject(selectedSubject);
+        if (subjectSubtopics.length > 0) {
+          sidebarSubtopics = subjectSubtopics;
+        }
+      }
 
-      setSubtopics(subtopicsList);
+      setSubtopics(sidebarSubtopics);
 
-      if (subtopicsList.length > 0) {
-        setSelectedSubtopicId(subtopicsList[0].full_id);
+      if (chapterSubtopics.length > 0) {
+        setSelectedSubtopicId(chapterSubtopics[0].full_id);
+      } else if (sidebarSubtopics.length > 0) {
+        setSelectedSubtopicId(sidebarSubtopics[0].full_id);
       }
 
       setSelectedTopic({

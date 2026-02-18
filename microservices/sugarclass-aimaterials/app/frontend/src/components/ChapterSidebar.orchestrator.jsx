@@ -215,7 +215,9 @@ function ChapterSidebar({
                     {subtopic.has_v8_content ? '✓' : '•'}
                   </span>
                   <span style={{ flex: 1, textAlign: 'left', fontSize: '0.9rem' }}>
-                    {subtopic.name}
+                    {selectedChapter && String(subtopic.topic_id) !== String(selectedChapter.id) && subtopic.topic_name
+                      ? `${subtopic.topic_name} · ${subtopic.name}`
+                      : subtopic.name}
                   </span>
                   {subtopic.v8_concepts_count > 0 && (
                     <span style={{
