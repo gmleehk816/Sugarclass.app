@@ -318,6 +318,20 @@ The main dashboard uses a **1:1:1 Balanced Grid**. Every column weight should be
   - Fixed real-life image generation by switching `GrokImageClient` to use the chat completions endpoint with `grok-imagine-1.0`.
   - Implemented robust `content_raw` deduplication using a check-then-upsert pattern for legacy DB compatibility.
 
+**Student V8 Sidebar Scope + Real-Life Tab Data Fix (2026-02-19)**:
+- **Files**:
+  - `microservices/sugarclass-aimaterials/app/frontend/src/App.jsx`
+  - `microservices/sugarclass-aimaterials/app/frontend/src/components/V8ContentViewer.jsx`
+  - `microservices/sugarclass-aimaterials/app/frontend/src/components/V8ContentView.jsx`
+  - `microservices/sugarclass-aimaterials/app/admin_v8.py`
+- **Key changes**:
+  - Fixed chapter navigation regression in student sidebar: selecting a chapter/topic now keeps the Subtopics tab scoped to that chapter/topic (removed subject-wide subtopic overwrite fallback in `App.jsx`).
+  - Fixed missing Real Life images in student view: public endpoint `GET /api/v8/subtopics/{subtopic_id}` now includes `reallife_images` from `v8_reallife_images`.
+  - Renamed student tab label from `Learn` to `Learning objective` in V8 viewer components for UI copy consistency.
+- **Admin DB delete caveat (diagnosed this session)**:
+  - Database tab delete may fail with `int_parsing` when subject IDs are text IDs (e.g. `ib_music`) because V8 subject delete route expects integer path IDs.
+  - Immediate workaround: call legacy DB admin delete endpoint (`/api/admin/db/subjects/{subject_id}`) for existing text-ID subjects, then re-ingest.
+
 ---
 
 ## 8. Integration Protocol

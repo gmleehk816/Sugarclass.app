@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Menu, ListOrdered, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../api';
 
@@ -131,7 +131,7 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
 
   const pagination = getPaginationConfig();
 
-  const goToPage = (delta) => {
+  const goToPage = useCallback((delta) => {
     if (!pagination || pagination.total <= 1) return;
     const nextIndex = Math.max(0, Math.min(pagination.total - 1, pagination.index + delta));
     if (nextIndex === pagination.index) return;
@@ -143,7 +143,33 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
     }
 
     setViewIndexes(prev => ({ ...prev, [pagination.key]: nextIndex }));
-  };
+  }, [pagination, concepts]);
+
+  useEffect(() => {
+    if (!pagination || pagination.total <= 1) return undefined;
+
+    const isInputElement = (target) => {
+      if (!target || !(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (isInputElement(event.target)) return;
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        goToPage(-1);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        goToPage(1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pagination, goToPage]);
 
   if (loading) {
     return (
