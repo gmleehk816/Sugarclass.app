@@ -306,6 +306,18 @@ The main dashboard uses a **1:1:1 Balanced Grid**. Every column weight should be
   - `./force-cancel-aimaterials-task.sh --task-id <task_id>`
   - `./force-cancel-aimaterials-task.sh --all-active`
 
+**Datatree Alignment & Grok Image Generation (2026-02-19)**:
+- **Files**:
+  - `frontend/src/app/admin/aimaterials/page.tsx`
+  - `microservices/sugarclass-aimaterials/app/admin_v8.py`
+  - `microservices/sugarclass-aimaterials/app/processors/content_processor_v8.py`
+- **Key changes**:
+  - Aligned `DATATREE` constant with official specification, including all 22 IB subjects and their 6-digit codes.
+  - Implemented IB SL / HL sub-selection logic using the "Board" dropdown as a dynamic level picker when IB is selected.
+  - Updated `V8IngestRequest` and `run_v8_full_ingestion` to handle `ib_level` and `exam_board`, ensuring HL/SL subjects are stored as distinct entities.
+  - Fixed real-life image generation by switching `GrokImageClient` to use the chat completions endpoint with `grok-imagine-1.0`.
+  - Implemented robust `content_raw` deduplication using a check-then-upsert pattern for legacy DB compatibility.
+
 ---
 
 ## 8. Integration Protocol
@@ -366,4 +378,4 @@ To add a new module:
 
 ---
 
-*Last Updated: 2026-02-18*
+*Last Updated: 2026-02-19*
