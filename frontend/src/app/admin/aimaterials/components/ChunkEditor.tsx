@@ -146,7 +146,7 @@ const ChunkEditor: React.FC<ChunkEditorProps> = ({ content, onClose, onSave }) =
         setError('');
 
         try {
-            const result = await serviceFetch('aimaterials', '/api/admin/contents/regenerate-chunk', {
+            const result = await serviceFetch('aimaterials', '/api/admin/v8/contents/regenerate-chunk', {
                 method: 'POST',
                 body: JSON.stringify({
                     content: chunk.content,
@@ -179,7 +179,7 @@ const ChunkEditor: React.FC<ChunkEditorProps> = ({ content, onClose, onSave }) =
         if (!imagePrompt.trim()) return;
         setGeneratingImage(true);
         try {
-            const result = await serviceFetch('aimaterials', '/api/admin/generate-content-image', {
+            const result = await serviceFetch('aimaterials', '/api/admin/v8/generate-content-image', {
                 method: 'POST',
                 body: JSON.stringify({ prompt: imagePrompt }),
             });

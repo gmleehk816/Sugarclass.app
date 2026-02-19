@@ -94,6 +94,8 @@ class V8IngestRequest(BaseModel):
     subject_name: str
     syllabus: str = "IGCSE"
     target_subject_id: Optional[str] = None
+    exam_board: Optional[str] = None   # e.g. "CIE Chemistry (0620)", "AQA Biology (7402)"
+    ib_level: Optional[str] = None     # "SL" or "HL" for IB subjects
 
 
 class ConceptUpdateRequest(BaseModel):
@@ -816,14 +818,15 @@ async def update_concept(concept_id: int, request: ConceptUpdateRequest):
         updates.append("icon = ?")
         params.append(request.icon)
 
-    if not updates:
+    if not updates and request.bullets is None:
         conn.close()
         raise HTTPException(status_code=400, detail="No fields to update")
 
     params.append(concept_id)
 
-    query = f"UPDATE v8_concepts SET {', '.join(updates)} WHERE id = ?"
-    conn.execute(query, params)
+    if updates:
+        query = f"UPDATE v8_concepts SET {', '.join(updates)} WHERE id = ?"
+        conn.execute(query, params)
     
     # Handle bullets update in generated content table
     if request.bullets is not None:
@@ -1017,6 +1020,214 @@ async def update_reallife_image(
     conn.close()
 
     return {"message": "Real-life image updated successfully"}
+
+
+# ============================================================================
+# CHUNK EDITOR — REGENERATION & IMAGE GENERATION
+# ============================================================================
+
+class ChunkRegenerateRequest(BaseModel):
+    """Request model for regenerating a specific chunk."""
+    content: str
+    type: str
+    focus: Optional[str] = None
+    temperature: Optional[float] = 0.7
+    subtopic_name: Optional[str] = None
+    surrounding_context: Optional[Dict[str, str]] = None  # { "before": "...", "after": "..." }
+
+# Type-specific prompt strategies
+CHUNK_TYPE_PROMPTS = {
+    "heading": "Rephrase this heading to be more engaging and clear while keeping the same topic scope. Return only the heading HTML tag (e.g. <h2>...</h2>).",
+    "text": "Enhance this educational paragraph. Improve clarity, add transition sentences, use active voice, and make it engaging for students. Return only the enhanced HTML paragraph(s).",
+    "list": "Improve these list items. Make each point clearer, more specific, and educational. Keep the list structure (<ul>/<ol> with <li> items). Return only the enhanced list HTML.",
+    "quote": "Enhance this quote or callout. Make it more impactful and thought-provoking while preserving the core message. Return only the enhanced HTML.",
+    "callout": "Improve this callout/details section. Make the content clearer and more helpful for students. Return only the enhanced HTML.",
+    "table": "Improve this table's content. Make headers clearer, data more meaningful, and add context where helpful. Return only the enhanced HTML table.",
+}
+
+
+@router.post("/contents/regenerate-chunk", response_model=Dict[str, Any])
+async def regenerate_chunk(request: ChunkRegenerateRequest):
+    """Regenerate a specific content chunk using AI with type-aware prompts."""
+    from openai import OpenAI
+    from .config_fastapi import settings
+
+    if not settings.LLM_API_KEY:
+        raise HTTPException(status_code=500, detail="LLM_API_KEY not configured")
+
+    # Build system prompt with topic context
+    system_prompt = "You are an expert educational content enhancer specializing in clear, engaging learning materials."
+    if request.subtopic_name:
+        system_prompt += f" The content belongs to the subtopic: '{request.subtopic_name}'."
+    if request.focus:
+        system_prompt += f" Enhancement focus: {request.focus}."
+
+    # Get type-specific instructions
+    type_instruction = CHUNK_TYPE_PROMPTS.get(request.type, CHUNK_TYPE_PROMPTS["text"])
+
+    # Build context from surrounding chunks
+    context_section = ""
+    if request.surrounding_context:
+        before = request.surrounding_context.get("before", "").strip()
+        after = request.surrounding_context.get("after", "").strip()
+        if before or after:
+            context_section = "\n\nSurrounding content for context (do NOT include this in your output):"
+            if before:
+                context_section += f"\n[BEFORE]: {before[:500]}"
+            if after:
+                context_section += f"\n[AFTER]: {after[:500]}"
+
+    # Temperature-based tone guidance
+    temp = request.temperature or 0.7
+    tone = ""
+    if temp > 0.7:
+        tone = "Be more creative, use vivid language and metaphors where appropriate."
+    elif temp < 0.5:
+        tone = "Keep it clear, concise, and straightforward."
+
+    user_prompt = f"""{type_instruction}
+
+{tone}
+
+Original Content:
+{request.content}
+{context_section}
+
+IMPORTANT: Return ONLY the enhanced HTML content. No markdown code fences, no commentary, no explanations. Just the raw HTML."""
+
+    try:
+        client = OpenAI(
+            api_key=settings.LLM_API_KEY,
+            base_url=settings.LLM_API_URL
+        )
+
+        response = client.chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=temp,
+            timeout=60,
+        )
+
+        enhanced_content = response.choices[0].message.content
+        if enhanced_content:
+            # Thorough cleanup
+            enhanced_content = enhanced_content.strip()
+            enhanced_content = re.sub(r'^```(?:html)?\n|```$', '', enhanced_content, flags=re.MULTILINE).strip()
+            enhanced_content = re.sub(r'<style[^>]*>.*?</style>', '', enhanced_content, flags=re.DOTALL | re.IGNORECASE)
+            enhanced_content = re.sub(r'<html[^>]*>|</html>|<head[^>]*>.*?</head>|<body[^>]*>|</body>|<!DOCTYPE[^>]*>', '', enhanced_content, flags=re.DOTALL | re.IGNORECASE).strip()
+            return {"success": True, "content": enhanced_content}
+        else:
+            raise HTTPException(status_code=502, detail="LLM returned empty content")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chunk regeneration failed: {str(e)}")
+
+
+class ContentImageRequest(BaseModel):
+    """Request model for generating a content image."""
+    prompt: str
+
+
+def _generate_single_image_v8(prompt: str) -> Dict[str, Any]:
+    """Internal helper to generate an image and return URL/filename."""
+    import requests as http_requests
+    from io import BytesIO
+    from PIL import Image as PILImage
+    from .config_fastapi import settings
+
+    if not settings.LLM_API_KEY:
+        raise Exception("LLM_API_KEY not configured")
+
+    api_url = settings.LLM_API_URL.rstrip('/') if settings.LLM_API_URL else ''
+    if not api_url:
+        raise Exception("LLM_API_URL not configured")
+    if not api_url.endswith('/chat/completions'):
+        api_url = f"{api_url}/chat/completions" if api_url.endswith('/v1') else f"{api_url}/v1/chat/completions"
+
+    full_prompt = f"Generate an image: {prompt}"
+
+    response = http_requests.post(
+        api_url,
+        headers={
+            "Authorization": f"Bearer {settings.LLM_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "grok-imagine-1.0",
+            "messages": [{"role": "user", "content": full_prompt}]
+        },
+        timeout=120
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"Image API returned status {response.status_code}: {response.text[:200]}")
+
+    result = response.json()
+    content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+
+    match = re.search(r'!\[.*?\]\((https://[^)]+)\)', content)
+    if not match:
+        raise Exception("Image generation did not return an image URL")
+
+    image_url = match.group(1)
+    served_url = image_url
+    filename = None
+
+    try:
+        img_response = None
+        download_headers = {"User-Agent": "Mozilla/5.0 (compatible; Sugarclass/1.0)"}
+        for attempt in range(2):
+            try:
+                img_response = http_requests.get(image_url, timeout=15, headers=download_headers)
+                if img_response.status_code == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+
+        if img_response and img_response.status_code == 200:
+            gen_images_dir = APP_DIR / "generated_images"
+            gen_images_dir.mkdir(parents=True, exist_ok=True)
+
+            filename = f"content_{uuid.uuid4().hex[:12]}.jpg"
+            img_path = gen_images_dir / filename
+
+            img = PILImage.open(BytesIO(img_response.content))
+            if img.mode in ('RGBA', 'LA'):
+                background = PILImage.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[-1])
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            img.save(img_path, 'JPEG', quality=90)
+            served_url = f"/generated_images/{filename}"
+    except Exception:
+        pass  # Fallback to remote URL
+
+    return {
+        "success": True,
+        "image_url": served_url,
+        "filename": filename or image_url.split("/")[-1],
+        "prompt": prompt
+    }
+
+
+@router.post("/generate-content-image", response_model=Dict[str, Any])
+async def generate_content_image(request: ContentImageRequest):
+    """Generate an image using grok-image-1.0 and return its URL."""
+    try:
+        res = _generate_single_image_v8(request.prompt)
+        return res
+    except Exception as e:
+        if "not configured" in str(e):
+            raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 # ============================================================================
@@ -1486,17 +1697,27 @@ async def v8_ingest(request: V8IngestRequest, background_tasks: BackgroundTasks)
 
     background_tasks.add_task(
         run_v8_full_ingestion,
-        task_id,
-        str(file_path),
-        subject_name,
-        syllabus,
-        request.target_subject_id
+        task_id=task_id,
+        file_path=file_path,
+        subject_name=subject_name,
+        syllabus=request.syllabus,
+        target_subject_id=request.target_subject_id,
+        exam_board=request.exam_board,
+        ib_level=request.ib_level,
     )
 
     return {"task_id": task_id, "status": "pending", "message": "V8 full ingestion started"}
 
 
-def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, syllabus: str, target_subject_id: Optional[str] = None):
+def run_v8_full_ingestion(
+    task_id: str,
+    file_path: str,
+    subject_name: str,
+    syllabus: str,
+    target_subject_id: Optional[str] = None,
+    exam_board: Optional[str] = None,
+    ib_level: Optional[str] = None
+):
     """Background task: full V8 pipeline — parse markdown, create hierarchy, generate all V8 content"""
     # Register a cancel event for this task so cancel_task() can wake us instantly
     _cancel_event = threading.Event()
@@ -1565,7 +1786,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
                 row = conn.execute("SELECT status, cancel_requested FROM v8_processing_tasks WHERE task_id = ?", (task_id,)).fetchone()
             except Exception:
                 row = conn.execute("SELECT status FROM v8_processing_tasks WHERE task_id = ?", (task_id,)).fetchone()
-            
+
             if not row:
                 return False
 
@@ -1642,8 +1863,14 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
 
         add_log('info', f"Schema type: {'V8' if is_v8_schema else 'legacy'} (id type: {id_type})")
 
+        # Append HL/SL to subject name if provided (IB subjects)
+        display_subject_name = subject_name
+        if ib_level:
+            display_subject_name = f"{subject_name} {ib_level}"
+            add_log('info', f"Processing IB subject: {display_subject_name}")
+
         syllabus_code = _sanitize_code(syllabus)
-        subject_code = _sanitize_code(subject_name)
+        subject_code = _sanitize_code(display_subject_name) # Use display_subject_name for code
         requested_subject_id = (target_subject_id or "").strip().lower()
         requested_subject_id = re.sub(r'[^a-z0-9_]', '', requested_subject_id)
         if requested_subject_id:
@@ -1664,7 +1891,7 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             conn.execute("""
                 INSERT OR IGNORE INTO subjects (syllabus_id, subject_id, name, code)
                 VALUES (?, ?, ?, ?)
-            """, (syllabus_id, subject_text_id, subject_name, subject_code))
+            """, (syllabus_id, subject_text_id, display_subject_name, exam_board or subject_code)) # Use display_subject_name
             conn.commit()
             subject_row = conn.execute("SELECT id FROM subjects WHERE subject_id = ?", (subject_text_id,)).fetchone()
         else:
@@ -1677,13 +1904,13 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
             conn.execute("""
                 INSERT OR IGNORE INTO subjects (id, syllabus_id, name)
                 VALUES (?, ?, ?)
-            """, (subject_text_id, syllabus_id, subject_name))
+            """, (subject_text_id, syllabus_id, display_subject_name)) # Use display_subject_name
             conn.commit()
             subject_row = conn.execute("SELECT id FROM subjects WHERE id = ?", (subject_text_id,)).fetchone()
 
         subject_db_id = subject_row['id']
 
-        add_log('info', f"Subject: {subject_name} (id={subject_db_id}, code={subject_text_id})")
+        add_log('info', f"Subject: {display_subject_name} (id={subject_db_id}, code={subject_text_id})")
 
         # --- Step 4: Create topics and subtopics ---
         subtopic_db_ids = []  # (db_id, markdown_content) pairs for V8 generation
@@ -1760,26 +1987,52 @@ def run_v8_full_ingestion(task_id: str, file_path: str, subject_name: str, sylla
 
                 st_db_id = st_row['id']
 
-                # Store markdown content in content_raw for later use
+                # Store markdown content in content_raw for later use.
+                # Use an explicit check-then-INSERT-or-UPDATE so we never create
+                # duplicate rows on re-ingestion.  (The legacy content_raw table often
+                # has no UNIQUE constraint on subtopic_id, so ON CONFLICT upserts don't work everywhere.)
                 content_saved = False
                 try:
-                    conn.execute("""
-                        INSERT OR REPLACE INTO content_raw (subtopic_id, title, markdown_content, source_file, char_count)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (st_db_id, subtopic_name, subtopic_content, str(md_path), len(subtopic_content)))
+                    existing_raw = conn.execute(
+                        "SELECT id FROM content_raw WHERE subtopic_id = ? ORDER BY id LIMIT 1",
+                        (st_db_id,)
+                    ).fetchone()
+                    if existing_raw:
+                        conn.execute("""
+                            UPDATE content_raw
+                            SET title = ?, markdown_content = ?, source_file = ?, char_count = ?
+                            WHERE id = ?
+                        """, (subtopic_name, subtopic_content, str(md_path), len(subtopic_content), existing_raw['id']))
+                    else:
+                        conn.execute("""
+                            INSERT INTO content_raw (subtopic_id, title, markdown_content, source_file, char_count)
+                            VALUES (?, ?, ?, ?, ?)
+                        """, (st_db_id, subtopic_name, subtopic_content, str(md_path), len(subtopic_content)))
                     conn.commit()
                     content_saved = True
                 except Exception as e1:
+                    add_log('warning', f"  Could not save content_raw for {subtopic_name}: {e1}")
+                    # Fallback to simple update if needed
                     try:
-                        conn.execute("""
-                            INSERT OR REPLACE INTO content_raw (subtopic_id, markdown_content)
-                            VALUES (?, ?)
-                        """, (st_db_id, subtopic_content))
+                        existing_raw = conn.execute(
+                            "SELECT id FROM content_raw WHERE subtopic_id = ? LIMIT 1",
+                            (st_db_id,)
+                        ).fetchone()
+                        if existing_raw:
+                            conn.execute(
+                                "UPDATE content_raw SET markdown_content = ? WHERE id = ?",
+                                (subtopic_content, existing_raw['id'])
+                            )
+                        else:
+                            conn.execute(
+                                "INSERT INTO content_raw (subtopic_id, markdown_content) VALUES (?, ?)",
+                                (st_db_id, subtopic_content)
+                            )
                         conn.commit()
                         content_saved = True
                     except Exception as e2:
-                        add_log('warning', f"  Could not save content_raw for {subtopic_name}: {e1} / {e2}")
-                
+                        add_log('warning', f"  Critical error saving content_raw for {subtopic_name}: {e2}")
+
                 if content_saved:
                     add_log('info', f"  Saved content_raw for {subtopic_name} ({len(subtopic_content)} chars)")
                 else:

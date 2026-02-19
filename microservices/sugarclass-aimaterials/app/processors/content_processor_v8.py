@@ -404,7 +404,12 @@ class ContentSplitter:
         current_chapter = None
         current_subtopic = None
         current_content = []
+        # Intro content before the first subtopic of a chapter.
+        # We defer creating a fallback subtopic until we know whether any
+        # real subtopics exist in the chapter — if they do, the intro is
+        # prepended to the first real subtopic instead of becoming its own entry.
         chapter_intro_content = []
+        chapter_has_subtopics = False  # tracks whether current chapter has ≥1 real subtopic
 
         for line in lines:
             line = line.strip()
@@ -418,10 +423,13 @@ class ContentSplitter:
                 current_subtopic = None
                 current_content = []
 
-                if current_chapter and chapter_intro_content:
+                # Only emit a fallback subtopic for the previous chapter if it
+                # had intro text AND no explicit subtopics were found.
+                if current_chapter and chapter_intro_content and not chapter_has_subtopics:
                     fallback_subtopic = self._build_fallback_subtopic(current_chapter, len(self.subtopics) + 1)
                     self._save_subtopic(fallback_subtopic, chapter_intro_content, current_chapter)
                 chapter_intro_content = []
+                chapter_has_subtopics = False
 
                 current_chapter = chapter_match
                 self.chapters.append(current_chapter)
@@ -438,11 +446,13 @@ class ContentSplitter:
                     current_chapter = {'num': '1', 'title': 'General', 'type': 'chapter'}
                     self.chapters.append(current_chapter)
 
+                # Prepend chapter intro content to the first real subtopic's body
+                # instead of creating a spurious 'Overview' subtopic.
                 if chapter_intro_content:
-                    intro_subtopic = self._build_fallback_subtopic(current_chapter, len(self.subtopics) + 1)
-                    self._save_subtopic(intro_subtopic, chapter_intro_content, current_chapter)
+                    current_content = list(chapter_intro_content)
                     chapter_intro_content = []
 
+                chapter_has_subtopics = True
                 current_subtopic = subtopic_match
                 continue
 
@@ -456,7 +466,8 @@ class ContentSplitter:
                 chapter_intro_content.append(line)
 
         self._flush_current_subtopic(current_subtopic, current_content, current_chapter)
-        if current_chapter and chapter_intro_content:
+        # End of document: emit fallback only if no explicit subtopics were found
+        if current_chapter and chapter_intro_content and not chapter_has_subtopics:
             fallback_subtopic = self._build_fallback_subtopic(current_chapter, len(self.subtopics) + 1)
             self._save_subtopic(fallback_subtopic, chapter_intro_content, current_chapter)
 
@@ -980,30 +991,50 @@ class GrokImageClient:
         }
 
     def generate_image(self, prompt: str) -> Optional[str]:
-        """Generate image using Grok Image API, returns URL or None"""
+        """Generate image using grok-imagine-1.0 via chat completions, returns URL or None.
+        
+        The dockerspeeds proxy exposes Grok image generation through the chat
+        completions API (grok-imagine-1.0) rather than /v1/images/generations.
+        The model returns a markdown link in the message content, e.g.:
+          ![image](https://...)
+        We extract that URL and return it.
+        """
         if not self.api_key:
             print("    [GROK] No API key configured")
             return None
 
-        url = f"{self.base_url}/v1/images/generations"
+        # Build the correct chat completions URL
+        base = self.base_url
+        if not base.endswith('/v1'):
+            api_url = f"{base}/v1/chat/completions"
+        else:
+            api_url = f"{base}/chat/completions"
+
         request_data = {
-            "model": "grok-2-image-1212",
-            "prompt": prompt,
-            "n": 1,
-            "size": "1024x1024"
+            "model": "grok-imagine-1.0",
+            "messages": [{"role": "user", "content": f"Generate an image: {prompt}"}]
         }
 
         try:
-            response = requests.post(url, headers=self.headers, json=request_data, timeout=60)
+            response = requests.post(api_url, headers=self.headers, json=request_data, timeout=90)
             if response.status_code == 200:
                 data = response.json()
-                if "data" in data and len(data["data"]) > 0:
-                    return data["data"][0].get("url", "")
+                content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                # Extract markdown image URL: ![alt](https://...)
+                match = re.search(r'!\[.*?\]\((https?://[^)]+)\)', content)
+                if match:
+                    return match.group(1)
+                # Fallback: look for a bare URL in the content
+                url_match = re.search(r'https?://\S+\.(?:jpg|jpeg|png|webp)(?:\S*)?', content, re.IGNORECASE)
+                if url_match:
+                    return url_match.group(0)
+                print(f"    [GROK] No image URL found in response content")
             else:
-                print(f"    [GROK] HTTP {response.status_code}")
+                print(f"    [GROK] HTTP {response.status_code}: {response.text[:200]}")
         except Exception as e:
             print(f"    [GROK] Error: {e}")
         return None
+
 
 
 # ============================================================================

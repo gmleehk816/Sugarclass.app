@@ -775,7 +775,6 @@ const V8ContentBrowser = ({
                 body: JSON.stringify({
                     title: data.summary,
                     bullets: data.html_content,
-                    description: "" // Clear description to avoid duplication with bullets
                 })
             });
             loadSubtopicContent(selectedSubtopicId!);
@@ -1906,97 +1905,97 @@ const V8ContentDetails = ({
                                         .replace(/\$\$([^$]+)\$\$/g, '<span style="font-family: serif; font-style: italic; color: #927559;">$1</span>')
                                         .replace(/\$([^$]+)\$/g, '<span style="font-family: serif; font-style: italic; color: #927559;">$1</span>');
                                     return (
-                                    <section key={concept.id} id={`concept-${concept.id}`} style={{ marginBottom: '80px', animation: 'fadeIn 0.8s ease' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-                                            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '16px', letterSpacing: '-0.04em' }}>
-                                                <span style={{ opacity: 0.9 }}>{concept.icon || '📚'}</span>
-                                                {concept.title}
-                                            </h3>
-                                            <div style={{ display: 'flex', gap: '8px' }}>
-                                                <button
-                                                    onClick={() => onEditSVG(concept)}
-                                                    style={{
-                                                        padding: '10px 18px', borderRadius: '12px', border: '1px solid #e2e8f0',
-                                                        background: 'white', cursor: 'pointer', color: '#7c3aed',
-                                                        display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 700,
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                    className="hover:shadow-md hover:border-violet-100"
-                                                >
-                                                    <Sparkles size={16} /> Refine SVG
-                                                </button>
-                                                <button
-                                                    onClick={() => onEditConcept(concept)}
-                                                    style={{
-                                                        padding: '10px 18px', borderRadius: '12px', border: '1px solid #e2e8f0',
-                                                        background: 'white', cursor: 'pointer', color: '#1e293b',
-                                                        display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 700,
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                    className="hover:shadow-md"
-                                                >
-                                                    <Edit2 size={16} /> Edit Content
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: (isTocVisible || isParentSidebarVisible) ? '1.2fr 1fr' : '1fr 1fr',
-                                            gap: '40px',
-                                            alignItems: 'stretch'
-                                        }}>
-                                            {/* Left: Text */}
-                                            <article style={{
-                                                background: 'rgba(255, 255, 255, 0.8)', padding: '32px', borderRadius: '28px',
-                                                border: '1px solid rgba(0,0,0,0.04)', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.03)',
-                                                backdropFilter: 'blur(8px)'
-                                            }}>
-                                                <div style={{ fontSize: '1.05rem', lineHeight: 1.9, color: '#334155' }}>
-                                                    {concept.description && <p style={{ marginBottom: '24px', fontWeight: 700, color: '#1a1a1b', fontSize: '1.2rem', letterSpacing: '-0.01em' }}>{concept.description}</p>}
-                                                    {sanitizedBulletsMarkup && (
-                                                        <div
-                                                            dangerouslySetInnerHTML={{
-                                                                __html: sanitizedBulletsMarkup
-                                                            }}
-                                                            style={{
-                                                                fontSize: '1.05rem',
-                                                                color: '#475569'
-                                                            }}
-                                                        />
-                                                    )}
+                                        <section key={concept.id} id={`concept-${concept.id}`} style={{ marginBottom: '80px', animation: 'fadeIn 0.8s ease' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                                                <h3 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '16px', letterSpacing: '-0.04em' }}>
+                                                    <span style={{ opacity: 0.9 }}>{concept.icon || '📚'}</span>
+                                                    {concept.title}
+                                                </h3>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button
+                                                        onClick={() => onEditSVG(concept)}
+                                                        style={{
+                                                            padding: '10px 18px', borderRadius: '12px', border: '1px solid #e2e8f0',
+                                                            background: 'white', cursor: 'pointer', color: '#7c3aed',
+                                                            display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 700,
+                                                            transition: 'all 0.2s'
+                                                        }}
+                                                        className="hover:shadow-md hover:border-violet-100"
+                                                    >
+                                                        <Sparkles size={16} /> Refine SVG
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onEditConcept(concept)}
+                                                        style={{
+                                                            padding: '10px 18px', borderRadius: '12px', border: '1px solid #e2e8f0',
+                                                            background: 'white', cursor: 'pointer', color: '#1e293b',
+                                                            display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 700,
+                                                            transition: 'all 0.2s'
+                                                        }}
+                                                        className="hover:shadow-md"
+                                                    >
+                                                        <Edit2 size={16} /> Edit Content
+                                                    </button>
                                                 </div>
-                                            </article>
+                                            </div>
 
-                                            {/* Right: Visual */}
                                             <div style={{
-                                                background: 'rgba(252, 250, 247, 0.7)', padding: '32px', borderRadius: '28px',
-                                                border: '1px solid rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                minHeight: '500px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.01)', position: 'relative',
-                                                overflow: 'hidden'
+                                                display: 'grid',
+                                                gridTemplateColumns: (isTocVisible || isParentSidebarVisible) ? '1.2fr 1fr' : '1fr 1fr',
+                                                gap: '40px',
+                                                alignItems: 'stretch'
                                             }}>
-                                                <div style={{ background: 'white', borderRadius: '20px', padding: '24px', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(0,0,0,0.03)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.01)' }}>
-                                                    {sanitizedSvgMarkup ? (
-                                                        <img
-                                                            src={svgMarkupToDataUrl(sanitizedSvgMarkup)}
-                                                            alt={`${concept.title} diagram`}
-                                                            style={{
-                                                                width: '100%',
-                                                                height: '100%',
-                                                                objectFit: 'contain'
-                                                            }}
-                                                        />
-                                                    ) : (
-                                                        <div style={{ opacity: 0.2, textAlign: 'center' }}>
-                                                            <Sparkles size={64} style={{ marginBottom: '20px', color: '#927559' }} />
-                                                            <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Designer Visual Space</div>
-                                                        </div>
-                                                    )}
+                                                {/* Left: Text */}
+                                                <article style={{
+                                                    background: 'rgba(255, 255, 255, 0.8)', padding: '32px', borderRadius: '28px',
+                                                    border: '1px solid rgba(0,0,0,0.04)', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.03)',
+                                                    backdropFilter: 'blur(8px)'
+                                                }}>
+                                                    <div style={{ fontSize: '1.05rem', lineHeight: 1.9, color: '#334155' }}>
+                                                        {concept.description && <p style={{ marginBottom: '24px', fontWeight: 700, color: '#1a1a1b', fontSize: '1.2rem', letterSpacing: '-0.01em' }}>{concept.description}</p>}
+                                                        {sanitizedBulletsMarkup && (
+                                                            <div
+                                                                dangerouslySetInnerHTML={{
+                                                                    __html: sanitizedBulletsMarkup
+                                                                }}
+                                                                style={{
+                                                                    fontSize: '1.05rem',
+                                                                    color: '#475569'
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </article>
+
+                                                {/* Right: Visual */}
+                                                <div style={{
+                                                    background: 'rgba(252, 250, 247, 0.7)', padding: '32px', borderRadius: '28px',
+                                                    border: '1px solid rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    minHeight: '500px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.01)', position: 'relative',
+                                                    overflow: 'hidden'
+                                                }}>
+                                                    <div style={{ background: 'white', borderRadius: '20px', padding: '24px', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(0,0,0,0.03)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.01)' }}>
+                                                        {sanitizedSvgMarkup ? (
+                                                            <img
+                                                                src={svgMarkupToDataUrl(sanitizedSvgMarkup)}
+                                                                alt={`${concept.title} diagram`}
+                                                                style={{
+                                                                    width: '100%',
+                                                                    height: '100%',
+                                                                    objectFit: 'contain'
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <div style={{ opacity: 0.2, textAlign: 'center' }}>
+                                                                <Sparkles size={64} style={{ marginBottom: '20px', color: '#927559' }} />
+                                                                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Designer Visual Space</div>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </section>
-                                );
+                                        </section>
+                                    );
                                 })}
                             </div>
                         </>

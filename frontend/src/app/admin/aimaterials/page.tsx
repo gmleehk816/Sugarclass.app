@@ -92,30 +92,32 @@ const inputStyle = {
 // DATATREE â€” Full educational hierarchy from datatree.md
 // Structure: Level â†’ Subject â†’ Board-specific variants (with exam codes)
 // ===========================================================================
+// IB subjects always show SL/HL in the Board dropdown
+const IB_LEVELS = ['SL', 'HL'];
+
 const DATATREE: Record<string, Record<string, string[]>> = {
     "A-Level": {
-        "Accounting": ["AQA Accounting (7127)", "Cie Accounting (9706)", "Edexcel Accounting (9AC0)"],
-        "Biology": ["AQA Biology (7402)", "Cie Biology (9700)", "Edexcel Biology (9BI0)"],
-        "Business": ["AQA Business (7132)", "Cie Business (9609)", "Edexcel Business (9BS0)"],
-        "Chemistry": ["AQA Chemistry (7405)", "Cie Chemistry (9701)", "Edexcel Chemistry (9CH0)"],
-        "Computer Science": ["AQA Computer Science (7517)", "Cie Computer Science (9618)"],
-        "Design Technology": ["AQA Design Technology (7552)", "Edexcel Design Technology Product Design (9DT0)"],
-        "Economics": ["AQA Economics (7136)", "Cie Economics (9708)", "Edexcel Economics (9EC0)"],
-        "Engineering": ["AQA Engineering (8852)"],
-        "English Language": ["AQA English Language (7702)", "Cie English Language (9093)", "Edexcel English Language (9EN0)"],
-        "English Literature": ["AQA English Literature (7712)", "Cie Literature English (9695)", "Edexcel English Literature (9ET0)"],
-        "Food Science Nutrition": ["AQA Food Science Nutrition (7272)"],
-        "French": ["AQA French (7652)"],
-        "Further Mathematics": ["AQA Further Mathematics (7367)", "Cie Further Mathematics (9231)", "Edexcel Further Mathematics (9FM0)"],
-        "Geography": ["AQA Geography (7037)", "Cie Geography (9696)", "Edexcel Geography (9GE0)"],
-        "Global perspectives": ["Cie Global Perspectives Research (9239)"],
-        "History": ["AQA History (7041)", "AQA History (7042)", "Cie History (9389)", "Cie History (9489)", "Edexcel History (9HI0)"],
-        "Information Technology": ["Edexcel Information Technology (9IT0)"],
-        "Mathematics": ["AQA Mathematics (7357)", "Cie Mathematics (9709)", "Edexcel Mathematics (9MA0)"],
-        "Physical Education": ["AQA Physical Education (7357)", "AQA Physical Education (7582)", "Edexcel Physical Education (9PE0)"],
-        "Physics": ["AQA Physics (7408)", "Cie Physics (9702)", "Edexcel Physics (9PH0)"],
-        "Psychology": ["AQA Psychology (7182)", "Cie Psychology (9990)", "Edexcel Psychology (9PS0)"],
-        "Sociology": ["AQA Sociology (7192)", "Cie Sociology (9699)", "Edexcel Sociology (9SC0)"],
+        "Accounting": ["AQA Accounting (7127)", "CIE Accounting (9706)", "Edexcel Accounting (9AC0)"],
+        "Biology": ["AQA Biology (7402)", "CIE Biology (9700)", "Edexcel Biology (9BI0)"],
+        "Business": ["AQA Business (7132)", "CIE Business (9609)", "Edexcel Business (9BS0)"],
+        "Chemistry": ["AQA Chemistry (7405)", "CIE Chemistry (9701)", "Edexcel Chemistry (9CH0)"],
+        "Chinese": ["AQA Chinese (7679)", "CIE Chinese (9715)", "Edexcel Chinese (9CN0)"],
+        "Computer Science": ["AQA Computer Science (7517)", "CIE Computer Science (9618)"],
+        "Design Technology": ["AQA Design Technology (7552)", "CIE Design Technology (9705)", "Edexcel Design Technology Product Design (9DT0)"],
+        "Economics": ["AQA Economics (7136)", "CIE Economics (9708)", "Edexcel Economics (9EC0)"],
+        "English Language": ["AQA English Language (7702)", "CIE English Language (9093)", "Edexcel English Language (8EL0)"],
+        "English Literature": ["AQA English Literature (7712)", "CIE Literature English (9695)", "Edexcel English Literature (9ET0)"],
+        "French": ["AQA French (7652)", "CIE French (9716)", "Edexcel French (9FR0)"],
+        "Further Mathematics": ["AQA Further Mathematics (7367)", "CIE Further Mathematics (9231)", "Edexcel Further Mathematics (9FM0)"],
+        "Geography": ["AQA Geography (7037)", "CIE Geography (9696)", "Edexcel Geography (9GE0)"],
+        "Global Perspectives": ["CIE Global Perspectives Research (9239)"],
+        "History": ["AQA History (7041)", "AQA History (7042)", "CIE History (9389)", "CIE History (9489)", "Edexcel History (9HI0)"],
+        "Information Technology": ["AQA Information Technology (7527)", "CIE Information Technology (9626)", "Edexcel Information Technology (9IT0)"],
+        "Mathematics": ["AQA Mathematics (7357)", "CIE Mathematics (9709)", "Edexcel Mathematics (9MA0)"],
+        "Physical Education": ["AQA Physical Education (7582)", "CIE Physical Education (9396)", "Edexcel Physical Education (9PE0)"],
+        "Physics": ["AQA Physics (7408)", "CIE Physics (9702)", "Edexcel Physics (9PH0)"],
+        "Psychology": ["AQA Psychology (7182)", "CIE Psychology (9990)", "Edexcel Psychology (9PS0)"],
+        "Sociology": ["AQA Sociology (7192)", "CIE Sociology (9699)", "Edexcel Sociology (9SC0)"],
     },
     "HKDSE": {
         "Biology": [], "Business, Accounting and Financial Studies": [], "Chemistry": [],
@@ -128,48 +130,68 @@ const DATATREE: Record<string, Record<string, string[]>> = {
         "Technology and Living": [], "Tourism and Hospitality Studies": [], "Visual Arts": [],
     },
     "IB": {
-        "Biology": [], "Business Management": [], "Chemistry": [], "Computer Science": [],
-        "Design Technology": [], "Economics": [], "English A Language Literature": [],
-        "Environmental Systems Societies": [], "Film": [], "Geography": [],
-        "Global Politics": [], "History": [], "Mathematics AA": [], "Music": [],
-        "Physics": [], "Psychology": [], "Spanish B": [], "Theory of Knowledge": [],
-        "Visual Arts": [],
+        "Biology (100088)": IB_LEVELS,
+        "Business Management (147712)": IB_LEVELS,
+        "Chemistry (100113)": IB_LEVELS,
+        "Chinese B Mandarin (117711)": IB_LEVELS,
+        "Computer Science (100132)": IB_LEVELS,
+        "Design Technology (100146)": IB_LEVELS,
+        "Digital Societies (179711)": IB_LEVELS,
+        "Economics (100164)": IB_LEVELS,
+        "English A Language Literature (112733)": IB_LEVELS,
+        "Environmental Systems Societies (100673)": IB_LEVELS,
+        "Food Science and Technology (158711)": IB_LEVELS,
+        "Geography (100222)": IB_LEVELS,
+        "Global Politics (123711)": IB_LEVELS,
+        "History (100680)": IB_LEVELS,
+        "Mathematics AA (166711)": IB_LEVELS,
+        "Music (100402)": IB_LEVELS,
+        "Philosophy (100449)": IB_LEVELS,
+        "Physics (100452)": IB_LEVELS,
+        "Psychology (100474)": IB_LEVELS,
+        "Social and Cultural Anthropology (100532)": IB_LEVELS,
+        "Sports Exercise Health Science (100546)": IB_LEVELS,
+        "Visual Arts (100608)": IB_LEVELS,
     },
     "IGCSE": {
-        "Accounting": ["Cie Accounting (0452)", "Edexcel Accounting", "Edexcel Accounting (4AC1)"],
-        "Additional Mathematics": ["Cie Additional Mathematics (0606)", "Edexcel Further Mathematics", "Edexcel Mathematics (4MA0)"],
-        "Biology": ["Cie Biology (0610)", "Edexcel Biology (4BI1)"],
-        "Business": ["Cie Business (0450)", "Edexcel Business (4BS1)"],
-        "Business Studies": ["Cie Business (0450)", "Edexcel Business (4BS1)"],
-        "Chemistry": ["Cie Chemistry (0620)", "Edexcel Chemistry (4CH1)"],
-        "Chinese First Language": ["Cie Chinese First Language (0509)", "Edexcel Chinese (4CN0)"],
-        "Chinese Mandarin Foreign Language": ["Cie Chinese Mandarin Foreign Language (0547)", "Edexcel Chinese (4CN0)"],
-        "Chinese Second Language": ["Cie Chinese Second Language (0523)", "Edexcel Chinese (4CN0)"],
-        "Combined Science": ["Cie Combined Science (0653)", "Edexcel Science (Double Award) (4SC0)"],
-        "Computer Science": ["Cie Computer Science (0478)", "Edexcel Computer Science (4CP0)"],
-        "Design Technology": ["Cie Design Technology (0445)"],
-        "Economics": ["Cie Economics (0455)", "Edexcel Economic", "Edexcel Economics"],
-        "English Literature": ["Cie Literature English (0475)", "Edexcel English literature (4ET1)"],
-        "English Second Language": ["Cie English Second Language (0510)", "Edexcel English as a Second Language (4ES0)"],
-        "Enterprise": ["Cie Enterprise (0454)"],
-        "Environmental Management": ["Cie Environmental Management (0680)"],
-        "First Language English": ["Cie First Language English (0500)", "Edexcel English Language (4EA0)"],
-        "Food and Nutrition": ["Cie Food and Nutrition (0648)"],
-        "Geography": ["Cie Geography (0460)", "Edexcel Geography (4GE1)"],
-        "Global Perspectives": ["Cie Global Perspectives (0457)"],
-        "History": ["Cie History (0470)", "Edexcel History (4HI1)"],
-        "Human Biology": ["Edexcel Human Biology"],
-        "ICT": ["Cie ICT (0417)", "Edexcel ICT (4IT1)"],
-        "International Mathematics": ["Cie Mathematics - International (0607)", "Edexcel Mathematics (4MA0)"],
-        "Mathematics": ["Cie Mathematics (0580)", "Edexcel Mathematics (4MA1)"],
-        "Physical Education": ["Cie Physical Education (0413)"],
-        "Physical Science": ["Cie Physical Science (0652)"],
-        "Physics": ["Cie Physics (0625)", "Edexcel Physics (4PH1)"],
-        "Psychology": ["Cie Psychology (0990)"],
-        "Sociology": ["Cie Sociology (0495)"],
+        "Accounting": ["CIE Accounting (0452)", "Edexcel Accounting (4AC1)"],
+        "Additional Mathematics": ["CIE Additional Mathematics (0606)", "Edexcel Further Pure Mathematics (4PM1)"],
+        "Biology": ["CIE Biology (0610)", "Edexcel Biology (4BI1)"],
+        "Business Studies": ["CIE Business (0450)", "Edexcel Business (4BS1)"],
+        "Chemistry": ["CIE Chemistry (0620)", "Edexcel Chemistry (4CH1)"],
+        "Chinese First Language": ["CIE Chinese First Language (0509)", "Edexcel Chinese (4CN0)"],
+        "Chinese Mandarin Foreign Language": ["CIE Chinese Mandarin Foreign Language (0547)"],
+        "Chinese Second Language": ["CIE Chinese Second Language (0523)"],
+        "Combined Science": ["CIE Combined Science (0653)", "Edexcel Science (Double Award) (4SD1)"],
+        "Commerce": ["CIE Commerce (0453)", "Edexcel Commerce (4CM1)"],
+        "Computer Science": ["CIE Computer Science (0478)", "Edexcel Computer Science (4CP0)"],
+        "Design Technology": ["CIE Design Technology (0445)"],
+        "Economics": ["CIE Economics (0455)", "Edexcel Economics (4EC0)"],
+        "English Literature": ["CIE Literature English (0475)", "Edexcel English Literature (4ET1)"],
+        "English Second Language": ["CIE English Second Language (0510)", "Edexcel English as a Second Language (4EA0)"],
+        "Enterprise": ["CIE Enterprise (0454)"],
+        "Environmental Management": ["CIE Environmental Management (0680)", "Edexcel Environmental Management (4ES0)"],
+        "First Language English": ["CIE First Language English (0500)", "Edexcel English Language (4E1)"],
+        "Food and Nutrition": ["CIE Food and Nutrition (0648)"],
+        "Geography": ["CIE Geography (0460)", "Edexcel Geography (4GE0)"],
+        "Global Perspectives": ["CIE Global Perspectives (0457)"],
+        "History": ["CIE History (0470)", "Edexcel History (4HI0)"],
+        "Human Biology": ["Edexcel Human Biology (4HB1)"],
+        "ICT": ["CIE ICT (0417)", "Edexcel ICT (4IT0)"],
+        "International Mathematics": ["CIE Mathematics - International (0607)", "Edexcel Mathematics (4MA0)"],
+        "Mathematics": ["CIE Mathematics (0580)", "Edexcel Mathematics (4MA1)"],
+        "Physical Education": ["CIE Physical Education (0413)"],
+        "Physical Science": ["CIE Physical Science (0652)"],
+        "Physics": ["CIE Physics (0625)", "Edexcel Physics (4PH1)"],
+        "Psychology": ["CIE Psychology (0266)"],
+        "Sociology": ["CIE Sociology (0495)"],
     },
-    "primary": {},
-    "secondary": {},
+    "primary": {
+        "Year 1": [], "Year 2": [], "Year 3": [], "Year 4": [], "Year 5": [], "Year 6": [],
+    },
+    "secondary": {
+        "Year 7": [], "Year 8": [], "Year 9": [],
+    },
 };
 
 type DbSubject = {
@@ -1465,6 +1487,7 @@ const AIMaterialsAdmin = () => {
     const [files, setFiles] = useState<File[]>([]);
     const [subjectName, setSubjectName] = useState('');
     const [syllabus, setSyllabus] = useState('');
+    const [selectedIbLevel, setSelectedIbLevel] = useState(''); // 'SL' or 'HL' for IB subjects
     const [uploading, setUploading] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [subtopicId, setSubtopicId] = useState('');
@@ -1670,7 +1693,14 @@ const AIMaterialsAdmin = () => {
 
             // IMPORTANT: user-selected tree/manual values must take precedence.
             // Suggestions from upload/PDF conversion are only fallbacks.
-            const treeSelectedSubject = (selectedBoard || selectedSubject || '').trim();
+            // IB subjects: board = 'SL' or 'HL'; other levels: board = exam board name
+            const isIB = selectedLevel === 'IB';
+            const ibLevel = isIB ? (selectedBoard || '').trim() : '';
+            // For IB, subject_name is the subject (without SL/HL suffix); ib_level carries SL/HL
+            // For other levels, board is the exam board (e.g. "CIE Physics (0625)")
+            const treeSelectedSubject = isIB
+                ? (selectedSubject || '').trim()
+                : (selectedBoard || selectedSubject || '').trim();
             const treeSelectedSyllabus = (selectedLevel || '').trim();
 
             const normalizedSubject = (treeSelectedSubject || subjectName).trim();
@@ -1678,8 +1708,11 @@ const AIMaterialsAdmin = () => {
 
             const extractedSubject = normalizedSubject || (uploadRes.suggested_subject || '').trim();
             const extractedSyllabus = normalizedSyllabus || (uploadRes.suggested_syllabus || '').trim();
+
+            // Build target_subject_id: for IB include ib_level suffix
+            const ibSuffix = ibLevel ? `_${sanitizeIngestCode(ibLevel)}` : '';
             const targetSubjectId = extractedSubject
-                ? `${sanitizeIngestCode(extractedSyllabus || 'IGCSE')}_${sanitizeIngestCode(extractedSubject)}`
+                ? `${sanitizeIngestCode(extractedSyllabus || 'IGCSE')}_${sanitizeIngestCode(extractedSubject)}${ibSuffix}`
                 : undefined;
 
             // Check for PDF conversion errors
@@ -1710,7 +1743,14 @@ const AIMaterialsAdmin = () => {
                 return;
             }
 
-            // Call V8 ingest endpoint instead of old pipeline
+            // For IB: require SL or HL selection
+            if (isIB && !ibLevel) {
+                setStatusMessage('❌ Please select SL or HL for IB subjects.');
+                setUploading(false);
+                return;
+            }
+
+            // Call V8 ingest endpoint
             const ingestRes = await serviceFetch('aimaterials', '/api/admin/v8/ingest', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -1719,6 +1759,8 @@ const AIMaterialsAdmin = () => {
                     subject_name: extractedSubject,
                     syllabus: extractedSyllabus || 'IGCSE',
                     target_subject_id: targetSubjectId,
+                    exam_board: isIB ? undefined : (selectedBoard || undefined),
+                    ib_level: ibLevel || undefined,
                 })
             });
 
@@ -1750,7 +1792,7 @@ const AIMaterialsAdmin = () => {
         }
 
         try {
-            const res = await serviceFetch('aimaterials', `/api/admin/db/subjects/${subjectId}`, {
+            const res = await serviceFetch('aimaterials', `/api/admin/v8/subjects/${subjectId}`, {
                 method: 'DELETE'
             });
             setStatusMessage(`Subject deleted: ${res.message}`);
@@ -1763,7 +1805,7 @@ const AIMaterialsAdmin = () => {
 
     const handleRenameSubject = async (subjectId: string, newName: string) => {
         try {
-            const res = await serviceFetch('aimaterials', `/api/admin/db/subjects/${subjectId}`, {
+            const res = await serviceFetch('aimaterials', `/api/admin/v8/subjects/${subjectId}`, {
                 method: 'PATCH',
                 body: JSON.stringify({ name: newName })
             });
@@ -2075,6 +2117,7 @@ const AIMaterialsAdmin = () => {
                                                         setSelectedLevel(e.target.value);
                                                         setSelectedSubject('');
                                                         setSelectedBoard('');
+                                                        setSelectedIbLevel('');
                                                         if (e.target.value) {
                                                             setSyllabus(e.target.value);
                                                             setSubjectName('');
@@ -2098,15 +2141,9 @@ const AIMaterialsAdmin = () => {
                                                     onChange={(e) => {
                                                         setSelectedSubject(e.target.value);
                                                         setSelectedBoard('');
+                                                        setSelectedIbLevel('');
                                                         if (e.target.value) {
-                                                            const boards = selectedLevel ? DATATREE[selectedLevel]?.[e.target.value] : [];
-                                                            if (!boards || boards.length === 0) {
-                                                                // No board variants (IB, HKDSE) â€” use subject name directly
-                                                                setSubjectName(e.target.value);
-                                                            } else {
-                                                                // Keep subject selection as fallback even before board is chosen
-                                                                setSubjectName(e.target.value);
-                                                            }
+                                                            setSubjectName(e.target.value);
                                                         }
                                                     }}
                                                 >
@@ -2117,9 +2154,11 @@ const AIMaterialsAdmin = () => {
                                                 </select>
                                             </div>
 
-                                            {/* Board variant dropdown â€” only show if boards exist */}
+                                            {/* Board / SL-HL dropdown */}
                                             <div style={inputGroupStyle}>
-                                                <label style={labelStyle}>Board / Exam</label>
+                                                <label style={labelStyle}>
+                                                    {selectedLevel === 'IB' ? 'Level (SL / HL)' : 'Board / Exam'}
+                                                </label>
                                                 <select
                                                     style={{
                                                         ...inputStyle,
@@ -2130,7 +2169,11 @@ const AIMaterialsAdmin = () => {
                                                     disabled={!selectedSubject || !selectedLevel || !(DATATREE[selectedLevel]?.[selectedSubject]?.length > 0)}
                                                     onChange={(e) => {
                                                         setSelectedBoard(e.target.value);
-                                                        if (e.target.value) {
+                                                        if (selectedLevel === 'IB') {
+                                                            setSelectedIbLevel(e.target.value);
+                                                            setSubjectName(`${selectedSubject} ${e.target.value}`); // e.g., "Biology HL"
+                                                        } else if (e.target.value) {
+                                                            // For non-IB: board name becomes the subject display name
                                                             setSubjectName(e.target.value);
                                                         }
                                                     }}
@@ -2138,7 +2181,7 @@ const AIMaterialsAdmin = () => {
                                                     <option value="">
                                                         {selectedSubject && selectedLevel && DATATREE[selectedLevel]?.[selectedSubject]?.length === 0
                                                             ? 'N/A (no variants)'
-                                                            : 'Select board...'}
+                                                            : (selectedLevel === 'IB' ? 'Select SL or HL...' : 'Select board...')}
                                                     </option>
                                                     {selectedLevel && selectedSubject && DATATREE[selectedLevel]?.[selectedSubject]?.map(board => (
                                                         <option key={board} value={board}>{board}</option>
@@ -2163,8 +2206,8 @@ const AIMaterialsAdmin = () => {
                                                 <FileText size={14} />
                                                 <span>
                                                     {selectedLevel}
-                                                    {selectedSubject && <> â€º {selectedSubject}</>}
-                                                    {selectedBoard && <> â€º {selectedBoard}</>}
+                                                    {selectedSubject && <> › {selectedSubject}</>}
+                                                    {selectedBoard && <> › {selectedBoard}</>}
                                                 </span>
                                             </div>
                                         )}
