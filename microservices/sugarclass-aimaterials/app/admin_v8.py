@@ -2557,6 +2557,14 @@ async def public_get_subtopic_content(subtopic_id: str):
         ORDER BY card_num
     """, (subtopic_id,)).fetchall()
 
+    # Get real-life images
+    reallife_images = conn.execute("""
+        SELECT id, image_type, image_url, prompt, title, description
+        FROM v8_reallife_images
+        WHERE subtopic_id = ?
+        ORDER BY image_type
+    """, (subtopic_id,)).fetchall()
+
     conn.close()
 
     return {
@@ -2564,7 +2572,8 @@ async def public_get_subtopic_content(subtopic_id: str):
         "name": subtopic['name'],
         "concepts": concept_list,
         "quiz": [dict(q) for q in quiz],
-        "flashcards": [dict(f) for f in flashcards]
+        "flashcards": [dict(f) for f in flashcards],
+        "reallife_images": [dict(img) for img in reallife_images]
     }
 
 

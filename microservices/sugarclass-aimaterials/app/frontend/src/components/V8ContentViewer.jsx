@@ -195,7 +195,7 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
               style={{ ...styles.navBtn, ...(activeView === 'content' ? styles.navBtnActive : {}) }}
               onClick={() => setActiveView('content')}
             >
-              Learn
+              Learning objective
             </button>
             <button
               style={{ ...styles.navBtn, ...(activeView === 'quiz' ? styles.navBtnActive : {}) }}

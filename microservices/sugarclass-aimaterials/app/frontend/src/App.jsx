@@ -56,12 +56,6 @@ function App() {
     }));
   };
 
-  const loadAllSubtopicsForSubject = async (subjectId) => {
-    if (!subjectId) return [];
-    const res = await api.get(`/api/db/subjects/${subjectId}/subtopics`);
-    return mapDbSubtopics(res.data);
-  };
-
   /** Load topics for a subject */
   const loadTopicsForSubject = async (subjectId) => {
     if (!subjectId) return;
@@ -98,21 +92,11 @@ function App() {
       const res = await api.get(`/api/db/topics/${topicId}/subtopics`);
 
       const topicSubtopics = mapDbSubtopics(res.data, topic.id);
-      let sidebarSubtopics = topicSubtopics;
-      if (selectedSubject) {
-        const subjectSubtopics = await loadAllSubtopicsForSubject(selectedSubject);
-        if (subjectSubtopics.length > 0) {
-          sidebarSubtopics = subjectSubtopics;
-        }
-      }
-
-      setSubtopics(sidebarSubtopics);
+      setSubtopics(topicSubtopics);
 
       // Auto-select first subtopic
       if (topicSubtopics.length > 0) {
         setSelectedSubtopicId(topicSubtopics[0].full_id);
-      } else if (sidebarSubtopics.length > 0) {
-        setSelectedSubtopicId(sidebarSubtopics[0].full_id);
       }
     } catch (err) {
       console.error('Error fetching subtopics', err);
@@ -144,20 +128,10 @@ function App() {
       const res = await api.get(`/api/db/topics/${topicId}/subtopics`);
 
       const chapterSubtopics = mapDbSubtopics(res.data, chapter.id);
-      let sidebarSubtopics = chapterSubtopics;
-      if (selectedSubject) {
-        const subjectSubtopics = await loadAllSubtopicsForSubject(selectedSubject);
-        if (subjectSubtopics.length > 0) {
-          sidebarSubtopics = subjectSubtopics;
-        }
-      }
-
-      setSubtopics(sidebarSubtopics);
+      setSubtopics(chapterSubtopics);
 
       if (chapterSubtopics.length > 0) {
         setSelectedSubtopicId(chapterSubtopics[0].full_id);
-      } else if (sidebarSubtopics.length > 0) {
-        setSelectedSubtopicId(sidebarSubtopics[0].full_id);
       }
 
       setSelectedTopic({

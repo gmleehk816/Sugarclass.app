@@ -78,7 +78,7 @@ function V8ContentView({ subtopicId }) {
           onClick={() => setActiveTab('learn')}
         >
           <span className="tab-icon">📖</span>
-          <span className="tab-label">Learn</span>
+          <span className="tab-label">Learning objective</span>
         </button>
         <button
           className={`v8-tab ${activeTab === 'quiz' ? 'active' : ''}`}
