@@ -412,6 +412,7 @@ services:
       - SUGARCLASS_API_URL=http://backend:8000/api/v1
     volumes:
       - ./microservices/sugarclass-aitutor/database:/app/database
+      - ./microservices/sugarclass-aimaterials/uploads:/app/uploads
     networks:
       - sugarclass-network
     command: python start.py
