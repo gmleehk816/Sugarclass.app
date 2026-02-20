@@ -43,7 +43,19 @@ interface V8SubtopicStatus {
     quiz_count: number;
     flashcard_count: number;
     reallife_image_count: number;
+    past_paper_count: number;
     processed_at: string | null;
+}
+
+interface V8PastPaper {
+    id: number;
+    subtopic_id: number;
+    question_text: string;
+    marks: number;
+    year?: string;
+    season?: string;
+    paper_reference?: string;
+    mark_scheme?: string;
 }
 
 interface V8Topic {
@@ -85,6 +97,7 @@ interface V8FullSubtopic {
     quiz: any[];
     flashcards: any[];
     reallife_images: any[];
+    past_papers: V8PastPaper[];
     learning_objectives: any[];
     key_terms: any[];
     formulas: any[];
@@ -468,6 +481,7 @@ const V8ContentBrowser = ({
     const [editingQuiz, setEditingQuiz] = useState<any>(null);
     const [editingFlashcard, setEditingFlashcard] = useState<any>(null);
     const [editingRealLife, setEditingRealLife] = useState<any>(null);
+    const [editingPastPaper, setEditingPastPaper] = useState<any>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [editingSVGConcept, setEditingSVGConcept] = useState<any>(null);
     const [customSVGPrompt, setCustomSVGPrompt] = useState('');
@@ -833,6 +847,47 @@ const V8ContentBrowser = ({
             alert('Failed to save real-life image');
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleSavePastPaper = async (paperId: number | null, paperData: any) => {
+        setIsSaving(true);
+        try {
+            if (paperId) {
+                // Update
+                await serviceFetch('aimaterials', `/api/admin/v8/pastpapers/${paperId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(paperData)
+                });
+            } else {
+                // Create
+                await serviceFetch('aimaterials', `/api/admin/v8/subtopics/${selectedSubtopicId}/pastpapers`, {
+                    method: 'POST',
+                    body: JSON.stringify(paperData)
+                });
+            }
+            loadSubtopicContent(selectedSubtopicId!);
+            setEditingPastPaper(null);
+        } catch (err) {
+            console.error('Error saving past paper', err);
+            alert('Failed to save past paper');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDeletePastPaper = async (paperId: number) => {
+        if (!window.confirm('Are you sure you want to delete this past paper?')) return;
+
+        try {
+            setIsProcessingAction(true);
+            await serviceFetch('aimaterials', `/api/admin/v8/pastpapers/${paperId}`, { method: 'DELETE' });
+            loadSubtopicContent(selectedSubtopicId!);
+        } catch (err) {
+            console.error('Error deleting past paper', err);
+            alert('Failed to delete past paper');
+        } finally {
+            setIsProcessingAction(false);
         }
     };
 
@@ -1361,6 +1416,8 @@ const V8ContentBrowser = ({
                             onEditQuiz={(q: any) => setEditingQuiz(q)}
                             onEditFlashcard={(c: any) => setEditingFlashcard(c)}
                             onEditRealLife={(img: any) => setEditingRealLife(img)}
+                            onEditPastPaper={(paper: any) => setEditingPastPaper(paper)}
+                            onDeletePastPaper={(id: number) => handleDeletePastPaper(id)}
                             onEditSVG={(concept: any) => { setEditingSVGConcept(concept); setCustomSVGPrompt(''); }}
                         />
                     ) : null}
@@ -1647,6 +1704,90 @@ const V8ContentBrowser = ({
                     </div>
                 </div>
             )}
+
+            {editingPastPaper && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2600,
+                    padding: isMobile ? '0' : '40px'
+                }}>
+                    <div style={{ background: 'white', padding: '40px', borderRadius: '32px', width: '100%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 30px 60px -12px rgba(0,0,0,0.25)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>{editingPastPaper.id ? 'Edit Past Paper' : 'Add Past Paper'}</h3>
+                            <button onClick={() => setEditingPastPaper(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: premiumColors.textSoft }}><XCircle size={28} /></button>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Question Text</label>
+                                <textarea
+                                    value={editingPastPaper.question_text || ''}
+                                    onChange={(e) => setEditingPastPaper({ ...editingPastPaper, question_text: e.target.value })}
+                                    style={{ ...inputStyle, minHeight: '120px' }}
+                                    placeholder="Enter the past paper question..."
+                                />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Marks</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={editingPastPaper.marks || 1}
+                                        onChange={(e) => setEditingPastPaper({ ...editingPastPaper, marks: parseInt(e.target.value) || 1 })}
+                                        style={inputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Year</label>
+                                    <input
+                                        value={editingPastPaper.year || ''}
+                                        onChange={(e) => setEditingPastPaper({ ...editingPastPaper, year: e.target.value })}
+                                        style={inputStyle}
+                                        placeholder="e.g. 2023"
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Season</label>
+                                    <input
+                                        value={editingPastPaper.season || ''}
+                                        onChange={(e) => setEditingPastPaper({ ...editingPastPaper, season: e.target.value })}
+                                        style={inputStyle}
+                                        placeholder="e.g. Summer, Winter, M/J"
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Paper Reference</label>
+                                    <input
+                                        value={editingPastPaper.paper_reference || ''}
+                                        onChange={(e) => setEditingPastPaper({ ...editingPastPaper, paper_reference: e.target.value })}
+                                        style={inputStyle}
+                                        placeholder="e.g. Paper 1, Variant 2"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 700, fontSize: '0.9rem' }}>Mark Scheme</label>
+                                <textarea
+                                    value={editingPastPaper.mark_scheme || ''}
+                                    onChange={(e) => setEditingPastPaper({ ...editingPastPaper, mark_scheme: e.target.value })}
+                                    style={{ ...inputStyle, minHeight: '150px', fontFamily: 'monospace' }}
+                                    placeholder="Enter the expected answer/mark scheme..."
+                                />
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '40px' }}>
+                            <button onClick={() => setEditingPastPaper(null)} style={buttonSecondary}>Cancel</button>
+                            <button
+                                onClick={() => handleSavePastPaper(editingPastPaper.id, editingPastPaper)}
+                                style={buttonPrimary}
+                                disabled={isSaving || !editingPastPaper.question_text}
+                            >
+                                {isSaving ? 'Saving...' : 'Save Past Paper'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -1660,6 +1801,8 @@ const V8ContentDetails = ({
     onEditQuiz,
     onEditFlashcard,
     onEditRealLife,
+    onEditPastPaper,
+    onDeletePastPaper,
     onEditSVG,
     isParentSidebarVisible,
     onToggleParentSidebar
@@ -1672,13 +1815,16 @@ const V8ContentDetails = ({
     onEditQuiz: (question: any) => void;
     onEditFlashcard: (card: any) => void;
     onEditRealLife: (image: any) => void;
+    onEditPastPaper: (paper: any) => void;
+    onDeletePastPaper: (id: number) => void;
     onEditSVG: (concept: any) => void;
     isParentSidebarVisible?: boolean;
     onToggleParentSidebar?: () => void;
 }) => {
-    const [activeTab, setActiveTab] = useState<'concepts' | 'quiz' | 'flashcards' | 'reallife'>('concepts');
+    const [activeTab, setActiveTab] = useState<'concepts' | 'quiz' | 'flashcards' | 'reallife' | 'pastpapers'>('concepts');
     const [activeConceptId, setActiveConceptId] = useState<number | null>(null);
     const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
+    const [expandedMarkSchemes, setExpandedMarkSchemes] = useState<Record<number, boolean>>({});
     const [isTocVisible, setIsTocVisible] = useState(true); // Internal TOC state
 
     // Initial concept selection
@@ -1806,8 +1952,9 @@ const V8ContentDetails = ({
                 }}>
                     {[
                         { id: 'concepts', label: 'Learn', Icon: Layers, color: '#927559' }, // Theme color
-                        { id: 'quiz', label: 'Quiz', Icon: HelpCircle, color: '#0f172a' },
-                        { id: 'flashcards', label: 'Cards', Icon: FileText, color: '#0f172a' },
+                        { id: 'quiz', label: 'Exercise', Icon: HelpCircle, color: '#0f172a' },
+                        { id: 'pastpapers', label: 'Past Papers', Icon: FileText, color: '#0f172a' },
+                        { id: 'flashcards', label: 'Cards', Icon: Layers, color: '#0f172a' }, // Changing FileText -> Layers for cards to allow FileText for papers
                         { id: 'reallife', label: 'Real Life', Icon: ImageIcon, color: '#0f172a' }
                     ].map(tab => {
                         const TabIcon = tab.Icon;
@@ -2188,6 +2335,123 @@ const V8ContentDetails = ({
                                     <ImageIcon size={80} style={{ opacity: 0.1, marginBottom: '32px', color: '#1e293b' }} />
                                     <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>No real-life applications discovered yet.</div>
                                     <div style={{ fontSize: '0.95rem', marginTop: '12px', maxWidth: '400px', margin: '12px auto 0' }}>Request a V8 generation with "Real-world examples" enabled to enrich this subtopic.</div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'pastpapers' && (
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px', display: 'flex', flexDirection: 'column', gap: '32px', background: '#fcfaf7' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <div style={{ textAlign: 'left' }}>
+                                    <h2 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', marginBottom: '8px', letterSpacing: '-0.04em' }}>📄 Past Papers</h2>
+                                    <p style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 500 }}>Official examination questions for exam preparation</p>
+                                </div>
+                                <button
+                                    onClick={() => onEditPastPaper({ question_text: '', marks: 1 })}
+                                    style={buttonPrimary}
+                                >
+                                    <FileText size={16} /> Add Past Paper
+                                </button>
+                            </div>
+
+                            {subtopic.past_papers && subtopic.past_papers.length > 0 ? (
+                                subtopic.past_papers.map((paper, idx) => (
+                                    <div key={paper.id} style={{
+                                        background: 'white', borderRadius: '32px', padding: '40px',
+                                        border: '1px solid rgba(0,0,0,0.03)', boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.06)'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                <span style={{
+                                                    background: '#f8fafc', color: '#475569', padding: '6px 12px',
+                                                    borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, border: '1px solid #e2e8f0'
+                                                }}>
+                                                    {paper.marks} {paper.marks === 1 ? 'Mark' : 'Marks'}
+                                                </span>
+                                                {paper.year && (
+                                                    <span style={{
+                                                        background: '#f8fafc', color: '#475569', padding: '6px 12px',
+                                                        borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, border: '1px solid #e2e8f0'
+                                                    }}>
+                                                        {paper.year}
+                                                    </span>
+                                                )}
+                                                {paper.season && (
+                                                    <span style={{
+                                                        background: '#f8fafc', color: '#475569', padding: '6px 12px',
+                                                        borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, border: '1px solid #e2e8f0'
+                                                    }}>
+                                                        {paper.season}
+                                                    </span>
+                                                )}
+                                                {paper.paper_reference && (
+                                                    <span style={{
+                                                        background: '#f8fafc', color: '#475569', padding: '6px 12px',
+                                                        borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700, border: '1px solid #e2e8f0'
+                                                    }}>
+                                                        {paper.paper_reference}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button
+                                                    onClick={() => onEditPastPaper(paper)}
+                                                    style={{ background: 'rgba(30, 41, 59, 0.05)', border: 'none', width: '32px', height: '32px', borderRadius: '8px', display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#64748b' }}
+                                                >
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => onDeletePastPaper(paper.id)}
+                                                    style={{ background: '#fef2f2', border: 'none', width: '32px', height: '32px', borderRadius: '8px', display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#ef4444' }}
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1e293b', marginBottom: '24px', lineHeight: 1.6 }}>
+                                            {paper.question_text.split('\n').map((line: string, i: number) => (
+                                                <React.Fragment key={i}>
+                                                    {line}
+                                                    {i !== paper.question_text.split('\n').length - 1 && <br />}
+                                                </React.Fragment>
+                                            ))}
+                                        </div>
+
+                                        {paper.mark_scheme && (
+                                            <div style={{ marginTop: '24px' }}>
+                                                <button
+                                                    onClick={() => setExpandedMarkSchemes(prev => ({ ...prev, [paper.id]: !prev[paper.id] }))}
+                                                    style={{
+                                                        background: 'none', border: 'none', cursor: 'pointer', color: '#7c3aed',
+                                                        fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px', padding: 0
+                                                    }}
+                                                >
+                                                    {expandedMarkSchemes[paper.id] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                                    {expandedMarkSchemes[paper.id] ? 'Hide Mark Scheme' : 'View Mark Scheme'}
+                                                </button>
+
+                                                {expandedMarkSchemes[paper.id] && (
+                                                    <div style={{
+                                                        marginTop: '16px', padding: '24px', background: 'rgba(124, 58, 237, 0.04)',
+                                                        borderRadius: '16px', borderLeft: '4px solid #7c3aed', fontSize: '0.95rem', color: '#475569', lineHeight: 1.7,
+                                                        fontFamily: 'monospace'
+                                                    }}>
+                                                        {paper.mark_scheme.split('\n').map((line: string, i: number) => (
+                                                            <div key={i}>{line}</div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            ) : (
+                                <div style={{ padding: '80px 40px', textAlign: 'center', color: '#94a3b8', background: 'white', borderRadius: '32px', border: '1px solid rgba(0,0,0,0.03)' }}>
+                                    <FileText size={64} style={{ opacity: 0.1, marginBottom: '24px', color: '#1e293b' }} />
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>No past papers available</div>
+                                    <div style={{ fontSize: '0.9rem', marginTop: '8px' }}>Add official exam questions manually to help students prepare.</div>
                                 </div>
                             )}
                         </div>

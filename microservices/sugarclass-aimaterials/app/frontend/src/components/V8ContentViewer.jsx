@@ -17,6 +17,7 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
   const [isTocVisible, setIsTocVisible] = useState(true);
   const [viewIndexes, setViewIndexes] = useState({
     quiz: 0,
+    pastpapers: 0,
     flashcards: 0,
     reallife: 0,
   });
@@ -40,7 +41,7 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
     setActiveSection(null);
     setFlippedCards({});
     setQuizAnswers({});
-    setViewIndexes({ quiz: 0, flashcards: 0, reallife: 0 });
+    setViewIndexes({ quiz: 0, pastpapers: 0, flashcards: 0, reallife: 0 });
     loadV8Content();
   }, [subtopicId]);
 
@@ -79,6 +80,7 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
   const quizItems = v8Data?.quiz || [];
   const flashcards = v8Data?.flashcards || [];
   const reallifeItems = v8Data?.reallife_images || [];
+  const pastPapers = v8Data?.past_papers || [];
 
   const currentConceptIndex = Math.max(0, concepts.findIndex(c => c.concept_key === activeSection));
   const currentConcept = concepts[currentConceptIndex] || null;
@@ -94,6 +96,15 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
   const currentReallifeIndex = Math.min(viewIndexes.reallife, Math.max(reallifeItems.length - 1, 0));
   const currentReallife = reallifeItems[currentReallifeIndex] || null;
 
+  const currentPastPaperIndex = Math.min(viewIndexes.pastpapers, Math.max(pastPapers.length - 1, 0));
+  const currentPastPaper = pastPapers[currentPastPaperIndex] || null;
+  const [expandedMarkScheme, setExpandedMarkScheme] = useState(false);
+
+  // Reset mark scheme expansion when changing past paper page
+  useEffect(() => {
+    setExpandedMarkScheme(false);
+  }, [currentPastPaperIndex, activeView]);
+
   useEffect(() => {
     if (!concepts.length) {
       setActiveSection(null);
@@ -108,10 +119,11 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
   useEffect(() => {
     setViewIndexes(prev => ({
       quiz: Math.min(prev.quiz, Math.max(quizItems.length - 1, 0)),
+      pastpapers: Math.min(prev.pastpapers, Math.max(pastPapers.length - 1, 0)),
       flashcards: Math.min(prev.flashcards, Math.max(flashcards.length - 1, 0)),
       reallife: Math.min(prev.reallife, Math.max(reallifeItems.length - 1, 0)),
     }));
-  }, [quizItems.length, flashcards.length, reallifeItems.length]);
+  }, [quizItems.length, pastPapers.length, flashcards.length, reallifeItems.length]);
 
   const getPaginationConfig = () => {
     if (activeView === 'content') {
@@ -125,6 +137,9 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
     }
     if (activeView === 'reallife') {
       return { key: 'reallife', index: currentReallifeIndex, total: reallifeItems.length, label: 'Application' };
+    }
+    if (activeView === 'pastpapers') {
+      return { key: 'pastpapers', index: currentPastPaperIndex, total: pastPapers.length, label: 'Paper' };
     }
     return null;
   };
@@ -227,7 +242,13 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
               style={{ ...styles.navBtn, ...(activeView === 'quiz' ? styles.navBtnActive : {}) }}
               onClick={() => setActiveView('quiz')}
             >
-              Quiz
+              Exercise
+            </button>
+            <button
+              style={{ ...styles.navBtn, ...(activeView === 'pastpapers' ? styles.navBtnActive : {}) }}
+              onClick={() => setActiveView('pastpapers')}
+            >
+              Past Papers
             </button>
             <button
               style={{ ...styles.navBtn, ...(activeView === 'flashcards' ? styles.navBtnActive : {}) }}
@@ -292,7 +313,10 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
           <div style={{ ...styles.sidebarSectionTitle, marginTop: '2rem' }}>Tools</div>
           <ul style={styles.tocList}>
             <li style={styles.tocItem} onClick={() => setActiveView('quiz')}>
-              <span style={styles.tocIcon}>❓</span> Practice Quiz
+              <span style={styles.tocIcon}>❓</span> Practice Exercise
+            </li>
+            <li style={styles.tocItem} onClick={() => setActiveView('pastpapers')}>
+              <span style={styles.tocIcon}>📄</span> Past Papers
             </li>
             <li style={styles.tocItem} onClick={() => setActiveView('flashcards')}>
               <span style={styles.tocIcon}>⚡</span> Flashcards
@@ -365,10 +389,10 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
             </div>
           )}
 
-          {/* VIEW: QUIZ */}
+          {/* VIEW: EXERCISE (Formerly Quiz) */}
           {activeView === 'quiz' && (
             <div id="view-quiz">
-              <h2 style={styles.sectionTitle}>❓ Practice Quiz</h2>
+              <h2 style={styles.sectionTitle}>❓ Practice Exercise</h2>
               {currentQuiz ? (
                 <div key={currentQuiz.id || currentQuizIndex} style={styles.quizQuestion}>
                   <div style={styles.qHeader}>
@@ -410,7 +434,78 @@ const V8ContentViewer = ({ subtopicId, isParentSidebarVisible, onToggleParentSid
               ) : (
                 <div style={styles.empty}>
                   <span style={{ fontSize: '3rem' }}>📝</span>
-                  <div>No quiz questions available</div>
+                  <div>No exercise questions available</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* VIEW: PAST PAPERS */}
+          {activeView === 'pastpapers' && (
+            <div id="view-pastpapers">
+              <h2 style={styles.sectionTitle}>📄 Past Papers</h2>
+              {currentPastPaper ? (
+                <div style={{ ...styles.section, background: 'white', padding: '2rem', borderRadius: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #e2e8f0' }}>
+                    <span style={{ background: '#f8fafc', padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 700, color: '#475569', border: '1px solid #e2e8f0' }}>
+                      {currentPastPaper.marks} {currentPastPaper.marks === 1 ? 'Mark' : 'Marks'}
+                    </span>
+                    {currentPastPaper.year && (
+                      <span style={{ background: '#f8fafc', padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 700, color: '#475569', border: '1px solid #e2e8f0' }}>
+                        {currentPastPaper.year}
+                      </span>
+                    )}
+                    {currentPastPaper.season && (
+                      <span style={{ background: '#f8fafc', padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 700, color: '#475569', border: '1px solid #e2e8f0' }}>
+                        {currentPastPaper.season}
+                      </span>
+                    )}
+                    {currentPastPaper.paper_reference && (
+                      <span style={{ background: '#f8fafc', padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 700, color: '#475569', border: '1px solid #e2e8f0' }}>
+                        {currentPastPaper.paper_reference}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: '1.25rem', color: '#1e293b', lineHeight: 1.6, marginBottom: '2rem', fontWeight: 500 }}>
+                    {currentPastPaper.question_text.split('\n').map((line, i) => (
+                      <React.Fragment key={i}>
+                        {line}
+                        {i !== currentPastPaper.question_text.split('\n').length - 1 && <br />}
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  {currentPastPaper.mark_scheme && (
+                    <div>
+                      <button
+                        onClick={() => setExpandedMarkScheme(!expandedMarkScheme)}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer', color: '#7c3aed',
+                          fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: 0
+                        }}
+                      >
+                        {expandedMarkScheme ? 'Hide Mark Scheme' : 'View Mark Scheme'}
+                      </button>
+
+                      {expandedMarkScheme && (
+                        <div style={{
+                          marginTop: '1rem', padding: '1.5rem', background: '#f5f3ff',
+                          borderRadius: '16px', borderLeft: '4px solid #7c3aed', fontSize: '0.95rem', color: '#475569', lineHeight: 1.7,
+                          fontFamily: 'monospace'
+                        }}>
+                          {currentPastPaper.mark_scheme.split('\n').map((line, i) => (
+                            <div key={i}>{line}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={styles.empty}>
+                  <span style={{ fontSize: '3rem' }}>📄</span>
+                  <div>No past papers available</div>
                 </div>
               )}
             </div>

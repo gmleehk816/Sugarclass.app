@@ -67,6 +67,7 @@ class V8ContentStatus(BaseModel):
     quiz_count: int
     flashcard_count: int
     reallife_image_count: int
+    past_paper_count: int
     processed_at: Optional[str]
 
 
@@ -147,6 +148,26 @@ class RealLifeImageUpdateRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     image_type: Optional[str] = None
+
+
+class PastPaperCreateRequest(BaseModel):
+    """Create a past paper request"""
+    question_text: str
+    marks: int = 1
+    year: Optional[str] = None
+    season: Optional[str] = None
+    paper_reference: Optional[str] = None
+    mark_scheme: Optional[str] = None
+
+
+class PastPaperUpdateRequest(BaseModel):
+    """Update a past paper request"""
+    question_text: Optional[str] = None
+    marks: Optional[int] = None
+    year: Optional[str] = None
+    season: Optional[str] = None
+    paper_reference: Optional[str] = None
+    mark_scheme: Optional[str] = None
 
 
 class SubjectListResponse(BaseModel):
@@ -276,11 +297,13 @@ async def list_topic_subtopics(
                 s.processed_at,
                 COUNT(DISTINCT c.id) AS v8_concepts_count,
                 COUNT(DISTINCT q.id) AS quiz_count,
-                COUNT(DISTINCT f.id) AS flashcard_count
+                COUNT(DISTINCT f.id) AS flashcard_count,
+                COUNT(DISTINCT p.id) AS past_paper_count
             FROM subtopics s
             LEFT JOIN v8_concepts c ON s.id = c.subtopic_id
             LEFT JOIN v8_quiz_questions q ON s.id = q.subtopic_id
             LEFT JOIN v8_flashcards f ON s.id = f.subtopic_id
+            LEFT JOIN v8_past_papers p ON s.id = p.subtopic_id
             WHERE s.topic_id = ?
             GROUP BY s.id
             ORDER BY s.order_num
@@ -478,6 +501,14 @@ async def get_subtopic(subtopic_id: str):
     """, (subtopic_id,)).fetchall()
     subtopic['reallife_images'] = [dict(row) for row in images]
 
+    # Get past papers
+    past_papers = conn.execute("""
+        SELECT * FROM v8_past_papers
+        WHERE subtopic_id = ?
+        ORDER BY created_at
+    """, (subtopic_id,)).fetchall()
+    subtopic['past_papers'] = [dict(row) for row in past_papers]
+
     conn.close()
 
     return subtopic
@@ -582,6 +613,11 @@ async def get_subtopic_status(subtopic_id: str):
         (subtopic_id,)
     ).fetchone()['count']
 
+    past_paper_count = conn.execute(
+        "SELECT COUNT(*) as count FROM v8_past_papers WHERE subtopic_id = ?",
+        (subtopic_id,)
+    ).fetchone()['count']
+
     conn.close()
 
     return {
@@ -592,6 +628,7 @@ async def get_subtopic_status(subtopic_id: str):
         "quiz_count": quiz_count,
         "flashcard_count": flashcard_count,
         "reallife_image_count": reallife_image_count,
+        "past_paper_count": past_paper_count,
         "processed_at": subtopic['processed_at']
     }
 

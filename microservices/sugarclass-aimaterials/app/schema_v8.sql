@@ -141,6 +141,20 @@ CREATE TABLE v8_reallife_images (
     UNIQUE(subtopic_id, image_type)
 );
 
+-- V8 Past Papers
+CREATE TABLE v8_past_papers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subtopic_id INTEGER NOT NULL,
+    question_text TEXT NOT NULL,
+    marks INTEGER NOT NULL DEFAULT 1,
+    year TEXT,                           -- e.g., '2023'
+    season TEXT,                         -- e.g., 'Summer', 'Winter', 'May/June'
+    paper_reference TEXT,                -- e.g., 'Paper 1 Variant 2 (12)'
+    mark_scheme TEXT,                    -- Multi-line answer/mark scheme
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (subtopic_id) REFERENCES subtopics(id) ON DELETE CASCADE
+);
+
 -- V8 Learning Objectives (Extracted from source)
 CREATE TABLE v8_learning_objectives (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,6 +228,7 @@ CREATE INDEX idx_v8_generated_content_type ON v8_generated_content(content_type)
 CREATE INDEX idx_v8_quiz_subtopic ON v8_quiz_questions(subtopic_id);
 CREATE INDEX idx_v8_flashcards_subtopic ON v8_flashcards(subtopic_id);
 CREATE INDEX idx_v8_reallife_subtopic ON v8_reallife_images(subtopic_id);
+CREATE INDEX idx_v8_past_papers_subtopic ON v8_past_papers(subtopic_id);
 CREATE INDEX idx_v8_tasks_status ON v8_processing_tasks(status);
 CREATE INDEX idx_v8_tasks_subtopic ON v8_processing_tasks(subtopic_id);
 
@@ -267,6 +282,7 @@ SELECT
     COUNT(DISTINCT q.id) AS quiz_count,
     COUNT(DISTINCT f.id) AS flashcard_count,
     COUNT(DISTINCT r.id) AS reallife_image_count,
+    COUNT(DISTINCT pp.id) AS past_paper_count,
     s.processed_at
 FROM subtopics s
 LEFT JOIN v8_concepts c ON s.id = c.subtopic_id
@@ -274,6 +290,7 @@ LEFT JOIN v8_generated_content gc ON c.id = gc.concept_id
 LEFT JOIN v8_quiz_questions q ON s.id = q.subtopic_id
 LEFT JOIN v8_flashcards f ON s.id = f.subtopic_id
 LEFT JOIN v8_reallife_images r ON s.id = r.subtopic_id
+LEFT JOIN v8_past_papers pp ON s.id = pp.subtopic_id
 GROUP BY s.id;
 
 -- ============================================================================

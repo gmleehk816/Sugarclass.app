@@ -104,6 +104,20 @@ def migrate_to_v8():
             FOREIGN KEY (subtopic_id) REFERENCES subtopics(id) ON DELETE CASCADE
         )""",
 
+        # V8 Past Papers
+        """CREATE TABLE IF NOT EXISTS v8_past_papers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subtopic_id INTEGER NOT NULL,
+            question_text TEXT NOT NULL,
+            marks INTEGER NOT NULL DEFAULT 1,
+            year TEXT,
+            season TEXT,
+            paper_reference TEXT,
+            mark_scheme TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (subtopic_id) REFERENCES subtopics(id) ON DELETE CASCADE
+        )""",
+
         # V8 Key Terms
         """CREATE TABLE IF NOT EXISTS v8_key_terms (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -170,6 +184,7 @@ def migrate_to_v8():
         "CREATE INDEX IF NOT EXISTS idx_v8_quiz_subtopic ON v8_quiz_questions(subtopic_id)",
         "CREATE INDEX IF NOT EXISTS idx_v8_flashcards_subtopic ON v8_flashcards(subtopic_id)",
         "CREATE INDEX IF NOT EXISTS idx_v8_reallife_subtopic ON v8_reallife_images(subtopic_id)",
+        "CREATE INDEX IF NOT EXISTS idx_v8_past_papers_subtopic ON v8_past_papers(subtopic_id)",
         "CREATE INDEX IF NOT EXISTS idx_v8_tasks_status ON v8_processing_tasks(status)",
         "CREATE INDEX IF NOT EXISTS idx_v8_tasks_subtopic ON v8_processing_tasks(subtopic_id)",
     ]
