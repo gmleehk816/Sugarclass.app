@@ -367,17 +367,32 @@ class MarkdownParser:
 # ============================================================================
 
 class ContentSplitter:
-    """Split markdown into chapters and subtopics"""
+    """Split markdown into chapters and subtopics.
+
+    Supports two modes:
+    1. **TOC-based** (preferred): Pass ``toc`` from ``extract_toc()`` — the
+       PDF bookmark hierarchy is the single most reliable chapter source.
+    2. **Regex-based** (fallback): Scans markdown headings for chapter/subtopic
+       patterns.  Works well for IGCSE science, maths, and numbered textbooks.
+    """
 
     # Patterns for different textbook formats
     CHAPTER_PATTERNS = [
         # Explicit chapter headings (prefer numeric chapter roots, not section wrappers)
-        r'^#{1,2}\s*Chapter\s*(\d{1,2})\s*[:\-\u2013]?\s*(.+)$',     # # Chapter 1: Title
+        r'^#{1,2}\s*Chapter\s*(\d{1,3})\s*[:\-\u2013]?\s*(.+)$',     # # Chapter 1: Title
         r'^#{1,2}\s*([A-Z]\d+)\s+(.+)$',                                  # # P1 Describing Motion
         r'^#{1,2}\s*(\d{1,2})\s*[\.\):\-\u2013]\s*(?!\d)(.+)$',      # # 1. Title / # 1: Title
         r'^#{1,2}\s*(\d{1,2})\s+(.+)$',                                   # ## 1 Data representation
-        r'^\*\*Chapter\s*(\d{1,2})\s*[:\-\u2013]?\s*([^*]+)\*\*$',   # **Chapter 1: Title**
+        r'^\*\*Chapter\s*(\d{1,3})\s*[:\-\u2013]?\s*([^*]+)\*\*$',   # **Chapter 1: Title**
         r'^\*\*(\d{1,2})\.\s+([^*]+)\*\*$',                                # **1. Title**
+        # --- Expanded patterns for non-IGCSE textbooks ---
+        r'^#{1,2}\s*Part\s*(\d{1,2}|[IVXLC]+)\s*[:\-\u2013]?\s*(.+)$',   # # Part 1: Title / Part IV: Title
+        r'^#{1,2}\s*Unit\s*(\d{1,3})\s*[:\-\u2013]?\s*(.+)$',             # # Unit 3: Title
+        r'^#{1,2}\s*Section\s*([A-Z0-9]+)\s*[:\-\u2013]?\s*(.+)$',         # # Section A: Title
+        r'^#{1,2}\s*Module\s*(\d{1,3})\s*[:\-\u2013]?\s*(.+)$',           # # Module 5: Title
+        r'^#{1,2}\s*Topic\s*(\d{1,3})\s*[:\-\u2013]?\s*(.+)$',            # # Topic 2: Title
+        r'^\*\*Part\s*(\d{1,2}|[IVXLC]+)\s*[:\-\u2013]?\s*([^*]+)\*\*$', # **Part 1: Title**
+        r'^\*\*Unit\s*(\d{1,3})\s*[:\-\u2013]?\s*([^*]+)\*\*$',           # **Unit 3: Title**
     ]
 
     SUBTOPIC_PATTERNS = [
@@ -394,12 +409,143 @@ class ContentSplitter:
         r'^##\s+(?!\d{1,2}\s+)(?![Cc]hapter\s*\d+)([^#\n]+)$',  # ## Any Header 2 except chapter-like
     ]
 
-    def __init__(self, markdown_content: str):
+    # pymupdf4llm inserts this marker between pages
+    PAGE_BREAK_PATTERN = re.compile(r'^-{3,}\s*$')
+
+    def __init__(self, markdown_content: str, toc: Optional[List[Dict]] = None):
         self.content = markdown_content
+        self.toc = toc or []
         self.chapters = []
         self.subtopics = []
 
     def split(self) -> List[Dict]:
+        # If we have a TOC from the PDF, try TOC-based splitting first.
+        # Fall back to regex if the TOC produces too few usable chapters.
+        if self.toc:
+            toc_result = self._split_with_toc()
+            if len(self.chapters) >= 2:
+                return toc_result
+            # Reset and try regex approach
+            self.chapters = []
+            self.subtopics = []
+
+        return self._split_with_regex()
+
+    def _split_with_toc(self) -> List[Dict]:
+        """Split content using PDF TOC bookmark data.
+
+        Maps TOC entries to content boundaries by tracking pymupdf4llm page
+        breaks in the markdown.  Level-1 TOC entries become chapters;
+        level-2+ entries become subtopics.
+        """
+        lines = self.content.split('\n')
+
+        # Build a page→line_index map by scanning for page breaks.
+        # pymupdf4llm typically inserts '-----' or '---' between pages.
+        page_starts: Dict[int, int] = {1: 0}  # page 1 starts at line 0
+        current_page = 1
+        for i, line in enumerate(lines):
+            if self.PAGE_BREAK_PATTERN.match(line.strip()):
+                current_page += 1
+                page_starts[current_page] = i + 1
+
+        # Determine the top chapter level in the TOC (usually 1, but some
+        # books use level 2 as the effective chapter level)
+        if self.toc:
+            min_level = min(e['level'] for e in self.toc)
+        else:
+            min_level = 1
+
+        # Build ordered list of TOC entries with their start line
+        toc_entries = []
+        for entry in self.toc:
+            page = entry['page']
+            # Find the closest page start at or before this page
+            start_line = 0
+            for p in sorted(page_starts.keys()):
+                if p <= page:
+                    start_line = page_starts[p]
+                else:
+                    break
+            toc_entries.append({
+                **entry,
+                'start_line': start_line,
+            })
+
+        # Process entries as chapters (level == min_level) or subtopics
+        chapter_counter = 0
+        current_chapter = None
+        current_subtopic = None
+        current_content = []
+        content_line_idx = 0  # tracks where we are in the lines array
+
+        for idx, entry in enumerate(toc_entries):
+            # Determine the end line for this entry
+            if idx + 1 < len(toc_entries):
+                end_line = toc_entries[idx + 1]['start_line']
+            else:
+                end_line = len(lines)
+
+            entry_content = '\n'.join(lines[entry['start_line']:end_line]).strip()
+
+            if entry['level'] == min_level:
+                # Flush previous subtopic
+                if current_subtopic:
+                    self._save_subtopic(current_subtopic, current_content, current_chapter)
+                    current_subtopic = None
+                    current_content = []
+
+                chapter_counter += 1
+                current_chapter = {
+                    'num': str(chapter_counter),
+                    'title': entry['title'],
+                    'type': 'chapter',
+                }
+                self.chapters.append(current_chapter)
+
+                # If this chapter has no sub-entries, create a fallback subtopic
+                has_children = any(
+                    e['level'] > min_level
+                    and (idx2 > idx)
+                    and (idx2 == idx + 1 or toc_entries[idx2 - 1]['level'] <= min_level or toc_entries[idx2]['level'] > min_level)
+                    for idx2, e in enumerate(toc_entries)
+                    if idx2 > idx and (idx2 + 1 >= len(toc_entries) or toc_entries[idx2]['start_line'] < (toc_entries[idx + 1]['start_line'] if idx + 1 < len(toc_entries) else len(lines)))
+                )
+                # Simpler check: next entry exists and is a child
+                next_is_child = (idx + 1 < len(toc_entries) and toc_entries[idx + 1]['level'] > min_level)
+                if not next_is_child:
+                    # No subtopics under this chapter — make the whole chapter a single subtopic
+                    fallback = self._build_fallback_subtopic(current_chapter, len(self.subtopics) + 1)
+                    self._save_subtopic(fallback, [entry_content], current_chapter)
+
+            else:
+                # This is a subtopic (level > min_level)
+                if current_subtopic:
+                    self._save_subtopic(current_subtopic, current_content, current_chapter)
+                    current_content = []
+
+                if not current_chapter:
+                    current_chapter = {'num': '1', 'title': 'General', 'type': 'chapter'}
+                    self.chapters.append(current_chapter)
+
+                subtopic_num = f"{current_chapter['num']}.{len([s for s in self.subtopics if s.get('chapter_num') == current_chapter['num']]) + 1}"
+                slug = re.sub(r'[^\w\s-]', '', entry['title']).strip().lower()
+                slug = re.sub(r'[-\s]+', '-', slug)
+                current_subtopic = {
+                    'num': subtopic_num,
+                    'title': entry['title'],
+                    'slug': slug or f'section-{subtopic_num}',
+                    'type': 'subtopic',
+                }
+                current_content = [entry_content]
+
+        # Flush the last subtopic
+        if current_subtopic:
+            self._save_subtopic(current_subtopic, current_content, current_chapter)
+
+        return self.subtopics
+
+    def _split_with_regex(self) -> List[Dict]:
         """Split content into subtopics with chapter-aware fallback handling."""
         lines = self.content.split('\n')
 

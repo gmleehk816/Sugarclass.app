@@ -394,6 +394,7 @@ services:
       - ./microservices/sugarclass-aimaterials/app:/app/app
       - ./microservices/sugarclass-aimaterials/app/static:/app/app/static:ro
       - ./microservices/sugarclass-aimaterials/archive:/app/archive:ro
+      - ./microservices/sugarclass-aimaterials/uploads:/app/uploads
       - ./microservices/sugarclass-aimaterials/scripts:/app/scripts:ro
       - ${BOOKS_PATH:-./microservices/sugarclass-aimaterials/archive}:/books:ro
     networks:

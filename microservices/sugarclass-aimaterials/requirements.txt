@@ -9,6 +9,7 @@ python-jose[cryptography]==3.3.0
 # LLM / AI
 openai==1.57.0
 langchain-openai==0.2.10
+google-generativeai==0.8.4
 
 # Utilities
 python-dotenv==1.0.1

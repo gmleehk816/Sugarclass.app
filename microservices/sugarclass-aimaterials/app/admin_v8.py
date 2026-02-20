@@ -193,8 +193,15 @@ def get_db_connection():
 # ============================================================================
 
 @router.delete("/subjects/{subject_id}")
-async def delete_subject(subject_id: int):
-    """Recursively delete a subject and all its topics/subtopics (cascading)"""
+async def delete_subject(subject_id: str):
+    """Recursively delete a subject and all its topics/subtopics/content.
+
+    We do a manual child-first cascading delete because:
+    - SQLite's ON DELETE CASCADE requires PRAGMA foreign_keys = ON
+    - That PRAGMA cannot be changed inside a transaction
+    - Python's sqlite3 auto-starts transactions
+    So we just delete every table explicitly in the correct dependency order.
+    """
     conn = get_db_connection()
     try:
         # Check if subject exists
@@ -202,8 +209,70 @@ async def delete_subject(subject_id: int):
         if not subject:
             raise HTTPException(status_code=404, detail="Subject not found")
 
-        # Delete subject (cascading will handle topics, subtopics, and content)
+        # 1. Collect all subtopic IDs belonging to this subject
+        subtopics = conn.execute("""
+            SELECT s.id FROM subtopics s
+            JOIN topics t ON s.topic_id = t.id
+            WHERE t.subject_id = ?
+        """, (subject_id,)).fetchall()
+
+        sub_ids = [s['id'] for s in subtopics]
+        if sub_ids:
+            ph = ','.join('?' * len(sub_ids))
+
+            # 2a. Delete v8_generated_content (child of v8_concepts)
+            conn.execute(f"""
+                DELETE FROM v8_generated_content WHERE concept_id IN (
+                    SELECT id FROM v8_concepts WHERE subtopic_id IN ({ph})
+                )
+            """, sub_ids)
+
+            # 2b. Delete v8_concepts
+            conn.execute(f"DELETE FROM v8_concepts WHERE subtopic_id IN ({ph})", sub_ids)
+
+            # 2c. Delete v8_task_logs (child of v8_processing_tasks via task_id)
+            conn.execute(f"""
+                DELETE FROM v8_task_logs WHERE task_id IN (
+                    SELECT task_id FROM v8_processing_tasks WHERE subtopic_id IN ({ph})
+                )
+            """, sub_ids)
+
+            # 2d. Delete v8_processing_tasks
+            conn.execute(f"DELETE FROM v8_processing_tasks WHERE subtopic_id IN ({ph})", sub_ids)
+
+            # 2e. Delete remaining V8 leaf content tables
+            conn.execute(f"DELETE FROM v8_quiz_questions WHERE subtopic_id IN ({ph})", sub_ids)
+            conn.execute(f"DELETE FROM v8_flashcards WHERE subtopic_id IN ({ph})", sub_ids)
+            conn.execute(f"DELETE FROM v8_reallife_images WHERE subtopic_id IN ({ph})", sub_ids)
+            conn.execute(f"DELETE FROM v8_past_papers WHERE subtopic_id IN ({ph})", sub_ids)
+            conn.execute(f"DELETE FROM v8_learning_objectives WHERE subtopic_id IN ({ph})", sub_ids)
+            conn.execute(f"DELETE FROM v8_key_terms WHERE subtopic_id IN ({ph})", sub_ids)
+            conn.execute(f"DELETE FROM v8_formulas WHERE subtopic_id IN ({ph})", sub_ids)
+            conn.execute(f"DELETE FROM v8_rewritten_content WHERE subtopic_id IN ({ph})", sub_ids)
+
+            # 2f. Delete legacy tables (no ON DELETE CASCADE on these FKs)
+            #     content_images → content_processed → content_raw → subtopics
+            conn.execute(f"""
+                DELETE FROM content_images WHERE content_id IN (
+                    SELECT id FROM content_processed WHERE subtopic_id IN ({ph})
+                )
+            """, sub_ids)
+            conn.execute(f"DELETE FROM content_processed WHERE subtopic_id IN ({ph})", sub_ids)
+            conn.execute(f"DELETE FROM content_raw WHERE subtopic_id IN ({ph})", sub_ids)
+
+        # 3. Delete subtopics
+        conn.execute("""
+            DELETE FROM subtopics WHERE topic_id IN (
+                SELECT id FROM topics WHERE subject_id = ?
+            )
+        """, (subject_id,))
+
+        # 4. Delete topics
+        conn.execute("DELETE FROM topics WHERE subject_id = ?", (subject_id,))
+
+        # 5. Finally delete the subject itself
         conn.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
+
         conn.commit()
         return {"success": True, "message": f"Subject {subject_id} deleted successfully"}
     except Exception as e:
@@ -214,7 +283,7 @@ async def delete_subject(subject_id: int):
 
 
 @router.patch("/subjects/{subject_id}")
-async def rename_subject(subject_id: int, request: SubjectRenameRequest):
+async def rename_subject(subject_id: str, request: SubjectRenameRequest):
     """Rename a subject"""
     conn = get_db_connection()
     try:
@@ -1911,23 +1980,137 @@ def run_v8_full_ingestion(
         update_task('running', 10, 'Splitting content into chapters and subtopics...')
         abort_if_cancelled(10, 'content split')
 
-        # --- Step 2: Split into chapters and subtopics ---
-        splitter = ContentSplitter(markdown_content)
-        subtopic_list = splitter.split()
+        # --- Step 1b: Extract PDF TOC if original PDF exists alongside the .md ---
+        toc_data = []
+        try:
+            from .pdf_converter import extract_toc
+            # The upload endpoint saves both the original PDF and the converted .md
+            # in the same batch directory.
+            pdf_candidates = list(md_path.parent.glob('*.pdf'))
+            if pdf_candidates:
+                pdf_path = pdf_candidates[0]
+                toc_data = extract_toc(pdf_path)
+                add_log('info', f"Extracted {len(toc_data)} TOC entries from {pdf_path.name}")
+            else:
+                add_log('info', "No PDF found alongside markdown; using regex-based chapter detection")
+        except Exception as toc_err:
+            add_log('warning', f"TOC extraction failed ({toc_err}); falling back to regex")
 
-        # Also extract chapters from splitter for topic creation
-        # Re-parse to get chapter→subtopic mapping
-        chapters = _extract_chapters_with_subtopics(markdown_content, subtopic_list)
-
-        if not chapters:
-            # Fallback: put everything under a single "General" topic
-            chapters = [{'num': '1', 'title': subject_name, 'subtopics': subtopic_list}]
-
-        total_subtopics = sum(len(ch['subtopics']) for ch in chapters)
-        add_log('info', f"Found {len(chapters)} chapters, {total_subtopics} subtopics")
-
+        # --- Step 2: Extract Structure (LLM-First) ---
+        chapters: List[Dict[str, Any]] = []
+        subtopic_list: List[Dict[str, Any]] = []
+        
+        try:
+            update_task('running', 10, 'Analyzing document structure with LLM...')
+            # Get structure, default to empty list if None. Pass toc_data as guidance!
+            _struct_result = _llm_detect_structure(markdown_content, toc_data=toc_data, add_log=add_log)
+            structure: List[Dict[str, Any]] = _struct_result if _struct_result else []
+            
+            if len(structure) > 0:
+                # Build chapters and subtopics from line numbers
+                lines = markdown_content.split('\n')
+                total_lines = len(lines)
+                
+                # Add a dummy end element to simplify boundary logic
+                boundaries: List[Dict[str, Any]] = list(structure)
+                boundaries.append({'line_num': total_lines, 'type': 'end', 'title': 'EOF'})
+                
+                current_chapter: Optional[Dict[str, Any]] = None
+                
+                ch_idx: int = 0
+                sec_idx: int = 0
+                
+                for i in range(len(structure)):
+                    item = structure[i]
+                    start_line = int(str(item.get('line_num', '0')))
+                    end_line = int(str(boundaries[i+1].get('line_num', str(total_lines))))
+                    
+                    # Extract content for this block (avoid out-of-bounds)
+                    start_line = max(0, min(start_line, total_lines - 1))
+                    end_line = max(0, min(end_line, total_lines))
+                    block_content = '\n'.join(lines[start_line:end_line]).strip()
+                    
+                    if not block_content and i < len(structure) - 1:
+                        # Only skip empty blocks if it's not the last block
+                        continue
+                        
+                    if str(item.get('type', '')) == 'chapter':
+                        ch_idx = ch_idx + 1
+                        sec_idx = 0
+                        
+                        current_chapter = {
+                            'num': str(ch_idx),
+                            'title': str(item.get('title', f"Chapter {ch_idx}")),
+                            'subtopics': []
+                        }
+                        chapters.append(current_chapter)
+                        
+                        # Give chapter overview text its own subtopic if substantial
+                        if len(block_content) > 150:
+                            sec_idx = sec_idx + 1
+                            slug = re.sub(r'[^\w\s-]', '', str(item.get('title', ''))).strip().lower()
+                            slug = re.sub(r'[-\s]+', '-', slug)
+                            
+                            subtopic = {
+                                'num': f"{ch_idx}.{sec_idx}",
+                                'title': f"{item.get('title')} - Overview",
+                                'slug': slug or f'chapter-{ch_idx}-overview',
+                                'type': 'subtopic',
+                                'content': block_content,
+                                'chapter_num': str(ch_idx),
+                                'chapter_title': str(item.get('title', ''))
+                            }
+                            # Help Pyre understand this is a list
+                            sub_list = current_chapter.get('subtopics')
+                            if isinstance(sub_list, list):
+                                sub_list.append(subtopic)
+                            subtopic_list.append(subtopic)
+                            
+                    elif str(item.get('type', '')) == 'subtopic':
+                        sec_idx = sec_idx + 1
+                        
+                        # If a subtopic appears before any chapter, create a "General" chapter
+                        if not current_chapter:
+                            ch_idx = ch_idx + 1
+                            current_chapter = {
+                                'num': str(ch_idx),
+                                'title': 'General',
+                                'subtopics': []
+                            }
+                            chapters.append(current_chapter)
+                            
+                        slug = re.sub(r'[^\w\s-]', '', str(item.get('title', ''))).strip().lower()
+                        slug = re.sub(r'[-\s]+', '-', slug)
+                            
+                        subtopic = {
+                            'num': f"{ch_idx}.{sec_idx}",
+                            'title': str(item.get('title', f"Section {sec_idx}")),
+                            'slug': slug or f'section-{ch_idx}-{sec_idx}',
+                            'type': 'subtopic',
+                            'content': block_content,
+                            'chapter_num': str(current_chapter.get('num', '')),
+                            'chapter_title': str(current_chapter.get('title', ''))
+                        }
+                        sub_list = current_chapter.get('subtopics')
+                        if isinstance(sub_list, list):
+                            sub_list.append(subtopic)
+                        subtopic_list.append(subtopic)
+        except Exception as llm_err:
+            add_log('warning', f"LLM structure compilation failed: {llm_err}")
+            chapters = []
+            
+        # --- Step 2b: Validate Structure ---
+        # We no longer fall back to Regex. If LLM fails, we fail.
+        total_subtopics = 0
+        for ch in chapters:
+            subs = ch.get('subtopics')
+            if isinstance(subs, list):
+                total_subtopics = total_subtopics + len(subs)
+                
         if total_subtopics == 0:
-            raise Exception("No subtopics detected in the markdown file. Check the heading format.")
+            raise Exception("LLM structure detection failed to identify any chapters/subtopics. Ingestion aborted.")
+
+        add_log('info', f"Found {len(chapters)} chapters, {total_subtopics} subtopics via LLM")
 
         update_task('running', 15, f'Creating hierarchy: {len(chapters)} topics, {total_subtopics} subtopics...')
         abort_if_cancelled(15, 'hierarchy creation')
@@ -2440,6 +2623,144 @@ def run_v8_full_ingestion(
                 pass
         # Clean up the cancel event registry to avoid memory leaks
         _cancel_events.pop(task_id, None)
+
+def _llm_detect_structure(markdown_content: str, toc_data: Optional[list] = None, add_log=None) -> Optional[list]:
+    """Use Gemini to detect textbook structure (chapters and subtopics).
+    
+    Instead of sending the full markdown, this extracts 'structural lines' 
+    (headings, short lines, numbered patterns) and their line numbers, 
+    sending a token-efficient map to the LLM for classification.
+    
+    Returns:
+        List of dicts: ``[{'line_num': int, 'type': 'chapter'|'subtopic', 'title': str}]``
+        or None on failure.
+    """
+    import json as _json
+    import os as _os
+    import re
+
+    api_key = _os.getenv("GEMINI_API_KEY") or _os.getenv("LLM_API_KEY")
+    if not api_key:
+        if add_log:
+            add_log('warning', "No LLM API key configured; skipping LLM structure detection")
+        return None
+
+    lines = markdown_content.split('\n')
+    structural_lines = []
+    
+    # 1. Extract potential structural lines to save tokens
+    for i, line in enumerate(lines):
+        orig_line = line
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Patterns for highly likely headings
+        is_heading = (
+            line.startswith('#') or 
+            line.startswith('**') or 
+            # Numbers like 7.1, 7.2.3, or 1 Introduction
+            re.match(r'^\d+(?:\.\d+)+\s', line) or
+            re.match(r'^\d+\s+[A-Z]', line) or
+            # Keywords at start
+            re.match(r'^(?:Chapter|Part|Unit|Section|Module|Topic|Lesson)\s', line, re.IGNORECASE) or
+            # ALL CAPS lines (likely major headings)
+            (line.isupper() and len(line) > 8 and len(line) < 100 and re.search(r'[A-Z]', line)) or
+            # Short lines that look like titles
+            (len(line) < 85 and re.match(r'^[A-Z0-9]', line))
+        )
+        
+        if is_heading:
+            structural_lines.append(f"{i}: {line}")
+
+    # If document is huge, cap the sample to prevent token limits
+    if len(structural_lines) > 2500:
+        if add_log:
+            add_log('warning', "Document very large, truncating structural lines for LLM")
+        structural_lines = structural_lines[:2500]
+
+    sample_text = "\n".join(structural_lines)
+
+    # 2. Format TOC data for prompt
+    toc_guidance = ""
+    if toc_data:
+        toc_guidance = "\nGUIDANCE FROM PDF BOOKMARKS (STRICT GROUND TRUTH):\n"
+        for entry in toc_data:
+            lvl = "Chapter" if entry.get('level') == 1 else "Subtopic"
+            toc_guidance += f"- {lvl}: \"{entry.get('title')}\"\n"
+        toc_guidance += "\nUse these bookmarks as anchor points to find the corresponding lines in the text below.\n"
+
+    prompt = (
+        "You are an expert textbook analyst. Below is a list of potential structural lines from a "
+        "mechanically converted textbook PDF. Each line starts with its line number: `LINE_NUM: content`.\n\n"
+        "Your task is to identify which lines are actual CHAPTER titles and which are SUBTOPIC sections.\n"
+        f"{toc_guidance}"
+        "\nCRITICAL RULES FOR HIERARCHY:\n"
+        "1. Our system ONLY supports a 2-level hierarchy: Chapters -> Subtopics.\n"
+        "2. If the book specifies 3 levels (e.g., 'SECTION 1' -> '1 Data' -> '1.1 Numbers'):\n"
+        "   - You MUST compress it into 2 levels.\n"
+        "   - Use '1 Data' as the `chapter` and '1.1 Numbers' as the `subtopic`.\n"
+        "   - IGNORE overarching high-level 'Section XXX' or 'Part XXX' lines if they contain nested chapters.\n"
+        "3. Ignore glossary entries (e.g. 'A', 'B', 'Algorithm'), index entries, page numbers, or normal body text.\n\n"
+        "Return ONLY valid JSON in this exact format:\n"
+        '[\n'
+        '  {"line_num": 45, "type": "chapter", "title": "7 Algorithm design"},\n'
+        '  {"line_num": 102, "type": "subtopic", "title": "7.1 The program development cycle"}\n'
+        ']\n\n'
+        "- Be extremely strict: classify a line as 'subtopic' or 'chapter' ONLY if it clearly defines a new hierarchy boundary.\n"
+        "- Sort the output by `line_num` ascending.\n\n"
+        f"--- STRUCTURAL LINES ---\n{sample_text}\n--- END LINES ---"
+    )
+
+    try:
+        from langchain_openai import ChatOpenAI
+        from langchain_core.messages import HumanMessage
+        
+        api_key = _os.getenv("LLM_API_KEY")
+        base_url = _os.getenv("LLM_API_URL")
+        model_name = _os.getenv("LLM_MODEL", "gemini-3-flash-preview")
+        
+        if not api_key:
+            if add_log:
+                add_log('warning', "No LLM API key configured for structure detection")
+            return None
+
+        # Increase temperature slightly for better reasoning, or keep at 0 for consistency
+        llm = ChatOpenAI(
+            temperature=0,
+            openai_api_key=api_key,
+            openai_api_base=base_url,
+            model_name=model_name,
+            model_kwargs={"response_format": {"type": "json_object"}} if "gemini" not in model_name.lower() else {}
+        )
+        
+        if add_log:
+            add_log('info', f"Calling LLM ({model_name}) with {len(structural_lines)} potential lines...")
+            
+        messages = [HumanMessage(content=prompt)]
+        response = llm.invoke(messages)
+        raw_text = response.content.strip()
+
+        if raw_text.startswith("```"):
+            raw_text = re.sub(r'^```\w*\n?', '', raw_text)
+            raw_text = re.sub(r'\n?```$', '', raw_text)
+
+        result = _json.loads(raw_text)
+        
+        if isinstance(result, list) and len(result) > 0:
+            chapters = sum(1 for item in result if str(item.get('type', '')) == 'chapter')
+            subtopics = sum(1 for item in result if str(item.get('type', '')) == 'subtopic')
+            if add_log:
+                add_log('info', f"LLM structure detection complete: {chapters} chapters, {subtopics} subtopics")
+            return sorted(result, key=lambda x: int(str(x.get('line_num', '0'))))
+        else:
+            if add_log:
+                add_log('warning', "LLM returned empty or invalid structure result")
+            return None
+    except Exception as e:
+        if add_log:
+            add_log('warning', f"LLM structure detection error: {e}")
+        return None
 
 
 def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list) -> list:

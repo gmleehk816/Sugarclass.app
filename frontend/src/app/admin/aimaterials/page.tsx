@@ -253,8 +253,11 @@ function matchSubjectsToTree(dbSubjects: DbSubject[]) {
 
         for (const [subjectName, boards] of Object.entries(subjects)) {
             const boardEntries = boards.map(boardName => {
-                // IMPORTANT: V8 IDs are prefixed with syllabus code: e.g. "igcse_physics_0625"
-                const targetId = `${levelCode}_${sanitizeId(boardName)}`;
+                // For IB: board is "SL"/"HL", so ID = level_subject_board (e.g. "ib_biology_100088_sl")
+                // For others: board is the full exam board name (e.g. "igcse_cie_physics_0625")
+                const targetId = level === 'IB'
+                    ? `${levelCode}_${sanitizeId(subjectName)}_${sanitizeId(boardName)}`
+                    : `${levelCode}_${sanitizeId(boardName)}`;
                 const db = subjectIdMap[targetId];
                 if (db) matched.add(db.id);
                 return { name: boardName, dbSubject: db };
