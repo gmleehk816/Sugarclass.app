@@ -1,0 +1,51 @@
+V8 PDF INGESTION CHAPTER COLLAPSE - FINDINGS + FIX NOTES
+Date: 2026-02-20
+
+Issue observed:
+- Textbook expected ~10 chapters.
+- In production ingestion output, only 2 chapters appeared.
+- Chapter 1 was mostly correct; remaining subtopics were grouped into chapter 2.
+
+Root cause summary:
+- Primary issue is ingestion-side parsing/chapter mapping, not frontend rendering.
+- Frontend reads topics/subtopics returned by backend APIs.
+- Splitter chapter regexes were too permissive/fragile for some PDF->Markdown header variants.
+- When chapter parsing collapsed, downstream mapping kept most subtopics in very few buckets.
+
+Code changes made:
+1) Hardened chapter/subtopic parsing patterns
+- File: microservices/sugarclass-aimaterials/app/processors/content_processor_v8.py
+- Added stronger numeric chapter heading detection (including "## 1 Title" style).
+- Reduced generic chapter fallback over-capture.
+- Kept controlled generic subtopic fallbacks for non-numbered books.
+- Added chapter title cleanup and filtering of bad/TOC-like titles.
+
+2) Prevented synthetic "General" preface pollution
+- File: microservices/sugarclass-aimaterials/app/processors/content_processor_v8.py
+- Intro noise from preface bucket is no longer turned into a fallback subtopic when real chapters begin.
+
+3) Added ingestion mapping safety net
+- File: microservices/sugarclass-aimaterials/app/admin_v8.py
+- Added numeric regroup fallback in _extract_chapters_with_subtopics():
+  - If chapter parsing collapses into very few buckets, regroup by subtopic root numbers (1.x, 2.x, ...).
+  - Drops pseudo chapter-heading rows accidentally captured as subtopics.
+
+Expected behavior after fix:
+- Numbered textbooks should map to distinct chapters instead of collapsing into 1-2 buckets.
+- Non-numbered textbooks still retain generic subtopic handling.
+- Frontend admin panel should show the corrected chapter list once re-ingested.
+
+Core functionality impact:
+- This does not change core generation workflows, auth, or UI architecture.
+- It changes only chapter/subtopic grouping logic during ingestion for better correctness and resilience.
+
+Verification done locally:
+- Python syntax check passed for modified files:
+  python -m py_compile microservices/sugarclass-aimaterials/app/processors/content_processor_v8.py microservices/sugarclass-aimaterials/app/admin_v8.py
+
+Production follow-up required:
+1) Deploy modified files to VPS.
+2) Re-run V8 full ingestion for the affected book.
+3) Confirm ingestion logs show expected chapter count.
+4) Validate admin UI topic list now shows expected chapters.
+

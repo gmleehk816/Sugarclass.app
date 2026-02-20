@@ -1,0 +1,111 @@
+AI MATERIALS FRONTEND + ADMIN REVIEW FINDINGS
+Date: 2026-02-20
+Scope:
+- Next.js admin UI: frontend/src/app/admin/aimaterials/*
+- AI materials frontend app: microservices/sugarclass-aimaterials/app/frontend/src/*
+
+================================================================
+SUMMARY
+================================================================
+This document captures code review findings to fix later.
+Priority order is: Critical -> High -> Medium.
+
+================================================================
+FINDINGS
+================================================================
+
+[Critical] Stored XSS risk from unsanitized HTML/SVG rendering
+- Learner frontend renders DB-provided HTML/SVG with dangerouslySetInnerHTML:
+  - microservices/sugarclass-aimaterials/app/frontend/src/components/V8ContentViewer.jsx:354
+  - microservices/sugarclass-aimaterials/app/frontend/src/components/V8ContentViewer.jsx:369
+- Admin UI also renders raw HTML content:
+  - frontend/src/app/admin/aimaterials/page.tsx:1364
+  - frontend/src/app/admin/aimaterials/page.tsx:1394
+  - frontend/src/app/admin/aimaterials/components/ChunkBlock.tsx:164
+- Backend returns raw generated HTML/SVG directly from DB:
+  - microservices/sugarclass-aimaterials/app/admin_v8.py:2571
+  - microservices/sugarclass-aimaterials/app/admin_v8.py:2577
+Risk:
+- Malicious or unsafe markup in stored content can execute in browser.
+
+[High] JWT token leaked in iframe query string
+- Token is appended as URL query parameter:
+  - frontend/src/app/(dashboard)/services/materials/page.tsx:20
+Risk:
+- Token can leak via logs, browser history, referrer headers, and monitoring tools.
+Note:
+- Current aimaterials frontend API client does not appear to consume this token from URL.
+
+[High] Admin subject tree mapping appears incompatible with numeric DB IDs
+- Matching logic expects sanitized name-based IDs:
+  - frontend/src/app/admin/aimaterials/lib/treeUtils.ts:115
+  - frontend/src/app/admin/aimaterials/lib/treeUtils.ts:121
+  - frontend/src/app/admin/aimaterials/page.tsx:257
+  - frontend/src/app/admin/aimaterials/page.tsx:263
+- API returns numeric IDs:
+  - microservices/sugarclass-aimaterials/app/admin_v8.py:242
+  - microservices/sugarclass-aimaterials/app/main.py:186
+- UI filters based on this matching:
+  - frontend/src/app/admin/aimaterials/components/V8ContentBrowser.tsx:1047
+Risk:
+- Subjects appear as "Unlinked", browse/select behavior is confusing or wrong.
+
+[Medium] Generation modal contains options that are not applied by backend
+- UI/state includes:
+  - generate_concepts
+  - apply_to_full_topic
+  - frontend/src/app/admin/aimaterials/components/V8ContentBrowser.tsx:311
+  - frontend/src/app/admin/aimaterials/components/V8ContentBrowser.tsx:502
+- Request payload omits these:
+  - frontend/src/app/admin/aimaterials/components/V8ContentBrowser.tsx:747
+- Backend request model also omits these:
+  - microservices/sugarclass-aimaterials/app/admin_v8.py:74
+Risk:
+- Misleading controls in UI, false expectations.
+
+[Medium] Public frontend shows delete chapter action that cannot authenticate
+- Delete button is shown in public materials UI:
+  - microservices/sugarclass-aimaterials/app/frontend/src/components/ChapterSidebar.orchestrator.jsx:177
+- Calls admin endpoint:
+  - microservices/sugarclass-aimaterials/app/frontend/src/components/ChapterSidebar.orchestrator.jsx:86
+- Admin endpoint requires auth:
+  - microservices/sugarclass-aimaterials/app/admin_v8.py:46
+- API client in this app does not attach bearer token:
+  - microservices/sugarclass-aimaterials/app/frontend/src/api.js:34
+Risk:
+- Broken action visible to users; potential confusion and noisy errors.
+
+[Medium] Subtopic selection can jump unexpectedly after generation completes
+- On completion, code reloads content and subtopics:
+  - frontend/src/app/admin/aimaterials/components/V8ContentBrowser.tsx:570
+  - frontend/src/app/admin/aimaterials/components/V8ContentBrowser.tsx:571
+- loadSubtopics auto-selects first subtopic:
+  - frontend/src/app/admin/aimaterials/components/V8ContentBrowser.tsx:620
+Risk:
+- User may lose current context after generating content.
+
+================================================================
+RECOMMENDED FIX ORDER
+================================================================
+1) XSS hardening (backend sanitization + frontend safe rendering).
+2) Remove token-in-query usage for materials iframe.
+3) Fix subject tree mapping to numeric ID model (or consistent stable identifiers).
+4) Resolve unused generation options (implement end-to-end or remove UI controls).
+5) Remove/hide unauthenticated admin actions in public frontend.
+6) Preserve selected subtopic after generation refresh.
+
+================================================================
+IMPLEMENTATION NOTES
+================================================================
+- Make security fixes first and deploy behind feature flag if needed.
+- Keep behavior changes minimal and validate each step with manual smoke tests.
+- For sanitization, prefer allowlist-based sanitizers for both HTML and SVG.
+- If SVG interactivity is needed, explicitly allow only safe tags/attributes.
+
+================================================================
+VALIDATION GAP DURING REVIEW
+================================================================
+- Could not run lint/typecheck because frontend dependencies were not installed:
+  - frontend: missing typescript/eslint
+  - microservices/sugarclass-aimaterials/app/frontend: missing eslint
+

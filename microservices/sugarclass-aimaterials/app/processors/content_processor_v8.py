@@ -371,25 +371,27 @@ class ContentSplitter:
 
     # Patterns for different textbook formats
     CHAPTER_PATTERNS = [
-        r'^#\s+(Chapter\s*\d+[:\s].+)$',          # # Chapter 1: Title
-        r'^#\s+([A-Z]\d+)\s+(.+)$',              # # P1 Describing Motion
-        r'^#\s+(\d+)\.\s+(.+)$',                 # # 1. Title
-        r'^#\s+(Section\s*[A-Za-z0-9IVX]+)[:\s-]+(.+)$',  # # Section A: Title
-        r'^#\s+(Part\s*[A-Za-z0-9IVX]+)[:\s-]+(.+)$',     # # Part II: Title
-        r'^\*\*(Section\s*[A-Za-z0-9IVX]+)[:\s-]+([^*]+)\*\*$',  # **Section B: Title**
-        r'^\*\*(\d+)\.\s+([^*]+)\*\*$',          # **1. Title**
-        r'^#\s+([^#\n]+)$',                      # # Any Header 1 (Generic Fallback)
+        # Explicit chapter headings (prefer numeric chapter roots, not section wrappers)
+        r'^#{1,2}\s*Chapter\s*(\d{1,2})\s*[:\-\u2013]?\s*(.+)$',     # # Chapter 1: Title
+        r'^#{1,2}\s*([A-Z]\d+)\s+(.+)$',                                  # # P1 Describing Motion
+        r'^#{1,2}\s*(\d{1,2})\s*[\.\):\-\u2013]\s*(?!\d)(.+)$',      # # 1. Title / # 1: Title
+        r'^#{1,2}\s*(\d{1,2})\s+(.+)$',                                   # ## 1 Data representation
+        r'^\*\*Chapter\s*(\d{1,2})\s*[:\-\u2013]?\s*([^*]+)\*\*$',   # **Chapter 1: Title**
+        r'^\*\*(\d{1,2})\.\s+([^*]+)\*\*$',                                # **1. Title**
     ]
 
     SUBTOPIC_PATTERNS = [
-        r'^###\s+(\d+\.\d+)\s+(.+)$',            # ### 2.4 Calculating Speed
-        r'^###\s+([^#\n]+)$',                    # ### Any Header 3
-        r'^\*\*(\d+\.\d+)\*\*\s+(.+)$',          # **2.4** Calculating Speed
-        r'^\*\*(\d+\.\d+)\s+([^*]+)\*\*$',       # **2.4 Calculating Speed**
-        r'^##\s+(\d+\.\d+)\s+(.+)$',             # ## 2.4 Calculating Speed
-        r'^(\d+\.\d+)\s+(.+)$',                  # 2.4 Calculating Speed
-        r'^([A-Z]\d+\.\d+)\s+(.+)$',             # P1.1 Describing Motion
-        r'^##\s+([^#\n]+)$',                     # ## Any Header 2 (Generic Fallback)
+        # Numeric syllabus subtopics (allow 1-3 hash levels due PDF->MD variation)
+        r'^#{1,3}\s*(\d{1,2}\.\d+(?:\.\d+)?)\s+(.+)$',    # ### 2.4 / # 2.1.3
+        r'^#{1,3}\s*([A-Z]\d+\.\d+)\s+(.+)$',                  # # P1.1 Describing Motion
+        r'^\*\*(\d{1,2}\.\d+(?:\.\d+)?)\*\*\s+(.+)$',       # **2.4** Calculating Speed
+        r'^\*\*(\d{1,2}\.\d+(?:\.\d+)?)\s+([^*]+)\*\*$',    # **2.4 Calculating Speed**
+        r'^(\d{1,2}\.\d+(?:\.\d+)?)\s+(.+)$',               # 2.4 Calculating Speed
+        r'^([A-Z]\d+\.\d+)\s+(.+)$',                           # P1.1 Describing Motion
+        # Generic fallbacks for non-numbered books:
+        # keep broad support but explicitly avoid chapter-like numeric H2s.
+        r'^###\s+([^#\n]+)$',                                    # ### Any Header 3
+        r'^##\s+(?!\d{1,2}\s+)(?![Cc]hapter\s*\d+)([^#\n]+)$',  # ## Any Header 2 except chapter-like
     ]
 
     def __init__(self, markdown_content: str):
@@ -426,8 +428,11 @@ class ContentSplitter:
                 # Only emit a fallback subtopic for the previous chapter if it
                 # had intro text AND no explicit subtopics were found.
                 if current_chapter and chapter_intro_content and not chapter_has_subtopics:
-                    fallback_subtopic = self._build_fallback_subtopic(current_chapter, len(self.subtopics) + 1)
-                    self._save_subtopic(fallback_subtopic, chapter_intro_content, current_chapter)
+                    # If we were in the synthetic preface bucket ("General"),
+                    # drop intro noise once real chapters begin.
+                    if (current_chapter.get('title') or '').strip().lower() != 'general':
+                        fallback_subtopic = self._build_fallback_subtopic(current_chapter, len(self.subtopics) + 1)
+                        self._save_subtopic(fallback_subtopic, chapter_intro_content, current_chapter)
                 chapter_intro_content = []
                 chapter_has_subtopics = False
 
@@ -488,12 +493,21 @@ class ContentSplitter:
                     num = groups[0]
                     title = groups[1]
                 else:
-                    num = "1" # Default
-                    title = groups[0]
+                    # Rare fallback path (single captured group)
+                    num = str(groups[0]).strip()
+                    title = f"Chapter {num}"
+
+                title = re.sub(r'\s+', ' ', str(title)).strip()
+                # Strip trailing page numbers from TOC-like lines: "Data representation 2"
+                title = re.sub(r'\s+\d{1,3}$', '', title).strip()
+                if not title:
+                    continue
+                if not re.search(r'[A-Za-z]', title):
+                    continue
                 
                 return {
                     'num': num,
-                    'title': title.strip(),
+                    'title': title,
                     'type': 'chapter'
                 }
         return None

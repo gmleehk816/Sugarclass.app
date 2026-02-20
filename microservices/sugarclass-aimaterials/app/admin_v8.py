@@ -2396,6 +2396,57 @@ def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list)
     """Map chapters → subtopics, preferring splitter-provided chapter metadata."""
     from .processors.content_processor_v8 import ContentSplitter
 
+    def _numeric_regroup_fallback(items: list) -> Optional[list]:
+        """
+        Recover chapter mapping from subtopic numbering when header parsing collapses
+        many chapters into a small number of buckets (e.g. only SECTION 1 / SECTION 2).
+        """
+        groups: Dict[str, List[dict]] = {}
+        chapter_title_hints: Dict[str, str] = {}
+
+        for st in items:
+            num = str(st.get('num') or '').strip()
+            title = str(st.get('title') or '').strip()
+
+            num_match = re.match(r'^(\d{1,2})\.\d+', num)
+            if num_match:
+                root = num_match.group(1)
+                groups.setdefault(root, []).append(st)
+                continue
+
+            # Capture chapter-like pseudo-subtopic titles such as "1 Data representation"
+            title_match = re.match(r'^(\d{1,2})\s+(?!\d)(.+)$', title)
+            if title_match:
+                root = title_match.group(1)
+                hinted = title_match.group(2).strip()
+                if hinted:
+                    chapter_title_hints[root] = hinted
+
+        # Require a meaningful spread before forcing regroup
+        if len(groups) < 4:
+            return None
+
+        rebuilt = []
+        for root in sorted(groups.keys(), key=lambda v: int(v)):
+            chapter_subtopics = []
+            for st in groups[root]:
+                title = str(st.get('title') or '').strip()
+                # Drop chapter heading rows accidentally captured as subtopics
+                if re.match(rf'^{re.escape(root)}\s+(?!\d)', title):
+                    continue
+                chapter_subtopics.append(st)
+
+            if not chapter_subtopics:
+                chapter_subtopics = groups[root]
+
+            rebuilt.append({
+                'num': root,
+                'title': chapter_title_hints.get(root, f"Chapter {root}"),
+                'subtopics': chapter_subtopics
+            })
+
+        return rebuilt
+
     chapters = []
     chapter_index = {}
 
@@ -2419,6 +2470,16 @@ def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list)
             chapters[chapter_index[key]]['subtopics'].append(st)
 
         if chapters:
+            # Guardrails:
+            # 1) if metadata grouped almost everything into a tiny number of buckets,
+            # 2) or produced a synthetic "General" bucket while numeric chapter roots exist,
+            # recover by subtopic numbering.
+            regrouped = _numeric_regroup_fallback(subtopic_list)
+            if regrouped and (
+                len(chapters) <= 2 or
+                any((c.get('title') or '').strip().lower() == 'general' for c in chapters)
+            ):
+                return regrouped
             return chapters
 
     # Backward-compatible fallback for old splitter payloads without chapter metadata.
@@ -2455,6 +2516,13 @@ def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list)
         else:
             chapters.append({'num': '1', 'title': 'General', 'subtopics': [subtopic_list[subtopic_idx]]})
         subtopic_idx += 1
+
+    regrouped = _numeric_regroup_fallback(subtopic_list)
+    if regrouped and (
+        len(chapters) <= 2 or
+        any((c.get('title') or '').strip().lower() == 'general' for c in chapters)
+    ):
+        return regrouped
 
     return chapters
 
