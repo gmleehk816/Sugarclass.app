@@ -498,8 +498,12 @@ class ContentSplitter:
                     title = f"Chapter {num}"
 
                 title = re.sub(r'\s+', ' ', str(title)).strip()
-                # Strip trailing page numbers from TOC-like lines: "Data representation 2"
-                title = re.sub(r'\s+\d{1,3}$', '', title).strip()
+                # Strip trailing page numbers from TOC-like lines: e.g. "Data representation 42"
+                # Only strip if the trailing number looks like a page number (> 20),
+                # to avoid corrupting real titles like "Algebra 2" or "World War 1".
+                _pgnum_match = re.match(r'^(.*\S)\s+(\d{1,3})$', title)
+                if _pgnum_match and int(_pgnum_match.group(2)) > 20:
+                    title = _pgnum_match.group(1).strip()
                 if not title:
                     continue
                 if not re.search(r'[A-Za-z]', title):

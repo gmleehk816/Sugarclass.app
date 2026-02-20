@@ -2396,13 +2396,34 @@ def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list)
     """Map chapters → subtopics, preferring splitter-provided chapter metadata."""
     from .processors.content_processor_v8 import ContentSplitter
 
+    # Pre-build a mapping of chapter number → real title by scanning the raw markdown.
+    # This is used by _numeric_regroup_fallback as a high-quality title source before
+    # falling back to the generic "Chapter N" label.
+    def _build_chapter_title_map_from_markdown(md: str) -> dict:
+        """Scan markdown headings for chapter titles. Returns {chapter_num_str: title}."""
+        hint_map: dict = {}
+        temp_s = ContentSplitter("")
+        for raw_line in md.split('\n'):
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            ch = temp_s._match_chapter(stripped)
+            if ch:
+                num = str(ch.get('num') or '').strip()
+                title = str(ch.get('title') or '').strip()
+                if num and title and re.search(r'[A-Za-z]', title):
+                    hint_map[num] = title
+        return hint_map
+
+    _markdown_chapter_titles = _build_chapter_title_map_from_markdown(markdown_content)
+
     def _numeric_regroup_fallback(items: list) -> Optional[list]:
         """
         Recover chapter mapping from subtopic numbering when header parsing collapses
         many chapters into a small number of buckets (e.g. only SECTION 1 / SECTION 2).
         """
         groups: Dict[str, List[dict]] = {}
-        chapter_title_hints: Dict[str, str] = {}
+        chapter_title_hints: Dict[str, str] = dict(_markdown_chapter_titles)  # seed with markdown scan
 
         for st in items:
             num = str(st.get('num') or '').strip()
@@ -2419,7 +2440,8 @@ def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list)
             if title_match:
                 root = title_match.group(1)
                 hinted = title_match.group(2).strip()
-                if hinted:
+                # Only overwrite the markdown-derived hint if we don't already have one
+                if hinted and root not in chapter_title_hints:
                     chapter_title_hints[root] = hinted
 
         # Require a meaningful spread before forcing regroup
@@ -2470,15 +2492,12 @@ def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list)
             chapters[chapter_index[key]]['subtopics'].append(st)
 
         if chapters:
-            # Guardrails:
-            # 1) if metadata grouped almost everything into a tiny number of buckets,
-            # 2) or produced a synthetic "General" bucket while numeric chapter roots exist,
-            # recover by subtopic numbering.
+            # Guardrail: if metadata grouped everything into a "General" synthetic bucket
+            # while numeric chapter roots exist in the subtopic numbers, regroup by numbers.
+            # NOTE: We intentionally do NOT trigger on `len(chapters) <= 2` — a PDF can
+            # legitimately have only 2 chapters and we must keep their real names.
             regrouped = _numeric_regroup_fallback(subtopic_list)
-            if regrouped and (
-                len(chapters) <= 2 or
-                any((c.get('title') or '').strip().lower() == 'general' for c in chapters)
-            ):
+            if regrouped and any((c.get('title') or '').strip().lower() == 'general' for c in chapters):
                 return regrouped
             return chapters
 
@@ -2518,9 +2537,11 @@ def _extract_chapters_with_subtopics(markdown_content: str, subtopic_list: list)
         subtopic_idx += 1
 
     regrouped = _numeric_regroup_fallback(subtopic_list)
+    # Only regroup when we have a meaningful number of numeric chapter roots AND
+    # the chapter list is either empty or entirely "General" buckets.
     if regrouped and (
-        len(chapters) <= 2 or
-        any((c.get('title') or '').strip().lower() == 'general' for c in chapters)
+        not chapters or
+        all((c.get('title') or '').strip().lower() == 'general' for c in chapters)
     ):
         return regrouped
 
