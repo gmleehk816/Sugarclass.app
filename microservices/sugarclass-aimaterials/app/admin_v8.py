@@ -830,6 +830,50 @@ async def cancel_task(task_id: str):
         conn.close()
 
 
+@router.post("/tasks/{task_id}/force-cancel")
+async def force_cancel_task(task_id: str):
+    """
+    Force a task from any in-progress state directly to 'cancelled'.
+    Use this as a safety valve when the normal cancel gets stuck on 'cancelling'
+    (e.g. a worker thread is blocked mid-HTTP-request and cannot check the event).
+    The frontend should call this endpoint after ~15s of no state change during cancellation.
+    """
+    ensure_v8_tables()
+    ensure_v8_task_columns()
+    conn = get_db_connection()
+    try:
+        task = conn.execute(
+            "SELECT task_id, status FROM v8_processing_tasks WHERE task_id = ?",
+            (task_id,)
+        ).fetchone()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        conn.execute("""
+            UPDATE v8_processing_tasks
+            SET status = 'cancelled',
+                cancel_requested = 1,
+                message = 'Task force-cancelled by user',
+                cancelled_at = COALESCE(cancelled_at, CURRENT_TIMESTAMP),
+                completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+            WHERE task_id = ?
+        """, (task_id,))
+        conn.execute("""
+            INSERT INTO v8_task_logs (task_id, log_level, message)
+            VALUES (?, 'warning', 'Task force-cancelled by user via force-cancel endpoint')
+        """, (task_id,))
+        conn.commit()
+
+        # Also wake the event in case the thread is sleeping between retries
+        event = _cancel_events.get(task_id)
+        if event:
+            event.set()
+
+        return {"task_id": task_id, "status": "cancelled", "message": "Task force-cancelled"}
+    finally:
+        conn.close()
+
+
 # ============================================================================
 # CONCEPT MANAGEMENT
 # ============================================================================
@@ -2132,6 +2176,9 @@ def run_v8_full_ingestion(
                     return
 
                 proc = _get_thread_processor()
+                # Attach the cancel event so every GeminiClient.generate() call
+                # in this worker inherits cooperative cancellation automatically.
+                proc.gemini.cancel_event = _cancel_event
                 add_log('info', f"[{i+1}/{n}] Processing: {st_name}")
 
                 # --- Progress calculation ---
@@ -2355,9 +2402,12 @@ def run_v8_full_ingestion(
                 except Exception:
                     pass  # Already handled inside _process_single_subtopic
         finally:
-            executor.shutdown(wait=True)
-            # Close all thread-local processors
-            # (Python threading.local doesn't expose all threads, but the GC will clean up)
+            # If cancelled, don't wait for in-flight HTTP calls to complete —
+            # they may take up to REQUEST_TIMEOUT seconds (120s default) each.
+            # wait=False lets the executor drop queued (not yet started) futures
+            # immediately; running threads will exit on their next cancel check.
+            was_cancelled = _cancel_event.is_set()
+            executor.shutdown(wait=not was_cancelled, cancel_futures=was_cancelled)
 
 
         add_log('info', f"Generation summary: {total_success} succeeded, {total_failed} failed out of {len(subtopic_db_ids)}")

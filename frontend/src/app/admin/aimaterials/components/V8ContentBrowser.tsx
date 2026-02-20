@@ -556,20 +556,49 @@ const V8ContentBrowser = ({
     useEffect(() => {
         if (!currentTaskId) return;
 
+        // Track how long we've been in the 'cancelling' state so we can force-cancel
+        // if the worker thread is stuck mid-HTTP-request (the most common cause of
+        // the "stuck cancelling" bug).
+        let cancellingStartTime: number | null = null;
+        const FORCE_CANCEL_TIMEOUT_MS = 15_000; // 15 seconds
+
         const pollInterval = setInterval(async () => {
             try {
                 const data = await serviceFetch('aimaterials', `/api/admin/v8/tasks/${currentTaskId}`);
                 setTaskStatus(data);
 
-                if (data.status === 'completed' || data.status === 'failed') {
+                if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
                     clearInterval(pollInterval);
                     setGenerating(false);
+                    cancellingStartTime = null;
 
                     if (data.status === 'completed') {
-                        // Refresh subtopic content
                         loadSubtopicContent(selectedSubtopicId!);
                         loadSubtopics(selectedTopicId!);
                     }
+                    return;
+                }
+
+                // If the task has been in 'cancelling' for > 15s, force-cancel it so the
+                // UI doesn't stay stuck. This handles the case where a worker thread is
+                // blocked inside a live HTTP request and can't check the cancel event.
+                if (data.status === 'cancelling') {
+                    if (cancellingStartTime === null) {
+                        cancellingStartTime = Date.now();
+                    } else if (Date.now() - cancellingStartTime > FORCE_CANCEL_TIMEOUT_MS) {
+                        console.warn(`[V8] Task ${currentTaskId} stuck in 'cancelling' for >15s — force-cancelling.`);
+                        try {
+                            await serviceFetch('aimaterials', `/api/admin/v8/tasks/${currentTaskId}/force-cancel`, {
+                                method: 'POST',
+                            });
+                        } catch (forceErr) {
+                            console.error('[V8] Force-cancel failed:', forceErr);
+                        }
+                        cancellingStartTime = null;
+                    }
+                } else {
+                    // Reset the timer if we leave the 'cancelling' state for any reason
+                    cancellingStartTime = null;
                 }
             } catch (err) {
                 console.error('Error polling task status', err);
@@ -578,6 +607,7 @@ const V8ContentBrowser = ({
 
         return () => clearInterval(pollInterval);
     }, [currentTaskId, selectedSubtopicId, selectedTopicId]);
+
 
     const loadSubjects = async () => {
         setLoadingSubjects(true);

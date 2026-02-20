@@ -575,35 +575,50 @@ class ContentSplitter:
 # ============================================================================
 
 class GeminiClient:
-    """Gemini API client with rate limiting"""
+    """Gemini API client with rate limiting and cooperative cancellation."""
 
     def __init__(self, api_key: str, model: str = MODEL):
         self.api_key = api_key
         self.model = model
         self.last_request_time = 0
+        self.cancel_event = None   # Set by callers to enable cooperative cancellation
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }
 
+    def _is_cancelled(self, explicit_event=None) -> bool:
+        """Check if cancellation has been requested via explicit or instance event."""
+        ev = explicit_event or self.cancel_event
+        return ev is not None and ev.is_set()
+
+    def _sleep_cancellable(self, seconds: float, explicit_event=None):
+        """Sleep for `seconds` but wake immediately if cancellation is signalled."""
+        ev = explicit_event or self.cancel_event
+        if ev is not None:
+            ev.wait(timeout=seconds)
+        else:
+            time.sleep(seconds)
+
     def _wait_for_rate_limit(self):
-        """Wait to respect rate limit"""
+        """Wait to respect rate limit (wakes early if cancelled)."""
         current_time = time.time()
         time_since_last = current_time - self.last_request_time
 
         if time_since_last < REQUEST_INTERVAL:
             wait_time = REQUEST_INTERVAL - time_since_last
             print(f"    [RATE LIMIT] Waiting {wait_time:.1f}s...")
-            time.sleep(wait_time)
+            self._sleep_cancellable(wait_time)
 
         self.last_request_time = time.time()
 
     def generate(self, prompt: str, timeout: int = REQUEST_TIMEOUT, max_retries: Optional[int] = None, cancel_event=None) -> Optional[str]:
         """Generate content from Gemini API.
-        
+
         Args:
-            cancel_event: optional threading.Event — if set, retry sleeps return immediately
-                          so the caller can check for cancellation without waiting.
+            cancel_event: optional threading.Event — if set (or self.cancel_event is set),
+                          retry sleeps and inter-attempt checks honour cancellation
+                          so the caller can react quickly without waiting.
         """
         request_data = {
             "model": self.model,
@@ -612,19 +627,16 @@ class GeminiClient:
         }
         retries = max_retries if max_retries is not None else MAX_RETRIES
 
-        def _sleep(seconds: float):
-            """Sleep that wakes immediately if cancel_event is set."""
-            if cancel_event is not None:
-                cancel_event.wait(timeout=seconds)
-            else:
-                time.sleep(seconds)
-
         for attempt in range(1, retries + 1):
-            # Check cancel before each attempt
-            if cancel_event is not None and cancel_event.is_set():
+            # Check cancel before each attempt (uses both explicit and instance event)
+            if self._is_cancelled(cancel_event):
                 return None
             try:
                 self._wait_for_rate_limit()
+
+                # One final cancel check after the rate-limit wait
+                if self._is_cancelled(cancel_event):
+                    return None
 
                 response = requests.post(
                     API_BASE_URL,
@@ -639,18 +651,17 @@ class GeminiClient:
                         return data["choices"][0]["message"]["content"]
 
                 elif response.status_code == 429:
-                    # Rate limited — read Retry-After header, then use exponential backoff
                     retry_after = int(response.headers.get("Retry-After", 0))
                     wait = max(retry_after, RETRY_DELAY * (2 ** (attempt - 1)))
                     print(f"    [RATE LIMIT 429] Attempt {attempt}/{retries}, waiting {wait:.0f}s (Retry-After={retry_after}s)...")
                     if attempt < retries:
-                        _sleep(wait)
+                        self._sleep_cancellable(wait, cancel_event)
                         continue
                     return None
                 elif response.status_code in (500, 502, 503, 504):
                     print(f"    [ERROR] HTTP {response.status_code}, attempt {attempt}/{retries}")
                     if attempt < retries:
-                        _sleep(RETRY_DELAY)
+                        self._sleep_cancellable(RETRY_DELAY, cancel_event)
                         continue
                     return None
                 else:
@@ -660,7 +671,7 @@ class GeminiClient:
             except Exception as e:
                 print(f"    [ERROR] {str(e)}")
                 if attempt < retries:
-                    _sleep(RETRY_DELAY)
+                    self._sleep_cancellable(RETRY_DELAY, cancel_event)
                     continue
                 return None
 
