@@ -45,6 +45,13 @@ def convert_pdf_to_markdown(
     if not pdf_path.exists():
         raise ValueError(f"PDF file not found: {pdf_path}")
 
+    # Suppress verbose C-level MuPDF parsing warnings for malformed PDFs
+    try:
+        import fitz
+        fitz.TOOLS.mupdf_display_errors(False)
+    except Exception:
+        pass
+
     # Convert PDF to markdown (text-only extraction)
     md_text = pymupdf4llm.to_markdown(str(pdf_path))
 
