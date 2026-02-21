@@ -134,12 +134,17 @@ async def upload_files(files: List[UploadFile] = File(...)):
     md_file = None
     uploaded_md_files: List[str] = []
     converted_md_files: List[str] = []
+    uploaded_json_files: List[str] = []
     pdf_converted = False
     conversion_errors = []
 
     for file in files:
         file_path = batch_dir / file.filename
         lower_filename = file.filename.lower()
+
+        # If it's a JSON file, rename it to structure.json for consistency if requested
+        if lower_filename.endswith('.json'):
+            file_path = batch_dir / 'structure.json'
 
         # Save uploaded file
         with open(file_path, "wb") as buffer:
@@ -162,6 +167,8 @@ async def upload_files(files: List[UploadFile] = File(...)):
             uploaded_files.append(file.filename)
             if lower_filename.endswith('.md'):
                 uploaded_md_files.append(file.filename)
+            elif lower_filename.endswith('.json'):
+                uploaded_json_files.append('structure.json')
 
     # Pick deterministic main markdown file:
     # 1) Prefer explicitly uploaded .md

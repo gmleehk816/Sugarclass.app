@@ -77,3 +77,4 @@ yarn-error.log*
 .tasks/
 .claude-summary.md
 CLAUDE.md
+microservices/sugarclass-aimaterials/uploads/

@@ -92,6 +92,7 @@ class V8IngestRequest(BaseModel):
     """Request to ingest a markdown file with V8 pipeline"""
     batch_id: str
     filename: str
+    structure_json: Optional[str] = None
     subject_name: str
     syllabus: str = "IGCSE"
     target_subject_id: Optional[str] = None
@@ -1854,6 +1855,7 @@ async def v8_ingest(request: V8IngestRequest, background_tasks: BackgroundTasks)
         target_subject_id=request.target_subject_id,
         exam_board=request.exam_board,
         ib_level=request.ib_level,
+        structure_json_name=request.structure_json,
     )
 
     return {"task_id": task_id, "status": "pending", "message": "V8 full ingestion started"}
@@ -1866,7 +1868,8 @@ def run_v8_full_ingestion(
     syllabus: str,
     target_subject_id: Optional[str] = None,
     exam_board: Optional[str] = None,
-    ib_level: Optional[str] = None
+    ib_level: Optional[str] = None,
+    structure_json_name: Optional[str] = None,
 ):
     """Background task: full V8 pipeline — parse markdown, create hierarchy, generate all V8 content"""
     # Register a cancel event for this task so cancel_task() can wake us instantly
@@ -1996,123 +1999,206 @@ def run_v8_full_ingestion(
         except Exception as toc_err:
             add_log('warning', f"TOC extraction failed ({toc_err}); falling back to regex")
 
-        # --- Step 2: Extract Structure (LLM-First) ---
+        # --- Step 2: Extract or Load Structure JSON ---
         chapters: List[Dict[str, Any]] = []
         subtopic_list: List[Dict[str, Any]] = []
         
         try:
-            update_task('running', 10, 'Analyzing document structure with LLM...')
-            # Get structure, default to empty list if None. Pass toc_data as guidance!
-            _struct_result = _llm_detect_structure(markdown_content, toc_data=toc_data, add_log=add_log)
-            structure: List[Dict[str, Any]] = _struct_result if _struct_result else []
+            update_task('running', 10, 'Loading or generating document structure...')
             
-            if len(structure) > 0:
-                # Build chapters and subtopics from line numbers
-                lines = markdown_content.split('\n')
-                total_lines = len(lines)
+            # Check for existing structure.json in the batch directory
+            structure_json_path = None
+            if structure_json_name:
+                candidate_path = md_path.parent / structure_json_name
+                if candidate_path.exists():
+                    structure_json_path = candidate_path
+            
+            if not structure_json_path:
+                candidate_path = md_path.parent / "structure.json"
+                if candidate_path.exists():
+                    structure_json_path = candidate_path
+
+            structure_data = None
+            if structure_json_path:
+                add_log('info', f"Loading existing structure from {structure_json_path.name}")
+                try:
+                    with open(structure_json_path, 'r', encoding='utf-8') as f:
+                        structure_data = json.load(f)
+                except Exception as e:
+                    add_log('warning', f"Failed to read structure JSON: {e}")
+            
+            if not structure_data:
+                add_log('info', "No existing structure JSON found, calling LLM to generate...")
+                structure_data = _generate_structure_json(
+                    markdown_content, 
+                    subject_name, 
+                    syllabus, 
+                    toc_data=toc_data, 
+                    add_log=add_log
+                )
                 
-                # Add a dummy end element to simplify boundary logic
-                boundaries: List[Dict[str, Any]] = list(structure)
-                boundaries.append({'line_num': total_lines, 'type': 'end', 'title': 'EOF'})
-                
-                current_chapter: Optional[Dict[str, Any]] = None
-                
-                ch_idx: int = 0
-                sec_idx: int = 0
-                
-                for i in range(len(structure)):
-                    item = structure[i]
-                    start_line = int(str(item.get('line_num', '0')))
-                    end_line = int(str(boundaries[i+1].get('line_num', str(total_lines))))
+                if structure_data:
+                    # Save it for future runs/debugging
+                    save_path = md_path.parent / "structure.json"
+                    try:
+                        with open(save_path, 'w', encoding='utf-8') as f:
+                            json.dump(structure_data, f, indent=2)
+                        add_log('info', f"Saved generated structure to {save_path.name}")
+                    except Exception as e:
+                        add_log('warning', f"Failed to save generated structure: {e}")
+            
+            if structure_data and 'chapters' in structure_data:
+                # Update subject/syllabus if provided by the JSON and not explicitly requested
+                # (though usually we trust the request more, the JSON acts as a strong hint)
+                json_subject = structure_data.get('subject_name')
+                json_syllabus = structure_data.get('syllabus')
+                if json_subject and not target_subject_id: # Only override if brand new
+                    subject_name = json_subject
+                if json_syllabus and syllabus == "IGCSE": 
+                    syllabus = json_syllabus
+
+                for ch_data in structure_data['chapters']:
+                    ch_num = str(ch_data.get('num', len(chapters) + 1))
+                    ch_title = str(ch_data.get('title', f"Chapter {ch_num}"))
                     
-                    # Extract content for this block (avoid out-of-bounds)
-                    start_line = max(0, min(start_line, total_lines - 1))
-                    end_line = max(0, min(end_line, total_lines))
-                    block_content = '\n'.join(lines[start_line:end_line]).strip()
+                    current_chapter = {
+                        'num': ch_num,
+                        'title': ch_title,
+                        'subtopics': []
+                    }
+                    chapters.append(current_chapter)
                     
-                    if not block_content and i < len(structure) - 1:
-                        # Only skip empty blocks if it's not the last block
-                        continue
+                    for st_data in ch_data.get('subtopics', []):
+                        st_num = str(st_data.get('num', f"{ch_num}.{len(current_chapter['subtopics']) + 1}"))
+                        st_title = str(st_data.get('title', f"Section {st_num}"))
                         
-                    if str(item.get('type', '')) == 'chapter':
-                        ch_idx = ch_idx + 1
-                        sec_idx = 0
-                        
-                        current_chapter = {
-                            'num': str(ch_idx),
-                            'title': str(item.get('title', f"Chapter {ch_idx}")),
-                            'subtopics': []
-                        }
-                        chapters.append(current_chapter)
-                        
-                        # Give chapter overview text its own subtopic if substantial
-                        if len(block_content) > 150:
-                            sec_idx = sec_idx + 1
-                            slug = re.sub(r'[^\w\s-]', '', str(item.get('title', ''))).strip().lower()
-                            slug = re.sub(r'[-\s]+', '-', slug)
-                            
-                            subtopic = {
-                                'num': f"{ch_idx}.{sec_idx}",
-                                'title': f"{item.get('title')} - Overview",
-                                'slug': slug or f'chapter-{ch_idx}-overview',
-                                'type': 'subtopic',
-                                'content': block_content,
-                                'chapter_num': str(ch_idx),
-                                'chapter_title': str(item.get('title', ''))
-                            }
-                            # Help Pyre understand this is a list
-                            sub_list = current_chapter.get('subtopics')
-                            if isinstance(sub_list, list):
-                                sub_list.append(subtopic)
-                            subtopic_list.append(subtopic)
-                            
-                    elif str(item.get('type', '')) == 'subtopic':
-                        sec_idx = sec_idx + 1
-                        
-                        # If a subtopic appears before any chapter, create a "General" chapter
-                        if not current_chapter:
-                            ch_idx = ch_idx + 1
-                            current_chapter = {
-                                'num': str(ch_idx),
-                                'title': 'General',
-                                'subtopics': []
-                            }
-                            chapters.append(current_chapter)
-                            
-                        slug = re.sub(r'[^\w\s-]', '', str(item.get('title', ''))).strip().lower()
+                        slug = re.sub(r'[^\w\s-]', '', st_title).strip().lower()
                         slug = re.sub(r'[-\s]+', '-', slug)
-                            
+                        
                         subtopic = {
-                            'num': f"{ch_idx}.{sec_idx}",
-                            'title': str(item.get('title', f"Section {sec_idx}")),
-                            'slug': slug or f'section-{ch_idx}-{sec_idx}',
+                            'num': st_num,
+                            'title': st_title,
+                            'slug': slug or f'section-{ch_num}-{len(current_chapter["subtopics"]) + 1}',
                             'type': 'subtopic',
-                            'content': block_content,
-                            'chapter_num': str(current_chapter.get('num', '')),
-                            'chapter_title': str(current_chapter.get('title', ''))
+                            # We will populate content in the next step via string matching
+                            'content': '', 
+                            'chapter_num': ch_num,
+                            'chapter_title': ch_title
                         }
+                        
                         sub_list = current_chapter.get('subtopics')
                         if isinstance(sub_list, list):
                             sub_list.append(subtopic)
                         subtopic_list.append(subtopic)
-        except Exception as llm_err:
-            add_log('warning', f"LLM structure compilation failed: {llm_err}")
+                        
+        except Exception as err:
+            add_log('warning', f"Structure processing failed: {err}")
             chapters = []
             
         # --- Step 2b: Validate Structure ---
-        # We no longer fall back to Regex. If LLM fails, we fail.
+        # We no longer fall back to Regex. If JSON fails, we fail.
         total_subtopics = 0
         for ch in chapters:
             subs = ch.get('subtopics')
             if isinstance(subs, list):
-                total_subtopics = total_subtopics + len(subs)
+                subs_list: List[Dict[str, Any]] = subs
+                total_subtopics += len(subs_list)
                 
         if total_subtopics == 0:
-            raise Exception("LLM structure detection failed to identify any chapters/subtopics. Ingestion aborted.")
+            raise Exception("Structure detection failed or returned empty JSON. Ingestion aborted.")
 
-        add_log('info', f"Found {len(chapters)} chapters, {total_subtopics} subtopics via LLM")
+        add_log('info', f"Loaded {len(chapters)} chapters, {total_subtopics} subtopics from structure JSON")
 
-        update_task('running', 15, f'Creating hierarchy: {len(chapters)} topics, {total_subtopics} subtopics...')
+        update_task('running', 12, 'Extracting subtopic markdown content based on headings...')
+        abort_if_cancelled(12, 'content matching')
+        
+        # --- Step 2c: Map JSON structure back to Markdown Content ---
+        # We do a fast regex scan looking for lines that match our known subtopic titles.
+        lines = markdown_content.split('\n')
+        
+        def _clean_for_match(s: str) -> str:
+            # Remove punctuation, extra spaces, and markdown headers
+            s = re.sub(r'^#+\s*', '', s)
+            s = re.sub(r'[^\w\s]', '', s).lower().strip()
+            return re.sub(r'\s+', ' ', s)
+
+        # Build search targets
+        search_targets: List[Dict[str, Any]] = []
+        for ch in chapters:
+            for st in ch.get('subtopics', []):
+                if isinstance(st, dict):
+                    search_targets.append({
+                        'ref': st,
+                        'clean_title': _clean_for_match(str(st.get('title', ''))),
+                        'clean_num': _clean_for_match(str(st.get('num', ''))),
+                        'found_line': -1
+                    })
+
+        # Scan document sequentially
+        current_target_idx: int = 0
+        for i, line in enumerate(lines):
+            if current_target_idx >= len(search_targets):
+                break # Found everything
+
+            clean_line = _clean_for_match(line)
+            if not clean_line:
+                continue
+
+            target = search_targets[current_target_idx]
+            if not isinstance(target, dict):
+                continue
+            
+            clean_title = str(target.get('clean_title', ''))
+            clean_num = str(target.get('clean_num', ''))
+            
+            # Match if the line exactly matches the title, OR starts with "num title", OR matches just the num if it's very specific
+            if (clean_title == clean_line or 
+                clean_line.startswith(f"{clean_num} {clean_title}") or
+                (clean_title in clean_line and clean_num in clean_line)):
+                
+                target['found_line'] = i
+                current_target_idx += 1
+
+        # Now extract the content blocks between the found lines
+        total_lines = len(lines)
+        for i, target in enumerate(search_targets):
+            if not isinstance(target, dict):
+                continue
+            start_line = int(str(target.get('found_line', -1)))
+            if start_line == -1:
+                # Fallback: if we couldn't find the exact heading, just give it a slice from the previous one.
+                # In a perfectly generated JSON this shouldn't happen, but it adds robustness.
+                ref_st = target.get('ref', {})
+                st_title = ""
+                if isinstance(ref_st, dict):
+                    st_title = str(ref_st.get('title', ''))
+                add_log('warning', f"Could not find exact heading in markdown for: {st_title}")
+                prev_line = -1
+                if i > 0:
+                    prev_target = search_targets[i-1]
+                    if isinstance(prev_target, dict):
+                        prev_line = int(str(prev_target.get('found_line', 0)))
+                start_line = prev_line if prev_line != -1 else 0
+
+            end_line = total_lines
+            for j in range(i + 1, len(search_targets)):
+                next_target = search_targets[j]
+                if isinstance(next_target, dict):
+                    next_line = int(str(next_target.get('found_line', -1)))
+                    if next_line != -1:
+                        end_line = next_line
+                        break
+            
+            # Don't let it run backwards
+            end_line = max(start_line, end_line)
+            
+            block_content = '\n'.join(lines[start_line:end_line]).strip()
+            ref = target.get('ref')
+            if isinstance(ref, dict):
+                ref['content'] = block_content
+
+
+        update_task('running', 15, f'Creating database hierarchy for {total_subtopics} subtopics...')
         abort_if_cancelled(15, 'hierarchy creation')
 
         # --- Step 3: Create/find syllabus and subject ---
@@ -2624,16 +2710,14 @@ def run_v8_full_ingestion(
         # Clean up the cancel event registry to avoid memory leaks
         _cancel_events.pop(task_id, None)
 
-def _llm_detect_structure(markdown_content: str, toc_data: Optional[list] = None, add_log=None) -> Optional[list]:
-    """Use Gemini to detect textbook structure (chapters and subtopics).
+def _generate_structure_json(markdown_content: str, subject_name: str, syllabus: str, toc_data: Optional[list] = None, add_log=None) -> Optional[dict]:
+    """Use Gemini to generate a complete structure.json mapping of the textbook.
     
-    Instead of sending the full markdown, this extracts 'structural lines' 
-    (headings, short lines, numbered patterns) and their line numbers, 
-    sending a token-efficient map to the LLM for classification.
+    This replaces the old line-by-line structural detection. It reads the TOC and
+    a sample of the markdown to return a definitive JSON hierarchy of Chapters -> Subtopics.
     
     Returns:
-        List of dicts: ``[{'line_num': int, 'type': 'chapter'|'subtopic', 'title': str}]``
-        or None on failure.
+        Dict matching the structure.json schema, or None on failure.
     """
     import json as _json
     import os as _os
@@ -2648,7 +2732,7 @@ def _llm_detect_structure(markdown_content: str, toc_data: Optional[list] = None
     lines = markdown_content.split('\n')
     structural_lines = []
     
-    # 1. Extract potential structural lines to save tokens
+    # 1. Extract potential structural lines to save tokens, but keep some context
     for i, line in enumerate(lines):
         orig_line = line
         line = line.strip()
@@ -2659,25 +2743,20 @@ def _llm_detect_structure(markdown_content: str, toc_data: Optional[list] = None
         is_heading = (
             line.startswith('#') or 
             line.startswith('**') or 
-            # Numbers like 7.1, 7.2.3, or 1 Introduction
             re.match(r'^\d+(?:\.\d+)+\s', line) or
             re.match(r'^\d+\s+[A-Z]', line) or
-            # Keywords at start
             re.match(r'^(?:Chapter|Part|Unit|Section|Module|Topic|Lesson)\s', line, re.IGNORECASE) or
-            # ALL CAPS lines (likely major headings)
             (line.isupper() and len(line) > 8 and len(line) < 100 and re.search(r'[A-Z]', line)) or
-            # Short lines that look like titles
             (len(line) < 85 and re.match(r'^[A-Z0-9]', line))
         )
         
         if is_heading:
-            structural_lines.append(f"{i}: {line}")
+            structural_lines.append(line)
 
-    # If document is huge, cap the sample to prevent token limits
-    if len(structural_lines) > 2500:
+    if len(structural_lines) > 3000:
         if add_log:
             add_log('warning', "Document very large, truncating structural lines for LLM")
-        structural_lines = structural_lines[:2500]
+        structural_lines = structural_lines[:3000]
 
     sample_text = "\n".join(structural_lines)
 
@@ -2688,28 +2767,41 @@ def _llm_detect_structure(markdown_content: str, toc_data: Optional[list] = None
         for entry in toc_data:
             lvl = "Chapter" if entry.get('level') == 1 else "Subtopic"
             toc_guidance += f"- {lvl}: \"{entry.get('title')}\"\n"
-        toc_guidance += "\nUse these bookmarks as anchor points to find the corresponding lines in the text below.\n"
+        toc_guidance += "\nUse these bookmarks as your primary source of truth for the hierarchy.\n"
 
     prompt = (
-        "You are an expert textbook analyst. Below is a list of potential structural lines from a "
-        "mechanically converted textbook PDF. Each line starts with its line number: `LINE_NUM: content`.\n\n"
-        "Your task is to identify which lines are actual CHAPTER titles and which are SUBTOPIC sections.\n"
+        "You are an expert textbook analyst. Below is a list of potential headings from a "
+        "mechanically converted textbook PDF.\n\n"
+        "Your task is to construct a definitive JSON hierarchy representing the Chapters and Subtopics "
+        "of this textbook.\n"
         f"{toc_guidance}"
         "\nCRITICAL RULES FOR HIERARCHY:\n"
-        "1. Our system ONLY supports a 2-level hierarchy: Chapters -> Subtopics.\n"
+        "1. Our system ONLY supports exactly 2 levels: Chapters -> Subtopics.\n"
         "2. If the book specifies 3 levels (e.g., 'SECTION 1' -> '1 Data' -> '1.1 Numbers'):\n"
         "   - You MUST compress it into 2 levels.\n"
         "   - Use '1 Data' as the `chapter` and '1.1 Numbers' as the `subtopic`.\n"
         "   - IGNORE overarching high-level 'Section XXX' or 'Part XXX' lines if they contain nested chapters.\n"
-        "3. Ignore glossary entries (e.g. 'A', 'B', 'Algorithm'), index entries, page numbers, or normal body text.\n\n"
-        "Return ONLY valid JSON in this exact format:\n"
-        '[\n'
-        '  {"line_num": 45, "type": "chapter", "title": "7 Algorithm design"},\n'
-        '  {"line_num": 102, "type": "subtopic", "title": "7.1 The program development cycle"}\n'
-        ']\n\n'
-        "- Be extremely strict: classify a line as 'subtopic' or 'chapter' ONLY if it clearly defines a new hierarchy boundary.\n"
-        "- Sort the output by `line_num` ascending.\n\n"
-        f"--- STRUCTURAL LINES ---\n{sample_text}\n--- END LINES ---"
+        "3. Ignore glossary entries (e.g. 'A', 'B', 'Algorithm'), index entries, page numbers, or normal body text.\n"
+        "4. Every Subtopic MUST belong to a Chapter.\n"
+        f"5. The subject is '{subject_name}' and the syllabus is '{syllabus}'. Use these exact values in the root of the JSON.\n\n"
+        "Return ONLY valid JSON in this exact schema format:\n"
+        '{\n'
+        f'  "subject_name": "{subject_name}",\n'
+        f'  "syllabus": "{syllabus}",\n'
+        '  "chapters": [\n'
+        '    {\n'
+        '      "num": "1",\n'
+        '      "title": "Motion, forces and energy",\n'
+        '      "subtopics": [\n'
+        '        { "num": "1.1", "title": "Physical quantities and measurement techniques" },\n'
+        '        { "num": "1.2", "title": "Motion" }\n'
+        '      ]\n'
+        '    }\n'
+        '  ]\n'
+        '}\n\n'
+        "DO NOT invent subtopics. Only include them if they appear in the provided text or bookmarks.\n"
+        "Make sure the numbers (`num`) are strings.\n"
+        f"--- EXTRACTED HEADINGS ---\n{sample_text}\n--- END HEADINGS ---"
     )
 
     try:
@@ -2735,7 +2827,7 @@ def _llm_detect_structure(markdown_content: str, toc_data: Optional[list] = None
         )
         
         if add_log:
-            add_log('info', f"Calling LLM ({model_name}) with {len(structural_lines)} potential lines...")
+            add_log('info', f"Calling LLM ({model_name}) to generate structure.json...")
             
         messages = [HumanMessage(content=prompt)]
         response = llm.invoke(messages)
@@ -2747,19 +2839,19 @@ def _llm_detect_structure(markdown_content: str, toc_data: Optional[list] = None
 
         result = _json.loads(raw_text)
         
-        if isinstance(result, list) and len(result) > 0:
-            chapters = sum(1 for item in result if str(item.get('type', '')) == 'chapter')
-            subtopics = sum(1 for item in result if str(item.get('type', '')) == 'subtopic')
+        if isinstance(result, dict) and 'chapters' in result:
+            chapters = len(result.get('chapters', []))
+            subtopics = sum(len(ch.get('subtopics', [])) for ch in result.get('chapters', []))
             if add_log:
-                add_log('info', f"LLM structure detection complete: {chapters} chapters, {subtopics} subtopics")
-            return sorted(result, key=lambda x: int(str(x.get('line_num', '0'))))
+                add_log('info', f"LLM generated structure.json: {chapters} chapters, {subtopics} subtopics")
+            return result
         else:
             if add_log:
-                add_log('warning', "LLM returned empty or invalid structure result")
+                add_log('warning', "LLM returned invalid structure JSON format")
             return None
     except Exception as e:
         if add_log:
-            add_log('warning', f"LLM structure detection error: {e}")
+            add_log('warning', f"LLM structure generation error: {e}")
         return None
 
 
